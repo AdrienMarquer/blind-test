@@ -256,3 +256,76 @@ export interface Repository<T> {
   update(id: string, data: Partial<T>): Promise<T>;
   delete(id: string): Promise<void>;
 }
+
+// ============================================================================
+// WebSocket Messages - Type-Safe Event System
+// ============================================================================
+
+/**
+ * Server → Client Messages
+ */
+export type ServerMessage =
+  // Connection
+  | { type: 'connected'; data: { roomId: string } }
+  | { type: 'state:synced'; data: { room: Room; players: Player[] } }
+  | { type: 'error'; data: { code?: string; message: string } }
+
+  // Player Events
+  | { type: 'player:joined'; data: { room: Room; player: Player } }
+  | { type: 'player:left'; data: { playerId: string; playerName: string; remainingPlayers: number } }
+  | { type: 'player:kicked'; data: { reason: string } }
+  | { type: 'player:disconnected'; data: { playerId: string; playerName: string; canRejoin: boolean } }
+  | { type: 'player:reconnected'; data: { playerId: string; playerName: string } }
+
+  // Game Flow
+  | { type: 'game:started'; data: { room: Room } }
+  | { type: 'round:started'; data: { roundIndex: number; songCount: number; modeType: ModeType } }
+  | { type: 'round:ended'; data: { roundIndex: number; scores: Record<string, number> } }
+
+  // Song Events
+  | { type: 'song:started'; data: { songIndex: number; duration: number } }
+  | { type: 'song:ended'; data: { songIndex: number; correctTitle: string; correctArtist: string } }
+
+  // Gameplay
+  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; titleChoices?: string[] } }
+  | { type: 'buzz:rejected'; data: { playerId: string; reason: string } }
+  | { type: 'answer:result'; data: {
+      playerId: string;
+      isCorrect: boolean;
+      pointsAwarded: number;
+      shouldShowArtistChoices?: boolean;
+      lockOutPlayer?: boolean;
+    } }
+  | { type: 'choices:artist'; data: { playerId: string; artistChoices: string[] } }
+
+  // Master Controls
+  | { type: 'game:paused'; data: { timestamp: number } }
+  | { type: 'game:resumed'; data: { timestamp: number } }
+  | { type: 'game:skipped'; data: { timestamp: number } };
+
+/**
+ * Client → Server Messages
+ */
+export type ClientMessage =
+  // Connection
+  | { type: 'state:sync' }
+
+  // Player Actions
+  | { type: 'player:join'; data: { name: string } }
+  | { type: 'player:leave' }
+  | { type: 'player:kick'; data: { playerId: string } }
+
+  // Gameplay
+  | { type: 'player:buzz'; data: { songIndex: number } }
+  | { type: 'player:answer'; data: { songIndex: number; answerType: 'title' | 'artist'; value: string } }
+
+  // Master Controls
+  | { type: 'game:pause' }
+  | { type: 'game:resume' }
+  | { type: 'game:skip' };
+
+/**
+ * Extract data type for a specific message type
+ */
+export type ExtractMessageData<T extends ServerMessage['type']> =
+  Extract<ServerMessage, { type: T }>['data'];

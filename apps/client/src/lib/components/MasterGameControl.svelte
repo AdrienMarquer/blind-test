@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import type { Room } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
@@ -55,62 +54,73 @@
 		}
 	}
 
-	// Listen for socket events
-	onMount(() => {
-		const originalOnMessage = socket.socket?.onmessage;
+	// ========================================================================
+	// Reactive Event Subscriptions using $effect()
+	// ========================================================================
 
-		if (socket.socket) {
-			socket.socket.onmessage = (event) => {
-				// Call original handler first
-				originalOnMessage?.call(socket.socket, event);
+	// Subscribe to round:started event
+	$effect(() => {
+		const event = socket.events.roundStarted;
+		if (event) {
+			totalSongs = event.songCount;
+			isPlaying = true;
+		}
+	});
 
-				// Handle game events
-				try {
-					const message = JSON.parse(event.data);
+	// Subscribe to song:started event
+	$effect(() => {
+		const event = socket.events.songStarted;
+		if (event) {
+			currentSong = event.songIndex;
+			timeRemaining = event.duration;
+			activePlayerName = 'Waiting for buzz...';
+			currentTitle = `Song ${event.songIndex + 1}`;
+			currentArtist = '';
+			// TODO: Start playing audio
+		}
+	});
 
-					switch (message.type) {
-						case 'round:started':
-							totalSongs = message.data.songCount;
-							isPlaying = true;
-							break;
+	// Subscribe to player:buzzed event
+	$effect(() => {
+		const event = socket.events.playerBuzzed;
+		if (event) {
+			// Find player name from socket.players
+			const player = socket.players.find((p) => p.id === event.playerId);
+			activePlayerName = player?.name || event.playerName || 'Unknown Player';
+		}
+	});
 
-						case 'song:started':
-							currentSong = message.data.songIndex;
-							timeRemaining = message.data.duration;
-							activePlayerName = 'Waiting for buzz...';
-							currentTitle = `Song ${message.data.songIndex + 1}`;
-							currentArtist = '';
-							// TODO: Start playing audio
-							break;
+	// Subscribe to song:ended event
+	$effect(() => {
+		const event = socket.events.songEnded;
+		if (event) {
+			currentTitle = event.correctTitle;
+			currentArtist = event.correctArtist;
+			activePlayerName = 'Song ended';
+		}
+	});
 
-						case 'player:buzzed':
-							// Find player name
-							const player = socket.players.find((p) => p.id === message.data.playerId);
-							activePlayerName = player?.name || 'Unknown Player';
-							break;
+	// Subscribe to game:paused event
+	$effect(() => {
+		const event = socket.events.gamePaused;
+		if (event) {
+			isPaused = true;
+		}
+	});
 
-						case 'song:ended':
-							currentTitle = message.data.correctTitle;
-							currentArtist = message.data.correctArtist;
-							activePlayerName = 'Song ended';
-							break;
+	// Subscribe to game:resumed event
+	$effect(() => {
+		const event = socket.events.gameResumed;
+		if (event) {
+			isPaused = false;
+		}
+	});
 
-						case 'game:paused':
-							isPaused = true;
-							break;
-
-						case 'game:resumed':
-							isPaused = false;
-							break;
-
-						case 'round:ended':
-							isPlaying = false;
-							break;
-					}
-				} catch (error) {
-					console.error('Error handling game event:', error);
-				}
-			};
+	// Subscribe to round:ended event
+	$effect(() => {
+		const event = socket.events.roundEnded;
+		if (event) {
+			isPlaying = false;
 		}
 	});
 </script>

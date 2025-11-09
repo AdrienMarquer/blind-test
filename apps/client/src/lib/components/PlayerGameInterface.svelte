@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import type { Player } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
@@ -41,81 +40,82 @@
 		showChoices = false;
 	}
 
-	// Listen for WebSocket events
-	onMount(() => {
-		const originalOnMessage = socket.socket?.onmessage;
+	// ========================================================================
+	// Reactive Event Subscriptions using $effect()
+	// ========================================================================
 
-		if (socket.socket) {
-			socket.socket.onmessage = (event) => {
-				// Call original handler first
-				originalOnMessage?.call(socket.socket, event);
+	// Subscribe to song:started event
+	$effect(() => {
+		const event = socket.events.songStarted;
+		if (event) {
+			// Reset for new song
+			hasBuzzed = false;
+			canBuzz = true;
+			showChoices = false;
+			isLockedOut = false;
+			currentSongIndex = event.songIndex;
+			timeRemaining = event.duration;
+		}
+	});
 
-				// Handle game events
-				try {
-					const message = JSON.parse(event.data);
+	// Subscribe to player:buzzed event
+	$effect(() => {
+		const event = socket.events.playerBuzzed;
+		if (event && event.playerId === player.id) {
+			// We buzzed successfully - show title choices
+			titleChoices = event.titleChoices || [];
+			showChoices = true;
+			answerType = 'title';
+		}
+	});
 
-					switch (message.type) {
-						case 'song:started':
-							// Reset for new song
-							hasBuzzed = false;
-							canBuzz = true;
-							showChoices = false;
-							isLockedOut = false;
-							currentSongIndex = message.data.songIndex;
-							timeRemaining = message.data.duration;
-							break;
+	// Subscribe to buzz:rejected event
+	$effect(() => {
+		const event = socket.events.buzzRejected;
+		if (event && event.playerId === player.id) {
+			// Our buzz was rejected - allow rebuzz
+			hasBuzzed = false;
+			canBuzz = true;
+		}
+	});
 
-						case 'player:buzzed':
-							// Someone buzzed - show choices if it's us
-							if (message.data.playerId === player.id) {
-								titleChoices = message.data.titleChoices || [];
-								showChoices = true;
-								answerType = 'title';
-							}
-							break;
+	// Subscribe to answer:result event
+	$effect(() => {
+		const event = socket.events.answerResult;
+		if (event && event.playerId === player.id) {
+			if (event.isCorrect) {
+				score += event.pointsAwarded;
+			}
 
-						case 'buzz:rejected':
-							// Our buzz was rejected - allow to rebuzz
-							hasBuzzed = false;
-							canBuzz = true;
-							break;
+			// Check if we should show artist choices or get locked out
+			if (event.shouldShowArtistChoices) {
+				// Will receive choices:artist event next
+			} else if (event.lockOutPlayer) {
+				isLockedOut = true;
+				canBuzz = false;
+				showChoices = false;
+			}
+		}
+	});
 
-						case 'answer:result':
-							if (message.data.playerId === player.id) {
-								if (message.data.isCorrect) {
-									score += message.data.pointsAwarded;
-								}
+	// Subscribe to choices:artist event
+	$effect(() => {
+		const event = socket.events.artistChoices;
+		if (event && event.playerId === player.id) {
+			artistChoices = event.artistChoices || [];
+			showChoices = true;
+			answerType = 'artist';
+		}
+	});
 
-								// Check if we should show artist choices
-								if (message.data.shouldShowArtistChoices) {
-									// Will receive choices:artist event
-								} else if (message.data.lockOutPlayer) {
-									isLockedOut = true;
-									canBuzz = false;
-									showChoices = false;
-								}
-							}
-							break;
-
-						case 'choices:artist':
-							if (message.data.playerId === player.id) {
-								artistChoices = message.data.artistChoices || [];
-								showChoices = true;
-								answerType = 'artist';
-							}
-							break;
-
-						case 'song:ended':
-							// Song finished
-							showChoices = false;
-							hasBuzzed = false;
-							canBuzz = false;
-							break;
-					}
-				} catch (error) {
-					console.error('Error handling game event:', error);
-				}
-			};
+	// Subscribe to song:ended event
+	$effect(() => {
+		const event = socket.events.songEnded;
+		if (event) {
+			// Song finished - reset state
+			showChoices = false;
+			hasBuzzed = false;
+			canBuzz = false;
 		}
 	});
 </script>

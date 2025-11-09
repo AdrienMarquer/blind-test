@@ -1,12 +1,11 @@
 /**
  * WebSocket Connection Manager (Svelte 5 Runes)
- * Manages native WebSocket connections to room endpoints
+ * Type-safe event-driven architecture for real-time communication
  */
 
-import type { Room, Player } from '@blind-test/shared';
+import type { Room, Player, ServerMessage, ClientMessage } from '@blind-test/shared';
 
 // Auto-detect server URL based on current host
-// In dev: uses localhost, in production: uses same host as client
 const getServerUrl = () => {
   if (typeof window === 'undefined') return 'ws://localhost:3007';
 
@@ -23,22 +22,60 @@ const getServerUrl = () => {
 
 const SERVER_URL = getServerUrl();
 
-interface WebSocketMessage {
-  type: string;
-  data?: any;
+/**
+ * Reactive event stream - components subscribe to specific events using $effect()
+ */
+export class GameEvents {
+  // Song events
+  songStarted = $state<{ songIndex: number; duration: number } | null>(null);
+  songEnded = $state<{ songIndex: number; correctTitle: string; correctArtist: string } | null>(null);
+
+  // Player events (gameplay)
+  playerBuzzed = $state<{ playerId: string; playerName: string; titleChoices?: string[] } | null>(null);
+  buzzRejected = $state<{ playerId: string; reason: string } | null>(null);
+  answerResult = $state<{
+    playerId: string;
+    isCorrect: boolean;
+    pointsAwarded: number;
+    shouldShowArtistChoices?: boolean;
+    lockOutPlayer?: boolean;
+  } | null>(null);
+  artistChoices = $state<{ playerId: string; artistChoices: string[] } | null>(null);
+
+  // Round events
+  roundStarted = $state<{ roundIndex: number; songCount: number; modeType: string } | null>(null);
+  roundEnded = $state<{ roundIndex: number; scores: Record<string, number> } | null>(null);
+
+  // Game control events
+  gamePaused = $state<{ timestamp: number } | null>(null);
+  gameResumed = $state<{ timestamp: number } | null>(null);
+  gameSkipped = $state<{ timestamp: number } | null>(null);
+
+  /**
+   * Clear an event after it's been processed
+   */
+  clear(eventName: keyof Omit<GameEvents, 'clear'>) {
+    (this as any)[eventName] = null;
+  }
 }
 
 /**
  * Room Socket Manager
- * Manages connection to a specific room namespace
+ * Manages connection to a specific room with type-safe event emission
  */
 export class RoomSocket {
-  socket: WebSocket | null = $state(null);
+  // Private WebSocket - components can't access directly
+  private socket: WebSocket | null = $state(null);
+  private connectionTimeout: number | null = null;
+
+  // Public reactive state
   connected = $state(false);
   room = $state<Room | null>(null);
   players = $state<Player[]>([]);
   error = $state<string | null>(null);
-  private connectionTimeout: number | null = null;
+
+  // Reactive event stream
+  events = new GameEvents();
 
   constructor(
     private roomId: string,
@@ -59,8 +96,8 @@ export class RoomSocket {
     }
 
     const wsUrl = `${SERVER_URL}/ws/rooms/${this.roomId}`;
-    console.log('[WebSocket] Attempting to connect to:', wsUrl);
-    console.log('[WebSocket] Server URL:', SERVER_URL);
+    console.log('[WebSocket] Connecting to:', wsUrl);
+
     this.socket = new WebSocket(wsUrl);
 
     // Set connection timeout (5 seconds)
@@ -82,11 +119,9 @@ export class RoomSocket {
   private setupListeners() {
     if (!this.socket) return;
 
-    // Connection events
     this.socket.onopen = () => {
-      console.log(`[WebSocket] onopen fired! Setting connected = true`);
+      console.log('[WebSocket] Connected');
 
-      // Clear connection timeout
       if (this.connectionTimeout) {
         clearTimeout(this.connectionTimeout);
         this.connectionTimeout = null;
@@ -94,31 +129,26 @@ export class RoomSocket {
 
       this.connected = true;
       this.error = null;
-      console.log(`[WebSocket] Connected to room ${this.roomId}, connected state:`, this.connected);
 
       // Request initial state sync
       this.requestStateSync();
     };
 
     this.socket.onclose = (event) => {
-      // Clear connection timeout
       if (this.connectionTimeout) {
         clearTimeout(this.connectionTimeout);
         this.connectionTimeout = null;
       }
 
       this.connected = false;
-      console.log(`[WebSocket] Disconnected from room ${this.roomId}. Code: ${event.code}, Reason: ${event.reason}`);
+      console.log(`[WebSocket] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
 
-      // Set error message based on close reason
       if (event.code !== 1000 && event.code !== 1005) {
-        // Not a normal closure
         this.error = event.reason || 'Connection closed unexpectedly';
       }
     };
 
-    this.socket.onerror = (error) => {
-      // Clear connection timeout
+    this.socket.onerror = () => {
       if (this.connectionTimeout) {
         clearTimeout(this.connectionTimeout);
         this.connectionTimeout = null;
@@ -126,49 +156,51 @@ export class RoomSocket {
 
       this.connected = false;
       this.error = 'Connection error - check if server is running';
-      console.error('[WebSocket] ERROR:', error);
-      console.error('[WebSocket] Connection failed. Check if server is running on port 3007');
+      console.error('[WebSocket] Connection failed');
     };
 
     this.socket.onmessage = (event) => {
       try {
-        const message: WebSocketMessage = JSON.parse(event.data);
+        const message = JSON.parse(event.data) as ServerMessage;
         this.handleMessage(message);
       } catch (error) {
-        console.error('Error parsing message:', error);
+        console.error('[WebSocket] Error parsing message:', error);
       }
     };
   }
 
   /**
    * Handle incoming WebSocket messages
+   * Single source of truth for message parsing
    */
-  private handleMessage(message: WebSocketMessage) {
-    console.log('Received message:', message.type, message.data);
+  private handleMessage(message: ServerMessage) {
+    console.log('[WS]', message.type, message.data);
 
     switch (message.type) {
+      // Connection
       case 'connected':
-        // Initial connection confirmed
         break;
 
       case 'state:synced':
         this.room = message.data.room;
         this.players = message.data.players || [];
-        console.log('State synced:', message.data);
         break;
 
+      case 'error':
+        this.error = message.data.message;
+        console.error(`[WS Error] ${message.data.code || 'ERROR'}:`, message.data.message);
+        break;
+
+      // Player Events
       case 'player:joined':
         this.room = message.data.room;
-        // Add player if not already in list
         if (message.data.player && !this.players.find((p) => p.id === message.data.player.id)) {
           this.players = [...this.players, message.data.player];
         }
-        console.log(`Player joined: ${message.data.player?.name}`);
         break;
 
       case 'player:left':
         this.players = this.players.filter((p) => p.id !== message.data.playerId);
-        console.log(`Player left: ${message.data.playerName}`);
         break;
 
       case 'player:kicked':
@@ -177,103 +209,90 @@ export class RoomSocket {
         break;
 
       case 'player:disconnected':
-        // Mark player as disconnected
         this.players = this.players.map((p) =>
           p.id === message.data.playerId ? { ...p, connected: false } : p
         );
-        console.log(`Player disconnected: ${message.data.playerName}`);
         break;
 
       case 'player:reconnected':
-        // Mark player as reconnected
         this.players = this.players.map((p) =>
           p.id === message.data.playerId ? { ...p, connected: true } : p
         );
-        console.log(`Player reconnected: ${message.data.playerName}`);
         break;
 
+      // Game Flow
       case 'game:started':
-        // Update room status when game starts
         this.room = message.data.room;
-        console.log('Game started:', message.data.room);
         break;
 
       case 'round:started':
-        console.log('Round started:', message.data);
-        // Will be handled by game components
-        break;
-
-      case 'song:started':
-        console.log('Song started:', message.data);
-        // Will be handled by game components
-        break;
-
-      case 'player:buzzed':
-        console.log('Player buzzed:', message.data);
-        // Will be handled by game components
-        break;
-
-      case 'buzz:rejected':
-        console.log('Buzz rejected:', message.data);
-        // Will be handled by game components
-        break;
-
-      case 'answer:result':
-        console.log('Answer result:', message.data);
-        // Will be handled by game components
-        break;
-
-      case 'choices:artist':
-        console.log('Artist choices:', message.data);
-        // Will be handled by game components
-        break;
-
-      case 'song:ended':
-        console.log('Song ended:', message.data);
-        // Will be handled by game components
+        this.events.roundStarted = message.data;
         break;
 
       case 'round:ended':
-        console.log('Round ended:', message.data);
-        // Will be handled by game components
+        this.events.roundEnded = message.data;
         break;
 
+      // Song Events - emit to reactive stream
+      case 'song:started':
+        this.events.songStarted = message.data;
+        break;
+
+      case 'song:ended':
+        this.events.songEnded = message.data;
+        break;
+
+      // Gameplay - emit to reactive stream
+      case 'player:buzzed':
+        this.events.playerBuzzed = message.data;
+        break;
+
+      case 'buzz:rejected':
+        this.events.buzzRejected = message.data;
+        break;
+
+      case 'answer:result':
+        this.events.answerResult = message.data;
+        break;
+
+      case 'choices:artist':
+        this.events.artistChoices = message.data;
+        break;
+
+      // Master Controls - emit to reactive stream
       case 'game:paused':
-        console.log('Game paused');
+        this.events.gamePaused = message.data;
         break;
 
       case 'game:resumed':
-        console.log('Game resumed');
+        this.events.gameResumed = message.data;
         break;
 
       case 'game:skipped':
-        console.log('Game skipped');
+        this.events.gameSkipped = message.data;
         break;
-
-      case 'error':
-        this.error = message.data.message;
-        console.error(`Server error [${message.data.code}]:`, message.data.message);
-        break;
-
-      default:
-        console.log('Unknown message type:', message.type);
     }
   }
 
   /**
-   * Send a message to the server
+   * Send a message to the server (type-safe)
    */
-  private send(message: WebSocketMessage) {
+  private send(message: ClientMessage) {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
     } else {
-      console.error('WebSocket is not open');
+      console.error('[WebSocket] Cannot send - socket not open');
     }
   }
 
-  /**
-   * Join the room as a player
-   */
+  // ========================================================================
+  // Connection Methods
+  // ========================================================================
+
+  requestStateSync() {
+    this.send({ type: 'state:sync' });
+  }
+
   joinRoom(playerName: string) {
     this.send({
       type: 'player:join',
@@ -281,18 +300,10 @@ export class RoomSocket {
     });
   }
 
-  /**
-   * Leave the room
-   */
   leaveRoom() {
-    this.send({
-      type: 'player:leave'
-    });
+    this.send({ type: 'player:leave' });
   }
 
-  /**
-   * Kick a player (master only)
-   */
   kickPlayer(playerId: string) {
     this.send({
       type: 'player:kick',
@@ -300,22 +311,10 @@ export class RoomSocket {
     });
   }
 
-  /**
-   * Request state synchronization
-   */
-  requestStateSync() {
-    this.send({
-      type: 'state:sync'
-    });
-  }
-
   // ========================================================================
   // Gameplay Methods
   // ========================================================================
 
-  /**
-   * Buzz in for the current song
-   */
   buzz(songIndex: number) {
     this.send({
       type: 'player:buzz',
@@ -323,9 +322,6 @@ export class RoomSocket {
     });
   }
 
-  /**
-   * Submit an answer
-   */
   submitAnswer(songIndex: number, answerType: 'title' | 'artist', value: string) {
     this.send({
       type: 'player:answer',
@@ -333,38 +329,23 @@ export class RoomSocket {
     });
   }
 
-  /**
-   * Pause the game (master only)
-   */
   pauseGame() {
-    this.send({
-      type: 'game:pause'
-    });
+    this.send({ type: 'game:pause' });
   }
 
-  /**
-   * Resume the game (master only)
-   */
   resumeGame() {
-    this.send({
-      type: 'game:resume'
-    });
+    this.send({ type: 'game:resume' });
   }
 
-  /**
-   * Skip current song (master only)
-   */
   skipSong() {
-    this.send({
-      type: 'game:skip'
-    });
+    this.send({ type: 'game:skip' });
   }
 
-  /**
-   * Disconnect from the room
-   */
+  // ========================================================================
+  // Cleanup
+  // ========================================================================
+
   disconnect() {
-    // Clear any pending timeout
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
       this.connectionTimeout = null;
@@ -377,9 +358,6 @@ export class RoomSocket {
     }
   }
 
-  /**
-   * Cleanup on destroy
-   */
   destroy() {
     this.disconnect();
   }
