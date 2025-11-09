@@ -109,7 +109,10 @@
 </script>
 
 <main>
-	<h1>🎵 Blind Test</h1>
+	<div class="page-header">
+		<h1>🎵 Blind Test</h1>
+		<a href="/music" class="music-library-link">📚 Music Library</a>
+	</div>
 
 	<section class="create-room">
 		<h2>Create New Room</h2>
@@ -177,11 +180,33 @@
 		padding: 2rem;
 	}
 
+	.page-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 2rem;
+	}
+
 	h1 {
 		font-size: 2.5rem;
-		margin-bottom: 2rem;
-		text-align: center;
+		margin: 0;
 		color: #1f2937;
+	}
+
+	.music-library-link {
+		display: inline-block;
+		padding: 0.75rem 1.5rem;
+		font-size: 1rem;
+		font-weight: 600;
+		color: white;
+		background-color: #10b981;
+		text-decoration: none;
+		border-radius: 0.5rem;
+		transition: background-color 0.2s;
+	}
+
+	.music-library-link:hover {
+		background-color: #059669;
 	}
 
 	h2 {
