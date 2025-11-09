@@ -90,13 +90,13 @@
 - [x] **WebSocket Events**
   - [x] `game:started` broadcast
 
-### Master/Player Separation ⚠️ **CRITICAL GAP**
-- [ ] **Role System** ⚠️ **BLOCKING ISSUE**
-  - [ ] Detect room creator as master
-  - [ ] Separate master vs player routes/views
-  - [ ] Master-only controls (Start Game, Configure, etc.)
-  - [ ] Player-only UI (simplified, mobile-optimized)
-  - [ ] Role-based permissions
+### Master/Player Separation ✅
+- [x] **Role System** ✅ **COMPLETED**
+  - [x] Detect room creator as master (localStorage-based)
+  - [x] Separate master vs player UI views
+  - [x] Master-only controls (Start Game, Configure, Remove Players, QR Code)
+  - [x] Player-only UI (simplified join form, waiting message)
+  - [x] Role-based permissions with visual badges
 
 ### Game Master Controls 🔲 **NEXT**
 - [ ] **Master Control Panel**
@@ -155,28 +155,22 @@
 
 ## 🚨 Current Blockers
 
-### 1. **Master/Player Role Separation** (CRITICAL)
+### 1. **Master/Player Role Separation** (FIXED ✅)
 **Issue**: Everyone sees the same UI, anyone can start game
-**Impact**: Breaks core architecture - master should control, players should only play
-**Priority**: 🔴 HIGH - Must fix before continuing
-**Docs Reference**:
-- `docs/PROJECT_DESCRIPTION.md` lines 76-91 (roles definition)
-- `docs/UI_SPEC.md` (separate UI specs for master vs player)
-
-**Solution Options**:
-- **Option A**: localStorage-based (quick, good for MVP)
-  - Store `isMaster: true` when creating room
+**Status**: ✅ **RESOLVED** - Implemented localStorage-based role detection
+**Solution Applied**: Option A (localStorage-based MVP)
+  - Store `master_${roomId}` when creating room
   - Show/hide controls based on flag
-  - Works for single-device master
-
-- **Option B**: Proper authentication (robust)
-  - Track room creator in database
-  - Session-based auth
-  - Separate `/master/:roomId` and `/player/:roomId` routes
+  - Role badges (👑 Master / 🎮 Player)
+  - Master: QR code, game controls, player management
+  - Player: Join form, waiting message
 
 ### 2. **Game Start Error** (FIXED ✅)
 **Issue**: `db is not defined` when starting game
 **Status**: ✅ Fixed by importing `db` in index.ts
+
+### No Current Blockers! ✅
+All critical issues have been resolved. Ready to proceed with gameplay implementation.
 
 ---
 
@@ -184,20 +178,34 @@
 
 **Phase 1**: ✅✅✅✅✅ 100% (5/5 components)
 **Phase 2**: ✅✅✅✅✅ 100% (5/5 components)
-**Phase 3**: ✅✅✅⚠️🔲 40% (2/5 major components)
+**Phase 3**: ✅✅✅✅🔲 60% (3/5 major components)
 
-**Total Project**: ~60% complete
+**Total Project**: ~65% complete
 
 ---
 
 ## 🎯 Next Steps (Priority Order)
 
-1. **Fix Master/Player Separation** ⚠️ (blocks everything else)
-2. Implement Master Control Panel
-3. Add Music Playback (Web Audio API)
-4. Implement Buzz & Choice gameplay
-5. Add scoring and leaderboard
-6. Test end-to-end gameplay
+1. ✅ ~~Fix Master/Player Separation~~ (COMPLETED)
+2. **Implement Master Control Panel** 🎯 (NEXT)
+   - Game state display
+   - Control buttons (Play, Pause, Skip, End)
+   - Current song info
+   - Player status indicators
+3. **Add Music Playback** (Web Audio API)
+   - Audio player component
+   - Play song clips from library
+   - Song duration timer
+4. **Implement Buzz & Choice Gameplay**
+   - Player buzz button
+   - Multiple choice display
+   - Answer validation
+5. **Add Scoring and Leaderboard**
+   - Real-time score updates
+   - Round score tracking
+6. **Test End-to-End Gameplay**
+   - Full game flow testing
+   - Multi-device testing
 
 ---
 
@@ -207,4 +215,6 @@
 - Database schema supports full game flow
 - Music library is functional and ready
 - QR code system works for easy player joining
-- **Main gap**: Role separation and gameplay implementation
+- **Role separation complete**: Master/Player UI separation implemented
+- **Next focus**: Game control panel and music playback for master device
+- **Architecture ready**: All foundation pieces in place for gameplay implementation
