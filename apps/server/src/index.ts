@@ -332,6 +332,7 @@ const app = new Elysia()
         sessionId: session.id,
         index: 0,
         modeType: body.modeType || 'buzz_and_choice',
+        mediaType: body.mediaType || 'music', // Default to music for MVP
         playlistId,
         params: body.params || null,
         status: 'pending',

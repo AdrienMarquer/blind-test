@@ -67,6 +67,21 @@ export function handleMessage(
       case 'player:kick':
         handlePlayerKick(ws, roomId, parsed.data);
         break;
+      case 'player:buzz':
+        handlePlayerBuzz(ws, roomId, parsed.data);
+        break;
+      case 'player:answer':
+        handlePlayerAnswer(ws, roomId, parsed.data);
+        break;
+      case 'game:pause':
+        handleGamePause(ws, roomId);
+        break;
+      case 'game:resume':
+        handleGameResume(ws, roomId);
+        break;
+      case 'game:skip':
+        handleGameSkip(ws, roomId);
+        break;
       default:
         console.log(`Unknown message type: ${parsed.type}`);
     }
@@ -315,5 +330,131 @@ function sendToPlayer(
     if (ws.data.playerId === playerId) {
       ws.send(messageStr);
     }
+  });
+}
+
+// ============================================================================
+// Gameplay Event Handlers
+// ============================================================================
+
+async function handlePlayerBuzz(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  roomId: string,
+  data: { songIndex: number }
+) {
+  const { playerId } = ws.data;
+  if (!playerId) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      data: { message: 'Not authenticated' }
+    }));
+    return;
+  }
+
+  try {
+    // TODO: Implement with GameService
+    console.log(`[Buzz] Player ${playerId} buzzed on song ${data.songIndex}`);
+
+    // Placeholder: Broadcast buzz to all clients
+    broadcastToRoom(roomId, {
+      type: 'player:buzzed',
+      data: {
+        playerId,
+        songIndex: data.songIndex,
+        timestamp: Date.now(),
+      }
+    });
+  } catch (error) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      data: { message: 'Failed to process buzz' }
+    }));
+  }
+}
+
+async function handlePlayerAnswer(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  roomId: string,
+  data: { songIndex: number; answerType: 'title' | 'artist'; value: string }
+) {
+  const { playerId } = ws.data;
+  if (!playerId) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      data: { message: 'Not authenticated' }
+    }));
+    return;
+  }
+
+  try {
+    // TODO: Implement with GameService and ModeHandler
+    console.log(`[Answer] Player ${playerId} answered ${data.answerType}: ${data.value}`);
+
+    // Placeholder: Validate and broadcast result
+    const isCorrect = false; // TODO: Real validation
+    const pointsAwarded = 0;
+
+    ws.send(JSON.stringify({
+      type: 'answer:result',
+      data: {
+        isCorrect,
+        pointsAwarded,
+        answerType: data.answerType,
+      }
+    }));
+
+    broadcastToRoom(roomId, {
+      type: 'answer:submitted',
+      data: {
+        playerId,
+        answerType: data.answerType,
+        isCorrect,
+        pointsAwarded,
+      }
+    }, ws);
+  } catch (error) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      data: { message: 'Failed to process answer' }
+    }));
+  }
+}
+
+async function handleGamePause(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  roomId: string
+) {
+  // TODO: Check if player is master
+  console.log(`[Game] Pause requested for room ${roomId}`);
+
+  broadcastToRoom(roomId, {
+    type: 'game:paused',
+    data: { timestamp: Date.now() }
+  });
+}
+
+async function handleGameResume(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  roomId: string
+) {
+  // TODO: Check if player is master
+  console.log(`[Game] Resume requested for room ${roomId}`);
+
+  broadcastToRoom(roomId, {
+    type: 'game:resumed',
+    data: { timestamp: Date.now() }
+  });
+}
+
+async function handleGameSkip(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  roomId: string
+) {
+  // TODO: Check if player is master
+  console.log(`[Game] Skip requested for room ${roomId}`);
+
+  broadcastToRoom(roomId, {
+    type: 'game:skipped',
+    data: { timestamp: Date.now() }
   });
 }

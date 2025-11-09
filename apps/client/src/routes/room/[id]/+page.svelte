@@ -4,6 +4,8 @@
 	import { api } from '$lib/api';
 	import { createRoomSocket } from '$lib/stores/socket.svelte';
 	import type { Room, Player } from '@blind-test/shared';
+	import MasterGameControl from '$lib/components/MasterGameControl.svelte';
+	import PlayerGameInterface from '$lib/components/PlayerGameInterface.svelte';
 
 	const roomId = $derived($page.params.id);
 
@@ -421,10 +423,18 @@
 
 		{#if room.status === 'playing'}
 			<section class="game-section">
-				<div class="placeholder">
-					<h2>🎵 Game in Progress</h2>
-					<p>Music playback and game controls will be implemented in Phase 2</p>
-				</div>
+				{#if isMaster}
+					<!-- Master Control Panel -->
+					<MasterGameControl {room} socket={roomSocket} />
+				{:else if currentPlayer}
+					<!-- Player Game Interface -->
+					<PlayerGameInterface player={currentPlayer} socket={roomSocket} />
+				{:else}
+					<div class="spectator">
+						<h2>👁️ Spectator Mode</h2>
+						<p>You are watching the game</p>
+					</div>
+				{/if}
 			</section>
 		{/if}
 	{/if}
