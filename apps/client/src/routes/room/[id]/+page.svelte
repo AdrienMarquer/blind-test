@@ -15,6 +15,12 @@
 	let starting = $state(false);
 	let initialRoom = $state<Room | null>(null);
 
+	// Game configuration
+	let songs = $state<any[]>([]);
+	let selectedSongIds = $state<string[]>([]);
+	let songCount = $state(10);
+	let showConfig = $state(false);
+
 	// Reactive access to socket state (prefer WebSocket data, fallback to HTTP)
 	const room = $derived(roomSocket?.room || initialRoom);
 	const players = $derived(roomSocket?.players || []);
@@ -87,6 +93,25 @@
 		}
 	}
 
+	async function loadSongs() {
+		try {
+			const response = await api.api.songs.get();
+			if (response.data) {
+				songs = response.data.songs || [];
+			}
+		} catch (err) {
+			console.error('Error loading songs:', err);
+		}
+	}
+
+	function toggleSongSelection(songId: string) {
+		if (selectedSongIds.includes(songId)) {
+			selectedSongIds = selectedSongIds.filter(id => id !== songId);
+		} else {
+			selectedSongIds = [...selectedSongIds, songId];
+		}
+	}
+
 	async function startGame() {
 		if (!room) return;
 
@@ -94,11 +119,21 @@
 			starting = true;
 			error = null;
 
-			const response = await api.api.game[room.id].start.post();
+			const body: any = {};
+
+			// Use selected songs or random count
+			if (selectedSongIds.length > 0) {
+				body.songIds = selectedSongIds;
+			} else {
+				body.songCount = songCount;
+			}
+
+			const response = await api.api.game[room.id].start.post(body);
 
 			if (response.data) {
 				console.log('Game started:', response.data);
-				// Game start will be broadcast via WebSocket in Phase 2
+				showConfig = false;
+				// Game start will be broadcast via WebSocket
 			} else {
 				error = 'Failed to start game';
 			}
@@ -237,15 +272,72 @@
 		</section>
 
 		{#if room.status === 'lobby' && players.length >= 2}
-			<section class="game-controls">
-				<button
-					class="start-button"
-					onclick={startGame}
-					disabled={starting}
-				>
-					{starting ? 'Starting...' : 'Start Game'}
-				</button>
-			</section>
+			{#if !showConfig}
+				<section class="game-controls">
+					<button
+						class="config-button"
+						onclick={() => { showConfig = true; loadSongs(); }}
+					>
+						⚙️ Configure Game
+					</button>
+					<button
+						class="start-button"
+						onclick={startGame}
+						disabled={starting}
+					>
+						{starting ? 'Starting...' : 'Quick Start (Random Songs)'}
+					</button>
+				</section>
+			{:else}
+				<section class="config-section">
+					<div class="config-header">
+						<h2>Game Configuration</h2>
+						<button class="close-button" onclick={() => showConfig = false}>✕</button>
+					</div>
+
+					<div class="config-tabs">
+						<h3>Select Songs</h3>
+						{#if songs.length === 0}
+							<p class="info">No songs in library. <a href="/music">Upload some music</a> first!</p>
+						{:else}
+							<div class="song-count-controls">
+								<label>
+									Use Random Songs:
+									<input type="number" bind:value={songCount} min="1" max="100" />
+								</label>
+								<span class="or">OR</span>
+								<span>Select specific songs ({selectedSongIds.length} selected)</span>
+							</div>
+
+							<div class="songs-grid-mini">
+								{#each songs as song (song.id)}
+									<button
+										class="song-item"
+										class:selected={selectedSongIds.includes(song.id)}
+										onclick={() => toggleSongSelection(song.id)}
+									>
+										<span class="song-title">{song.title}</span>
+										<span class="song-artist">{song.artist}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+
+					<div class="config-actions">
+						<button class="cancel-button" onclick={() => showConfig = false}>
+							Cancel
+						</button>
+						<button
+							class="start-button"
+							onclick={startGame}
+							disabled={starting || (songs.length === 0)}
+						>
+							{starting ? 'Starting...' : `Start Game${selectedSongIds.length > 0 ? ` (${selectedSongIds.length} songs)` : ` (${songCount} random)`}`}
+						</button>
+					</div>
+				</section>
+			{/if}
 		{:else if room.status === 'lobby' && players.length < 2}
 			<section class="game-controls">
 				<p class="info">Need at least 2 players to start the game</p>
