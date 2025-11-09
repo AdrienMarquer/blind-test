@@ -12,7 +12,7 @@
  * 5. Points awarded immediately
  */
 
-import type { Round, RoundSong, Answer, Song, ModeParams } from '@blind-test/shared';
+import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
 
 export class FastBuzzMode extends BaseModeHandler {

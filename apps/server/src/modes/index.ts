@@ -12,7 +12,6 @@ export * from './ModeRegistry';
 import { BuzzAndChoiceMode } from './BuzzAndChoiceMode';
 import { FastBuzzMode } from './FastBuzzMode';
 import { TextInputMode } from './TextInputMode';
-import { PictureRoundMode } from './PictureRoundMode';
 
 import { modeRegistry } from './ModeRegistry';
 
@@ -20,7 +19,6 @@ import { modeRegistry } from './ModeRegistry';
 modeRegistry.register(new BuzzAndChoiceMode());
 modeRegistry.register(new FastBuzzMode());
 modeRegistry.register(new TextInputMode());
-modeRegistry.register(new PictureRoundMode());
 
 console.log('[Mode System] Initialized with', modeRegistry.getAvailableTypes().length, 'modes');
 console.log('[Mode System] Available:', modeRegistry.getAvailableTypes().join(', '));

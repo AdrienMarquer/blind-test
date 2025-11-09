@@ -9,7 +9,7 @@
  * - Game flow (when songs/rounds end)
  */
 
-import type { Round, RoundSong, Answer, Song, ModeType, ModeParams } from '@blind-test/shared';
+import type { Round, RoundSong, Answer, Song, ModeType, ModeParams, MediaType } from '@blind-test/shared';
 
 /**
  * Result of an answer validation
@@ -48,8 +48,9 @@ export interface ModeHandler {
   /**
    * Called when a song starts playing
    * Initialize song-specific state (choices, timers, etc.)
+   * @param mediaType - The media type for this round (music, picture, video, text_question)
    */
-  startSong(song: RoundSong, allSongs: Song[]): Promise<void>;
+  startSong(song: RoundSong, allSongs: Song[], mediaType: MediaType): Promise<void>;
 
   /**
    * Called when a song ends
@@ -122,8 +123,8 @@ export abstract class BaseModeHandler implements ModeHandler {
     console.log(`[${this.type}] Starting round ${round.index}`);
   }
 
-  async startSong(song: RoundSong, allSongs: Song[]): Promise<void> {
-    console.log(`[${this.type}] Starting song ${song.index}`);
+  async startSong(song: RoundSong, allSongs: Song[], mediaType: MediaType): Promise<void> {
+    console.log(`[${this.type}] Starting song ${song.index} with media type: ${mediaType}`);
   }
 
   async endSong(song: RoundSong): Promise<void> {

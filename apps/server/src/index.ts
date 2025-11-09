@@ -18,6 +18,7 @@ import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { modeRegistry } from './modes';
+import { mediaRegistry } from './media';
 
 // Run database migrations (db directory created in db/index.ts)
 try {
@@ -674,6 +675,40 @@ const app = new Elysia()
     } catch (err) {
       console.error(`[GET /api/modes/${modeType}] Error:`, err);
       return error(404, { error: `Mode not found: ${modeType}` });
+    }
+  })
+
+  // ========================================================================
+  // Media System Endpoints
+  // ========================================================================
+
+  // Get all available media types
+  .get('/api/media', () => {
+    console.log('[GET /api/media] Fetching available media types');
+
+    const mediaTypes = mediaRegistry.getMetadata();
+
+    return {
+      mediaTypes,
+      count: mediaTypes.length,
+    };
+  })
+
+  // Get specific media type details
+  .get('/api/media/:mediaType', ({ params: { mediaType }, error }) => {
+    console.log(`[GET /api/media/${mediaType}] Fetching media type details`);
+
+    try {
+      const handler = mediaRegistry.get(mediaType as any);
+
+      return {
+        type: handler.type,
+        name: handler.name,
+        description: handler.description,
+      };
+    } catch (err) {
+      console.error(`[GET /api/media/${mediaType}] Error:`, err);
+      return error(404, { error: `Media type not found: ${mediaType}` });
     }
   })
 

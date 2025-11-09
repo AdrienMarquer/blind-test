@@ -11,7 +11,13 @@ export type RoomStatus = 'lobby' | 'playing' | 'between_rounds' | 'finished';
 export type PlayerRole = 'master' | 'player';
 export type GameStatus = 'waiting' | 'playing' | 'paused' | 'finished';
 export type RoundStatus = 'pending' | 'active' | 'finished';
-export type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'picture_round';
+
+// Game Mechanics - HOW players interact
+export type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
+
+// Media Type - WHAT content is shown
+export type MediaType = 'music' | 'picture' | 'video' | 'text_question';
+
 export type SongStatus = 'pending' | 'playing' | 'answering' | 'finished';
 export type AnswerType = 'title' | 'artist' | 'both';
 
@@ -83,7 +89,8 @@ export interface Round {
   id: string;
   sessionId: string;
   index: number;             // Round number (0-based)
-  modeType: ModeType;
+  modeType: ModeType;        // Game mechanic (HOW to play)
+  mediaType: MediaType;      // Content type (WHAT to show)
   playlistId: string;
 
   // Configuration (simplified - no game-level config)
@@ -168,9 +175,9 @@ export interface Playlist {
 
 export interface RoundSong {
   songId: string;
-  song: Song;                  // Populated song data
+  song: Song;                  // Populated song data (or picture/video data)
   index: number;               // Song number in round
-  status: SongStatus;
+  status: SongStatus;          // Note: mediaType inherited from parent Round
 
   // State
   startedAt?: Date;

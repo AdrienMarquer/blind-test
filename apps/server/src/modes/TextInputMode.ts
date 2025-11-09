@@ -12,7 +12,7 @@
  * 5. No buzzing or lockouts
  */
 
-import type { Round, RoundSong, Answer, Song, ModeParams } from '@blind-test/shared';
+import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
 
 export class TextInputMode extends BaseModeHandler {

@@ -13,8 +13,9 @@
  * 7. Song ends when both correct or timer expires
  */
 
-import type { Round, RoundSong, Answer, Song, ModeParams } from '@blind-test/shared';
+import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
+import { mediaRegistry } from '../media';
 
 export class BuzzAndChoiceMode extends BaseModeHandler {
   type = 'buzz_and_choice' as const;
@@ -35,19 +36,25 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
   /**
    * Initialize song with multiple choice options
    */
-  async startSong(song: RoundSong, allSongs: Song[]): Promise<void> {
-    await super.startSong(song, allSongs);
+  async startSong(song: RoundSong, allSongs: Song[], mediaType: MediaType): Promise<void> {
+    await super.startSong(song, allSongs, mediaType);
 
-    // Generate multiple choice options
+    // Get the appropriate media handler
+    const mediaHandler = mediaRegistry.get(mediaType);
+
+    // Load media content
     const correctSong = song.song;
+    const mediaContent = await mediaHandler.loadContent(correctSong);
 
-    // Generate 4 title choices (1 correct, 3 wrong)
-    song.titleChoices = this.generateTitleChoices(correctSong, allSongs);
+    // Generate 3 wrong choices for title and artist
+    const wrongTitles = mediaHandler.generateWrongChoices(mediaContent, allSongs, 3, 'title');
+    const wrongArtists = mediaHandler.generateWrongChoices(mediaContent, allSongs, 3, 'artist');
 
-    // Generate 4 artist choices (1 correct, 3 wrong)
-    song.artistChoices = this.generateArtistChoices(correctSong, allSongs);
+    // Combine correct answer with wrong answers and shuffle
+    song.titleChoices = this.shuffleArray([mediaContent.title, ...wrongTitles]);
+    song.artistChoices = this.shuffleArray([mediaContent.artist || '', ...wrongArtists]);
 
-    console.log(`[BuzzAndChoice] Generated choices for song "${correctSong.title}"`);
+    console.log(`[BuzzAndChoice] Generated choices for ${mediaType}: "${correctSong.title}"`);
   }
 
   /**
@@ -202,74 +209,6 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
     // TODO: Check if all players locked out
 
     return false;
-  }
-
-  /**
-   * Generate 4 title choices (1 correct, 3 wrong from similar songs)
-   */
-  private generateTitleChoices(correctSong: Song, allSongs: Song[]): string[] {
-    const choices = new Set<string>();
-
-    // Add correct answer
-    choices.add(correctSong.title);
-
-    // Filter potential wrong answers (same genre/era preferred)
-    const similarSongs = allSongs.filter(s =>
-      s.id !== correctSong.id &&
-      s.title !== correctSong.title &&
-      (s.genre === correctSong.genre || Math.abs(s.year - correctSong.year) <= 5)
-    );
-
-    // Add wrong answers
-    const wrongAnswers = this.selectRandomSongs(similarSongs, allSongs, 3);
-    wrongAnswers.forEach(song => choices.add(song.title));
-
-    // Convert to array and shuffle
-    return this.shuffleArray(Array.from(choices)).slice(0, 4);
-  }
-
-  /**
-   * Generate 4 artist choices (1 correct, 3 wrong from similar songs)
-   */
-  private generateArtistChoices(correctSong: Song, allSongs: Song[]): string[] {
-    const choices = new Set<string>();
-
-    // Add correct answer
-    choices.add(correctSong.artist);
-
-    // Filter potential wrong answers
-    const similarSongs = allSongs.filter(s =>
-      s.id !== correctSong.id &&
-      s.artist !== correctSong.artist &&
-      (s.genre === correctSong.genre || Math.abs(s.year - correctSong.year) <= 5)
-    );
-
-    // Add wrong answers
-    const wrongAnswers = this.selectRandomSongs(similarSongs, allSongs, 3);
-    wrongAnswers.forEach(song => choices.add(song.artist));
-
-    // Convert to array and shuffle
-    return this.shuffleArray(Array.from(choices)).slice(0, 4);
-  }
-
-  /**
-   * Select random songs, preferring similar ones
-   */
-  private selectRandomSongs(similarSongs: Song[], allSongs: Song[], count: number): Song[] {
-    const selected: Song[] = [];
-
-    // Try to use similar songs first
-    const shuffledSimilar = this.shuffleArray([...similarSongs]);
-    selected.push(...shuffledSimilar.slice(0, count));
-
-    // If not enough similar songs, add random ones
-    if (selected.length < count) {
-      const shuffledAll = this.shuffleArray([...allSongs]);
-      const additional = shuffledAll.filter(s => !selected.some(sel => sel.id === s.id));
-      selected.push(...additional.slice(0, count - selected.length));
-    }
-
-    return selected.slice(0, count);
   }
 
   /**
