@@ -87,7 +87,7 @@ bun run dev
 ```
 
 This will start:
-- Backend API on `http://localhost:3000`
+- Backend API on `http://localhost:3007`
 - Frontend on `http://localhost:5173`
 
 #### Run Server Only
@@ -96,7 +96,7 @@ This will start:
 bun run dev:server
 ```
 
-The server will run on `http://localhost:3000` with hot reload enabled.
+The server will run on `http://localhost:3007` with hot reload enabled.
 
 #### Run Client Only
 
@@ -198,7 +198,7 @@ export type App = typeof app;
 
 // Frontend (apps/client/src/lib/api.ts)
 import type { App } from '../../../server/src/index';
-export const api = treaty<App>('http://localhost:3000');
+export const api = treaty<App>('http://localhost:3007');
 ```
 
 All API calls are fully typed, providing:
@@ -261,8 +261,8 @@ All API calls are fully typed, providing:
 
 ### Server won't start
 ```bash
-# Check if port 3000 is already in use
-lsof -i :3000
+# Check if port 3007 is already in use
+lsof -i :3007
 
 # Kill the process if needed
 kill -9 <PID>

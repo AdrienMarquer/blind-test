@@ -188,7 +188,7 @@ const app = new Elysia()
     }
   )
 
-  .listen(3000);
+  .listen(3007);
 
 console.log(
   `🎵 Blind Test API Server is running at http://${app.server?.hostname}:${app.server?.port}`
