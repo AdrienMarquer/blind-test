@@ -19,6 +19,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { modeRegistry } from './modes';
 import { mediaRegistry } from './media';
+import { gameService } from './services/GameService';
 
 // Run database migrations (db directory created in db/index.ts)
 try {
@@ -344,6 +345,15 @@ const app = new Elysia()
       // Update room status
       const updated = await roomRepository.update(roomId, { status: 'playing' });
       console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name} with ${songIds.length} songs`);
+
+      // Start the first round
+      try {
+        await gameService.startRound(roomId, session.id, 0);
+        console.log(`[POST /api/game/${roomId}/start] Round 0 started successfully`);
+      } catch (roundError) {
+        console.error(`[POST /api/game/${roomId}/start] Failed to start round:`, roundError);
+        // Continue anyway - game is created, round start can be retried
+      }
 
       // Broadcast game start to all connected WebSocket clients
       broadcastToRoom(roomId, {

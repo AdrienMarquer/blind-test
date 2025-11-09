@@ -8,18 +8,19 @@
  * - WebSocket (real-time communication)
  */
 
-import type { GameSession, Round, RoundSong, Song, Player, MediaType } from '@blind-test/shared';
-import { generateId } from '@blind-test/shared';
-import { gameSessionRepository, songRepository } from '../repositories';
+import type { GameSession, Round, RoundSong, Song, Player, MediaType, Answer } from '@blind-test/shared';
+import { generateId, SYSTEM_DEFAULTS } from '@blind-test/shared';
+import { gameSessionRepository, songRepository, playlistRepository } from '../repositories';
 import { modeRegistry } from '../modes';
 import { mediaRegistry } from '../media';
 import { broadcastToRoom } from '../websocket/handler';
+import { gameStateManager } from './GameStateManager';
 
 export class GameService {
   /**
    * Start a round - transition from lobby to playing
    */
-  async startRound(sessionId: string, roundIndex: number): Promise<Round> {
+  async startRound(roomId: string, sessionId: string, roundIndex: number): Promise<Round> {
     console.log(`[GameService] Starting round ${roundIndex} for session ${sessionId}`);
 
     const session = await gameSessionRepository.findById(sessionId);
@@ -44,11 +45,19 @@ export class GameService {
     round.status = 'active';
     round.startedAt = new Date();
 
+    // Initialize scores map if not already set
+    if (!round.scores) {
+      round.scores = new Map<string, number>();
+    }
+
+    // Register in state manager
+    gameStateManager.setActiveSession(roomId, session, round);
+
     // Start first song
-    await this.startSong(round, 0);
+    await this.startSong(roomId, round, 0);
 
     // Broadcast round started
-    broadcastToRoom(session.roomId, {
+    broadcastToRoom(roomId, {
       type: 'round:started',
       data: {
         roundIndex: round.index,
@@ -67,12 +76,23 @@ export class GameService {
   private async loadRoundSongs(round: Round): Promise<RoundSong[]> {
     console.log(`[GameService] Loading songs for round ${round.index}`);
 
-    // Get all songs from playlist (implementation depends on playlist structure)
-    // For now, load from songRepository based on playlistId
-    const allSongs = await songRepository.findAll();
+    // Get playlist songs
+    const playlist = await playlistRepository.findById(round.playlistId);
+    if (!playlist) {
+      throw new Error(`Playlist not found: ${round.playlistId}`);
+    }
+
+    // Load song details
+    const songs: Song[] = [];
+    for (const songId of playlist.songIds) {
+      const song = await songRepository.findById(songId);
+      if (song) {
+        songs.push(song);
+      }
+    }
 
     // Create RoundSong objects
-    const roundSongs: RoundSong[] = allSongs.slice(0, 10).map((song, index) => ({
+    const roundSongs: RoundSong[] = songs.map((song, index) => ({
       songId: song.id,
       song: song,
       index,
@@ -87,7 +107,7 @@ export class GameService {
   /**
    * Start a specific song in the round
    */
-  async startSong(round: Round, songIndex: number): Promise<void> {
+  async startSong(roomId: string, round: Round, songIndex: number): Promise<void> {
     console.log(`[GameService] Starting song ${songIndex} in round ${round.index}`);
 
     const song = round.songs[songIndex];
@@ -107,12 +127,15 @@ export class GameService {
     song.startedAt = new Date();
     round.currentSongIndex = songIndex;
 
+    // Update state
+    gameStateManager.updateRound(roomId, round);
+
     // Broadcast song started
-    broadcastToRoom(round.sessionId, {
+    broadcastToRoom(roomId, {
       type: 'song:started',
       data: {
         songIndex,
-        duration: round.params.songDuration || 15,
+        duration: round.params.songDuration || SYSTEM_DEFAULTS.songDuration,
         // Don't send the correct answer to clients!
         clipStart: song.song.clipStart,
       },
@@ -122,13 +145,22 @@ export class GameService {
   /**
    * Handle player buzz
    */
-  async handleBuzz(roundId: string, songIndex: number, playerId: string): Promise<boolean> {
-    console.log(`[GameService] Player ${playerId} buzzed on song ${songIndex}`);
+  async handleBuzz(roomId: string, songIndex: number, playerId: string): Promise<boolean> {
+    console.log(`[GameService] Player ${playerId} buzzed on song ${songIndex} in room ${roomId}`);
 
-    // Get round (this would need repository implementation)
-    // For now, this is a placeholder
-    const round = await this.getRound(roundId);
+    // Get current round
+    const round = gameStateManager.getCurrentRound(roomId);
+    if (!round) {
+      console.error(`[GameService] No active round for room ${roomId}`);
+      return false;
+    }
+
     const song = round.songs[songIndex];
+    if (!song) {
+      console.error(`[GameService] Song ${songIndex} not found`);
+      return false;
+    }
+
     const modeHandler = modeRegistry.get(round.modeType);
 
     // Check if player can buzz
@@ -141,8 +173,11 @@ export class GameService {
     const accepted = await modeHandler.handleBuzz(playerId, song);
 
     if (accepted) {
+      // Update state
+      gameStateManager.updateRound(roomId, round);
+
       // Broadcast buzz to all clients
-      broadcastToRoom(round.sessionId, {
+      broadcastToRoom(roomId, {
         type: 'player:buzzed',
         data: {
           playerId,
@@ -156,9 +191,65 @@ export class GameService {
   }
 
   /**
+   * Handle player answer
+   */
+  async handleAnswer(roomId: string, playerId: string, answer: Answer): Promise<void> {
+    console.log(`[GameService] Player ${playerId} answered ${answer.type}: ${answer.value}`);
+
+    // Get current round and song
+    const round = gameStateManager.getCurrentRound(roomId);
+    if (!round) {
+      throw new Error(`No active round for room ${roomId}`);
+    }
+
+    const song = round.songs[round.currentSongIndex];
+    if (!song) {
+      throw new Error(`No active song in round`);
+    }
+
+    const modeHandler = modeRegistry.get(round.modeType);
+
+    // Validate and score the answer
+    const result = await modeHandler.handleAnswer(answer, song);
+
+    // Store the answer
+    song.answers.push(answer);
+    gameStateManager.updateRound(roomId, round);
+
+    // Send result to the player
+    broadcastToRoom(roomId, {
+      type: 'answer:result',
+      data: {
+        playerId,
+        answerType: answer.type,
+        isCorrect: result.isCorrect,
+        pointsAwarded: result.pointsAwarded,
+        shouldShowArtistChoices: result.shouldShowArtistChoices,
+        lockOutPlayer: result.lockOutPlayer,
+      },
+    });
+
+    // Check if we should show artist choices
+    if (result.shouldShowArtistChoices && song.artistChoices) {
+      broadcastToRoom(roomId, {
+        type: 'choices:artist',
+        data: {
+          playerId,
+          artistChoices: song.artistChoices,
+        },
+      });
+    }
+
+    // Check if song should end
+    if (modeHandler.shouldEndSong(song)) {
+      await this.endSong(roomId, round, round.currentSongIndex);
+    }
+  }
+
+  /**
    * End a song
    */
-  async endSong(round: Round, songIndex: number): Promise<void> {
+  async endSong(roomId: string, round: Round, songIndex: number): Promise<void> {
     console.log(`[GameService] Ending song ${songIndex} in round ${round.index}`);
 
     const song = round.songs[songIndex];
@@ -170,8 +261,11 @@ export class GameService {
     song.status = 'finished';
     song.endedAt = new Date();
 
+    // Update state
+    gameStateManager.updateRound(roomId, round);
+
     // Broadcast song ended
-    broadcastToRoom(round.sessionId, {
+    broadcastToRoom(roomId, {
       type: 'song:ended',
       data: {
         songIndex,
@@ -182,17 +276,17 @@ export class GameService {
 
     // Check if round is complete
     if (modeHandler.isRoundComplete(round)) {
-      await this.endRound(round);
+      await this.endRound(roomId, round);
     } else {
       // Start next song
-      await this.startSong(round, songIndex + 1);
+      await this.startSong(roomId, round, songIndex + 1);
     }
   }
 
   /**
    * End a round
    */
-  async endRound(round: Round): Promise<void> {
+  async endRound(roomId: string, round: Round): Promise<void> {
     console.log(`[GameService] Ending round ${round.index}`);
 
     round.status = 'finished';
@@ -201,8 +295,11 @@ export class GameService {
     // Calculate round scores
     // TODO: Implement scoring logic
 
+    // Update state
+    gameStateManager.updateRound(roomId, round);
+
     // Broadcast round ended
-    broadcastToRoom(round.sessionId, {
+    broadcastToRoom(roomId, {
       type: 'round:ended',
       data: {
         roundIndex: round.index,
@@ -212,16 +309,11 @@ export class GameService {
         })),
       },
     });
+
+    // Remove from state manager
+    gameStateManager.removeSession(roomId);
   }
 
-  /**
-   * Placeholder: Get round by ID
-   * TODO: Implement proper round repository
-   */
-  private async getRound(roundId: string): Promise<Round> {
-    // This is a placeholder - need to implement RoundRepository
-    throw new Error('Not implemented yet - need RoundRepository');
-  }
 }
 
 // Export singleton instance

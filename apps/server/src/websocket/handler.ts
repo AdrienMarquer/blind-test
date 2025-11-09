@@ -6,6 +6,7 @@
 import type { ServerWebSocket } from 'bun';
 import { roomRepository, playerRepository } from '../repositories';
 import type { Player, Room } from '@blind-test/shared';
+import { gameService } from '../services/GameService';
 
 // Store active connections per room
 const roomConnections = new Map<string, Set<ServerWebSocket<{ roomId: string; playerId?: string }>>>();
@@ -352,19 +353,19 @@ async function handlePlayerBuzz(
   }
 
   try {
-    // TODO: Implement with GameService
     console.log(`[Buzz] Player ${playerId} buzzed on song ${data.songIndex}`);
 
-    // Placeholder: Broadcast buzz to all clients
-    broadcastToRoom(roomId, {
-      type: 'player:buzzed',
-      data: {
-        playerId,
-        songIndex: data.songIndex,
-        timestamp: Date.now(),
-      }
-    });
+    // Process buzz through GameService
+    const accepted = await gameService.handleBuzz(roomId, data.songIndex, playerId);
+
+    if (!accepted) {
+      ws.send(JSON.stringify({
+        type: 'buzz:rejected',
+        data: { reason: 'Cannot buzz at this time' }
+      }));
+    }
   } catch (error) {
+    console.error('[Buzz] Error:', error);
     ws.send(JSON.stringify({
       type: 'error',
       data: { message: 'Failed to process buzz' }
@@ -387,32 +388,25 @@ async function handlePlayerAnswer(
   }
 
   try {
-    // TODO: Implement with GameService and ModeHandler
     console.log(`[Answer] Player ${playerId} answered ${data.answerType}: ${data.value}`);
 
-    // Placeholder: Validate and broadcast result
-    const isCorrect = false; // TODO: Real validation
-    const pointsAwarded = 0;
+    // Create answer object
+    const answer = {
+      id: `answer_${Date.now()}_${playerId}`,
+      playerId,
+      songId: '', // Will be filled by GameService
+      type: data.answerType,
+      value: data.value,
+      submittedAt: new Date(),
+      timeToAnswer: 0, // TODO: Calculate from buzz time
+      isCorrect: false, // Will be set by validation
+      pointsAwarded: 0, // Will be set by scoring
+    };
 
-    ws.send(JSON.stringify({
-      type: 'answer:result',
-      data: {
-        isCorrect,
-        pointsAwarded,
-        answerType: data.answerType,
-      }
-    }));
-
-    broadcastToRoom(roomId, {
-      type: 'answer:submitted',
-      data: {
-        playerId,
-        answerType: data.answerType,
-        isCorrect,
-        pointsAwarded,
-      }
-    }, ws);
+    // Process answer through GameService
+    await gameService.handleAnswer(roomId, playerId, answer);
   } catch (error) {
+    console.error('[Answer] Error:', error);
     ws.send(JSON.stringify({
       type: 'error',
       data: { message: 'Failed to process answer' }
