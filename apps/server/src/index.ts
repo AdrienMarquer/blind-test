@@ -5,10 +5,12 @@
 
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { roomRepository, playerRepository, songRepository } from './repositories';
+import { roomRepository, playerRepository, songRepository, gameSessionRepository, playlistRepository } from './repositories';
 import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './websocket/handler';
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
+import { generateId } from '@blind-test/shared';
+import { schema } from './db';
 import { runMigrations } from './db';
 import { extractMetadata, isSupportedAudioFormat, getFileFormat } from './utils/mp3-metadata';
 import { writeFile, unlink, stat } from 'fs/promises';
@@ -267,7 +269,7 @@ const app = new Elysia()
   // ========================================================================
 
   // Start game
-  .post('/api/game/:roomId/start', async ({ params: { roomId }, error }) => {
+  .post('/api/game/:roomId/start', async ({ params: { roomId }, body, error }) => {
     const room = await roomRepository.findById(roomId);
 
     if (!room) {
@@ -284,26 +286,90 @@ const app = new Elysia()
     }
 
     try {
-      // TODO: Implement game session creation in Phase 2
+      // Create game session
+      const session = await gameSessionRepository.create({
+        roomId,
+      });
+
+      // Get songs for the game
+      let songIds: string[];
+      if (body.playlistId) {
+        const playlist = await playlistRepository.findById(body.playlistId);
+        if (!playlist) {
+          return error(404, { error: 'Playlist not found' });
+        }
+        songIds = playlist.songIds;
+      } else if (body.songIds && body.songIds.length > 0) {
+        songIds = body.songIds;
+      } else {
+        // Get random songs from library
+        const randomSongs = await songRepository.getRandom(body.songCount || 10);
+        songIds = randomSongs.map(s => s.id);
+      }
+
+      if (songIds.length === 0) {
+        await gameSessionRepository.delete(session.id);
+        return error(400, { error: 'No songs available for the game' });
+      }
+
+      // Create a simple playlist for this session if needed
+      let playlistId = body.playlistId;
+      if (!playlistId) {
+        const tempPlaylist = await playlistRepository.create({
+          name: `Game ${session.id}`,
+          description: 'Auto-generated playlist for game session',
+          songIds,
+        });
+        playlistId = tempPlaylist.id;
+      }
+
+      // Create single round for now (Phase 3 will support multiple rounds)
+      const roundId = generateId();
+      await db.insert(schema.rounds).values({
+        id: roundId,
+        sessionId: session.id,
+        index: 0,
+        modeType: body.modeType || 'buzz_and_choice',
+        playlistId,
+        params: body.params || null,
+        status: 'pending',
+        startedAt: null,
+        endedAt: null,
+        currentSongIndex: 0,
+      });
+
+      // Update room status
       const updated = await roomRepository.update(roomId, { status: 'playing' });
-      console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name}`);
+      console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name} with ${songIds.length} songs`);
 
       // Broadcast game start to all connected WebSocket clients
       broadcastToRoom(roomId, {
         type: 'game:started',
-        data: { room: updated }
+        data: {
+          room: updated,
+          session: await gameSessionRepository.findById(session.id),
+        }
       });
 
       return {
-        sessionId: 'placeholder', // Will be implemented in Phase 2
+        sessionId: session.id,
         roomId,
         status: updated.status,
-        message: 'Game start will be fully implemented in Phase 2',
+        songCount: songIds.length,
+        modeType: body.modeType || 'buzz_and_choice',
       };
     } catch (err) {
       console.error(`[POST /api/game/${roomId}/start] Error:`, err);
       return error(500, { error: 'Failed to start game' });
     }
+  }, {
+    body: t.Object({
+      playlistId: t.Optional(t.String()),
+      songIds: t.Optional(t.Array(t.String())),
+      songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+      modeType: t.Optional(t.String()),
+      params: t.Optional(t.Any()),
+    }),
   })
 
   // ========================================================================
@@ -482,6 +548,96 @@ const app = new Elysia()
     } catch (err) {
       console.error(`[DELETE /api/songs/${songId}] Error:`, err);
       return error(500, { error: 'Failed to delete song' });
+    }
+  })
+
+  // ========================================================================
+  // Playlist Endpoints
+  // ========================================================================
+
+  // Get all playlists
+  .get('/api/playlists', async () => {
+    console.log('[GET /api/playlists] Fetching all playlists');
+    const playlists = await playlistRepository.findAll();
+    return {
+      playlists,
+      total: playlists.length,
+    };
+  })
+
+  // Get playlist by ID
+  .get('/api/playlists/:playlistId', async ({ params: { playlistId }, error }) => {
+    const playlist = await playlistRepository.findById(playlistId);
+
+    if (!playlist) {
+      return error(404, { error: 'Playlist not found' });
+    }
+
+    return playlist;
+  })
+
+  // Create playlist
+  .post('/api/playlists', async ({ body, error }) => {
+    try {
+      const playlist = await playlistRepository.create({
+        name: body.name,
+        description: body.description,
+        songIds: body.songIds || [],
+      });
+
+      console.log(`[POST /api/playlists] Created playlist: ${playlist.name} with ${playlist.songCount} songs`);
+      return playlist;
+    } catch (err) {
+      console.error('[POST /api/playlists] Error:', err);
+      return error(500, { error: 'Failed to create playlist' });
+    }
+  }, {
+    body: t.Object({
+      name: t.String({ minLength: 1, maxLength: 100 }),
+      description: t.Optional(t.String()),
+      songIds: t.Optional(t.Array(t.String())),
+    }),
+  })
+
+  // Update playlist
+  .patch('/api/playlists/:playlistId', async ({ params: { playlistId }, body, error }) => {
+    const playlist = await playlistRepository.findById(playlistId);
+
+    if (!playlist) {
+      return error(404, { error: 'Playlist not found' });
+    }
+
+    try {
+      const updated = await playlistRepository.update(playlistId, body);
+      console.log(`[PATCH /api/playlists/${playlistId}] Updated playlist: ${updated.name}`);
+      return updated;
+    } catch (err) {
+      console.error(`[PATCH /api/playlists/${playlistId}] Error:`, err);
+      return error(500, { error: 'Failed to update playlist' });
+    }
+  }, {
+    body: t.Object({
+      name: t.Optional(t.String()),
+      description: t.Optional(t.String()),
+      songIds: t.Optional(t.Array(t.String())),
+    }),
+  })
+
+  // Delete playlist
+  .delete('/api/playlists/:playlistId', async ({ params: { playlistId }, error }) => {
+    const playlist = await playlistRepository.findById(playlistId);
+
+    if (!playlist) {
+      return error(404, { error: 'Playlist not found' });
+    }
+
+    try {
+      await playlistRepository.delete(playlistId);
+      console.log(`[DELETE /api/playlists/${playlistId}] Deleted playlist: ${playlist.name}`);
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      console.error(`[DELETE /api/playlists/${playlistId}] Error:`, err);
+      return error(500, { error: 'Failed to delete playlist' });
     }
   })
 
