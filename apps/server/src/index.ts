@@ -17,6 +17,7 @@ import { writeFile, unlink, stat } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { modeRegistry } from './modes';
 
 // Run database migrations (db directory created in db/index.ts)
 try {
@@ -640,6 +641,45 @@ const app = new Elysia()
       return error(500, { error: 'Failed to delete playlist' });
     }
   })
+
+  // ========================================================================
+  // Mode System Endpoints
+  // ========================================================================
+
+  // Get all available game modes
+  .get('/api/modes', () => {
+    console.log('[GET /api/modes] Fetching available modes');
+
+    const modes = modeRegistry.getMetadata();
+
+    return {
+      modes,
+      count: modes.length,
+    };
+  })
+
+  // Get specific mode details
+  .get('/api/modes/:modeType', ({ params: { modeType }, error }) => {
+    console.log(`[GET /api/modes/${modeType}] Fetching mode details`);
+
+    try {
+      const handler = modeRegistry.get(modeType as any);
+
+      return {
+        type: handler.type,
+        name: handler.name,
+        description: handler.description,
+        defaultParams: handler.defaultParams,
+      };
+    } catch (err) {
+      console.error(`[GET /api/modes/${modeType}] Error:`, err);
+      return error(404, { error: `Mode not found: ${modeType}` });
+    }
+  })
+
+  // ========================================================================
+  // WebSocket Endpoints
+  // ========================================================================
 
   // WebSocket endpoint for room connections
   .ws('/ws/rooms/:roomId', {
