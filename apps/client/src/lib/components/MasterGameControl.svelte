@@ -4,8 +4,7 @@
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
 	// Props
-	export let room: Room;
-	export let socket: RoomSocket;
+	const { room, socket }: { room: Room; socket: RoomSocket } = $props();
 
 	// Game state
 	let currentSong = $state(0);

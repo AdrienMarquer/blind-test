@@ -9,7 +9,7 @@
 
 	const roomId = $derived($page.params.id);
 
-	let roomSocket: ReturnType<typeof createRoomSocket> | null = null;
+	let roomSocket = $state<ReturnType<typeof createRoomSocket> | null>(null);
 	let playerName = $state('');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -716,20 +716,6 @@
 
 	.game-section {
 		background-color: #f9fafb;
-	}
-
-	.placeholder {
-		text-align: center;
-		padding: 3rem 2rem;
-	}
-
-	.placeholder h2 {
-		font-size: 1.5rem;
-		margin-bottom: 1rem;
-	}
-
-	.placeholder p {
-		color: #6b7280;
 	}
 
 	.config-button {
