@@ -15,6 +15,7 @@
 	let starting = $state(false);
 	let initialRoom = $state<Room | null>(null);
 	let isMaster = $state(false);
+	let currentPlayer = $state<Player | null>(null); // Current user's player object if they joined
 
 	// Game configuration
 	let songs = $state<any[]>([]);
@@ -42,6 +43,20 @@
 			if (response.data) {
 				initialRoom = response.data;
 				console.log('Loaded room:', response.data);
+
+				// Validate saved player still exists in the room
+				if (currentPlayer && !isMaster) {
+					const playerStillExists = response.data.players.some(
+						(p: Player) => p.id === currentPlayer.id
+					);
+					if (!playerStillExists) {
+						console.log('[Player] Saved player was removed, clearing localStorage');
+						const playerKey = `player_${roomId}`;
+						localStorage.removeItem(playerKey);
+						currentPlayer = null;
+					}
+				}
+
 				// WebSocket will update this with real-time changes
 			} else if (response.error) {
 				error = 'Room not found';
@@ -67,7 +82,14 @@
 
 			if (response.data) {
 				console.log('Joined room as:', response.data);
+
+				// Save player info to localStorage for persistence
+				const playerKey = `player_${roomId}`;
+				localStorage.setItem(playerKey, JSON.stringify(response.data));
+				currentPlayer = response.data;
+
 				playerName = '';
+				console.log(`[Player] Saved player info for room ${roomId}`);
 				// Player join will be broadcast via WebSocket
 			} else {
 				error = 'Failed to join room';
@@ -177,20 +199,32 @@
 	}
 
 	onMount(() => {
+		if (!roomId) return;
+
 		// Check if this user is the master of this room
-		if (roomId) {
-			const masterKey = `master_${roomId}`;
-			isMaster = localStorage.getItem(masterKey) === 'true';
-			console.log(`[Role] User is ${isMaster ? 'MASTER' : 'PLAYER'} of room ${roomId}`);
+		const masterKey = `master_${roomId}`;
+		isMaster = localStorage.getItem(masterKey) === 'true';
+
+		// Check if this user already joined as a player
+		const playerKey = `player_${roomId}`;
+		const savedPlayer = localStorage.getItem(playerKey);
+		if (savedPlayer && !isMaster) {
+			try {
+				currentPlayer = JSON.parse(savedPlayer);
+				console.log(`[Player] Restored player info:`, currentPlayer);
+			} catch (err) {
+				console.error('Failed to parse saved player info:', err);
+				localStorage.removeItem(playerKey);
+			}
 		}
+
+		console.log(`[Role] User is ${isMaster ? 'MASTER' : currentPlayer ? 'PLAYER (' + currentPlayer.name + ')' : 'VISITOR'} of room ${roomId}`);
 
 		loadRoom();
 
 		// Create WebSocket connection
-		if (roomId) {
-			roomSocket = createRoomSocket(roomId, { role: isMaster ? 'master' : 'player' });
-			roomSocket.connect();
-		}
+		roomSocket = createRoomSocket(roomId, { role: isMaster ? 'master' : 'player' });
+		roomSocket.connect();
 	});
 
 	onDestroy(() => {
@@ -247,21 +281,33 @@
 		{/if}
 
 		{#if room.status === 'lobby' && !isMaster}
-			<section class="join-section">
-				<h2>Join Room</h2>
-				<form onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
-					<input
-						type="text"
-						placeholder="Enter your name"
-						bind:value={playerName}
-						disabled={joining}
-						required
-					/>
-					<button type="submit" disabled={joining || !playerName.trim()}>
-						{joining ? 'Joining...' : 'Join'}
-					</button>
-				</form>
-			</section>
+			{#if !currentPlayer}
+				<section class="join-section">
+					<h2>Join Room</h2>
+					<form onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
+						<input
+							type="text"
+							placeholder="Enter your name"
+							bind:value={playerName}
+							disabled={joining}
+							required
+						/>
+						<button type="submit" disabled={joining || !playerName.trim()}>
+							{joining ? 'Joining...' : 'Join'}
+						</button>
+					</form>
+				</section>
+			{:else}
+				<section class="player-status">
+					<div class="status-card">
+						<span class="status-icon">✅</span>
+						<div class="status-info">
+							<h3>You are playing as:</h3>
+							<p class="player-name-display">{currentPlayer.name}</p>
+						</div>
+					</div>
+				</section>
+			{/if}
 		{/if}
 
 		<section class="players-section">
@@ -853,6 +899,45 @@
 		font-size: 0.875rem;
 		max-width: 400px;
 		opacity: 0.9;
+	}
+
+	.player-status {
+		margin-bottom: 2rem;
+	}
+
+	.status-card {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 1.5rem;
+		background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+		border-radius: 0.75rem;
+		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+	}
+
+	.status-icon {
+		font-size: 2.5rem;
+		flex-shrink: 0;
+	}
+
+	.status-info {
+		flex: 1;
+	}
+
+	.status-info h3 {
+		margin: 0 0 0.5rem 0;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: rgba(255, 255, 255, 0.9);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.player-name-display {
+		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 700;
+		color: white;
 	}
 
 	@media (max-width: 640px) {
