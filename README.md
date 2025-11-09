@@ -39,6 +39,29 @@ bun run build
 4. **Démarrer la partie** (minimum 2 joueurs)
 5. **Buzzer** et deviner le titre/artiste !
 
+### 🎵 Import en masse de chansons
+
+Pour importer rapidement toute votre bibliothèque musicale :
+
+```bash
+# Importer toutes les chansons d'un dossier (récursif)
+bun scripts/bulk-upload-songs.ts ~/Musique
+
+# Ou depuis un chemin relatif
+bun scripts/bulk-upload-songs.ts ./mes-chansons
+
+# Serveur distant (si pas localhost:3007)
+SERVER_URL=http://192.168.1.100:3007 bun scripts/bulk-upload-songs.ts ~/Musique
+```
+
+**Formats supportés** : `.mp3`, `.m4a`, `.wav`, `.flac`
+
+Le script :
+- ✅ Scanne récursivement tous les sous-dossiers
+- ✅ Détecte et ignore automatiquement les doublons
+- ✅ Extrait les métadonnées (titre, artiste, genre, année)
+- ✅ Affiche une progression en temps réel avec un résumé
+
 ## 🛠 Stack technique
 
 - **Runtime** : Bun

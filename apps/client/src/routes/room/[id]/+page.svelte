@@ -25,6 +25,24 @@
 	let songCount = $state(10);
 	let showConfig = $state(false);
 
+	// Filter configuration
+	let useFilters = $state(false);
+	let selectedGenres = $state<string[]>([]);
+	let yearMin = $state<number | undefined>(undefined);
+	let yearMax = $state<number | undefined>(undefined);
+	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
+
+	// Available genres (populated from songs)
+	let availableGenres = $derived.by(() => {
+		const genres = new Set<string>();
+		songs.forEach(song => {
+			if (song.genre) {
+				genres.add(song.genre);
+			}
+		});
+		return Array.from(genres).sort();
+	});
+
 	// Local state for tracking socket state (needed for proper reactivity)
 	let connected = $state(false);
 	let socketError = $state<string | null>(null);
@@ -150,11 +168,29 @@
 
 			const body: any = {};
 
-			// Use selected songs or random count
-			if (selectedSongIds.length > 0) {
+			// Priority 1: Use filters
+			if (useFilters && (selectedGenres.length > 0 || yearMin !== undefined || yearMax !== undefined)) {
+				body.songFilters = {
+					...(selectedGenres.length > 0 && { genre: selectedGenres }),
+					...(yearMin !== undefined && { yearMin }),
+					...(yearMax !== undefined && { yearMax }),
+					...(songCount && { songCount }),
+				};
+			}
+			// Priority 2: Use selected songs
+			else if (selectedSongIds.length > 0) {
 				body.songIds = selectedSongIds;
-			} else {
+			}
+			// Priority 3: Random count
+			else {
 				body.songCount = songCount;
+			}
+
+			// Audio playback configuration
+			if (audioPlayback !== 'master') {
+				body.params = {
+					audioPlayback,
+				};
 			}
 
 			const response = await api.api.game[room.id].start.post(body);
@@ -171,6 +207,14 @@
 			console.error('Error starting game:', err);
 		} finally {
 			starting = false;
+		}
+	}
+
+	function toggleGenre(genre: string) {
+		if (selectedGenres.includes(genre)) {
+			selectedGenres = selectedGenres.filter(g => g !== genre);
+		} else {
+			selectedGenres = [...selectedGenres, genre];
 		}
 	}
 
@@ -385,32 +429,121 @@
 					</div>
 
 					<div class="config-tabs">
-						<h3>Select Songs</h3>
+						<h3>Song Selection</h3>
 						{#if songs.length === 0}
 							<p class="info">No songs in library. <a href="/music">Upload some music</a> first!</p>
 						{:else}
-							<div class="song-count-controls">
+							<!-- Filter by Metadata -->
+							<div class="filter-toggle">
 								<label>
-									Use Random Songs:
-									<input type="number" bind:value={songCount} min="1" max="100" />
+									<input type="checkbox" bind:checked={useFilters} />
+									Use metadata filters (genre, year)
 								</label>
-								<span class="or">OR</span>
-								<span>Select specific songs ({selectedSongIds.length} selected)</span>
 							</div>
 
-							<div class="songs-grid-mini">
-								{#each songs as song (song.id)}
-									<button
-										class="song-item"
-										class:selected={selectedSongIds.includes(song.id)}
-										onclick={() => toggleSongSelection(song.id)}
-									>
-										<span class="song-title">{song.title}</span>
-										<span class="song-artist">{song.artist}</span>
-									</button>
-								{/each}
-							</div>
+							{#if useFilters}
+								<div class="filter-section">
+									<h4>Filters</h4>
+
+									<!-- Genre Multi-Select -->
+									{#if availableGenres.length > 0}
+										<div class="filter-group">
+											<label>Genres ({selectedGenres.length} selected):</label>
+											<div class="genre-chips">
+												{#each availableGenres as genre}
+													<button
+														class="chip"
+														class:selected={selectedGenres.includes(genre)}
+														onclick={() => toggleGenre(genre)}
+													>
+														{genre}
+													</button>
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									<!-- Year Range -->
+									<div class="filter-group">
+										<label>Year Range:</label>
+										<div class="year-inputs">
+											<input
+												type="number"
+												placeholder="From"
+												bind:value={yearMin}
+												min="1900"
+												max="2100"
+											/>
+											<span>to</span>
+											<input
+												type="number"
+												placeholder="To"
+												bind:value={yearMax}
+												min="1900"
+												max="2100"
+											/>
+										</div>
+									</div>
+
+									<!-- Song Count -->
+									<div class="filter-group">
+										<label>Number of songs:</label>
+										<input type="number" bind:value={songCount} min="1" max="100" />
+									</div>
+								</div>
+							{:else}
+								<!-- Manual Selection -->
+								<div class="song-count-controls">
+									<label>
+										Use Random Songs:
+										<input type="number" bind:value={songCount} min="1" max="100" />
+									</label>
+									<span class="or">OR</span>
+									<span>Select specific songs ({selectedSongIds.length} selected)</span>
+								</div>
+
+								<div class="songs-grid-mini">
+									{#each songs as song (song.id)}
+										<button
+											class="song-item"
+											class:selected={selectedSongIds.includes(song.id)}
+											onclick={() => toggleSongSelection(song.id)}
+										>
+											<span class="song-title">{song.title}</span>
+											<span class="song-artist">{song.artist}</span>
+										</button>
+									{/each}
+								</div>
+							{/if}
 						{/if}
+					</div>
+
+					<!-- Audio Playback Location -->
+					<div class="config-tabs">
+						<h3>Audio Playback</h3>
+						<div class="audio-options">
+							<label class="radio-option">
+								<input type="radio" bind:group={audioPlayback} value="master" />
+								<div class="option-content">
+									<strong>Master Only (Default)</strong>
+									<span>Audio plays only on the master device</span>
+								</div>
+							</label>
+							<label class="radio-option">
+								<input type="radio" bind:group={audioPlayback} value="players" />
+								<div class="option-content">
+									<strong>Players Only</strong>
+									<span>Audio plays on all player devices</span>
+								</div>
+							</label>
+							<label class="radio-option">
+								<input type="radio" bind:group={audioPlayback} value="all" />
+								<div class="option-content">
+									<strong>All Devices</strong>
+									<span>Audio plays on both master and players</span>
+								</div>
+							</label>
+						</div>
 					</div>
 
 					<div class="config-actions">
@@ -954,6 +1087,153 @@
 		font-size: 1.5rem;
 		font-weight: 700;
 		color: white;
+	}
+
+	/* Filter UI Styles */
+	.filter-toggle {
+		padding: 1rem;
+		background-color: #f3f4f6;
+		border-radius: 0.375rem;
+		margin-bottom: 1rem;
+	}
+
+	.filter-toggle label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		cursor: pointer;
+		font-weight: 600;
+	}
+
+	.filter-toggle input[type="checkbox"] {
+		width: auto;
+		cursor: pointer;
+	}
+
+	.filter-section {
+		padding: 1rem;
+		background-color: #f9fafb;
+		border: 1px solid #e5e7eb;
+		border-radius: 0.375rem;
+		margin-bottom: 1rem;
+	}
+
+	.filter-section h4 {
+		margin: 0 0 1rem 0;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #6b7280;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.filter-group {
+		margin-bottom: 1rem;
+	}
+
+	.filter-group:last-child {
+		margin-bottom: 0;
+	}
+
+	.filter-group > label {
+		display: block;
+		margin-bottom: 0.5rem;
+		font-weight: 600;
+		color: #374151;
+		font-size: 0.875rem;
+	}
+
+	.genre-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.chip {
+		padding: 0.5rem 1rem;
+		background-color: white;
+		border: 2px solid #e5e7eb;
+		border-radius: 1rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+		color: #374151;
+	}
+
+	.chip:hover {
+		border-color: #3b82f6;
+		background-color: #eff6ff;
+	}
+
+	.chip.selected {
+		border-color: #10b981;
+		background-color: #d1fae5;
+		color: #065f46;
+	}
+
+	.year-inputs {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.year-inputs input[type="number"] {
+		width: 100px;
+		padding: 0.5rem;
+		border: 1px solid #d1d5db;
+		border-radius: 0.25rem;
+	}
+
+	.year-inputs span {
+		color: #6b7280;
+		font-weight: 500;
+	}
+
+	/* Audio Playback Styles */
+	.audio-options {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.radio-option {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+		padding: 1rem;
+		background-color: #f9fafb;
+		border: 2px solid #e5e7eb;
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.radio-option:hover {
+		border-color: #3b82f6;
+		background-color: #eff6ff;
+	}
+
+	.radio-option input[type="radio"] {
+		width: auto;
+		margin-top: 0.25rem;
+		cursor: pointer;
+	}
+
+	.option-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.option-content strong {
+		color: #1f2937;
+		font-size: 0.9375rem;
+	}
+
+	.option-content span {
+		color: #6b7280;
+		font-size: 0.8125rem;
 	}
 
 	@media (max-width: 640px) {
