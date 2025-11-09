@@ -411,7 +411,7 @@ const app = new Elysia()
 
       // Metadata-based filtering (NEW - preferred approach)
       songFilters: t.Optional(t.Object({
-        genre: t.Optional(t.String()),
+        genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
         yearMin: t.Optional(t.Number()),
         yearMax: t.Optional(t.Number()),
         artistName: t.Optional(t.String()),
@@ -420,7 +420,7 @@ const app = new Elysia()
 
       // Quick filters (alternative to songFilters object)
       songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-      genre: t.Optional(t.String()),
+      genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
       yearMin: t.Optional(t.Number()),
       yearMax: t.Optional(t.Number()),
 

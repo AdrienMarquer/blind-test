@@ -71,34 +71,39 @@
 	// Subscribe to song:started event
 	$effect(() => {
 		const event = socket.events.songStarted;
-		if (event && audioElement) {
+		if (event) {
 			currentSong = event.songIndex;
 			timeRemaining = event.duration;
 			activePlayerName = 'Waiting for buzz...';
 			currentTitle = `Song ${event.songIndex + 1}`;
 			currentArtist = '';
 
-			// Load and play audio
-			audioElement.src = event.audioUrl;
-			audioElement.load();
+			// Play audio if configured for master
+			if (audioElement && (event.audioPlayback === 'master' || event.audioPlayback === 'all')) {
+				console.log(`[Master] Playing audio (mode: ${event.audioPlayback})`);
+				audioElement.src = event.audioUrl;
+				audioElement.load();
 
-			// Wait for audio to be ready, then start at clipStart
-			audioElement.onloadedmetadata = () => {
-				if (audioElement) {
-					audioElement.currentTime = event.clipStart;
-					audioElement.play().catch(err => {
-						console.error('[Audio] Failed to play:', err);
-					});
+				// Wait for audio to be ready, then start at clipStart
+				audioElement.onloadedmetadata = () => {
+					if (audioElement) {
+						audioElement.currentTime = event.clipStart;
+						audioElement.play().catch(err => {
+							console.error('[Master Audio] Failed to play:', err);
+						});
 
-					// Stop after duration seconds
-					setTimeout(() => {
-						if (audioElement) {
-							audioElement.pause();
-							console.log(`[Audio] Stopped after ${event.duration}s`);
-						}
-					}, event.duration * 1000);
-				}
-			};
+						// Stop after duration seconds
+						setTimeout(() => {
+							if (audioElement) {
+								audioElement.pause();
+								console.log(`[Master Audio] Stopped after ${event.duration}s`);
+							}
+						}, event.duration * 1000);
+					}
+				};
+			} else {
+				console.log(`[Master] Not playing audio (mode: ${event.audioPlayback})`);
+			}
 		}
 	});
 

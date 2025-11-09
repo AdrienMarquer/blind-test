@@ -160,6 +160,7 @@ export class GameService {
         duration: round.params.songDuration || SYSTEM_DEFAULTS.songDuration,
         audioUrl,
         clipStart: song.song.clipStart,
+        audioPlayback: round.params.audioPlayback || SYSTEM_DEFAULTS.audioPlayback,
       },
     });
   }

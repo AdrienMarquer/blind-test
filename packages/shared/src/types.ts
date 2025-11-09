@@ -95,7 +95,7 @@ export interface Round {
 
   // Metadata-based song filtering (replaces playlists)
   songFilters?: {
-    genre?: string;          // Filter by genre
+    genre?: string | string[]; // Filter by genre (single or multiple)
     yearMin?: number;        // Minimum year (inclusive)
     yearMax?: number;        // Maximum year (inclusive)
     artistName?: string;     // Filter by artist name (partial match)
@@ -129,6 +129,7 @@ export interface ModeParams {
   // Universal parameters
   songDuration?: number;        // Seconds (default: 15)
   answerTimer?: number;         // Seconds (default: 5)
+  audioPlayback?: 'master' | 'players' | 'all'; // Where audio plays (default: 'master')
 
   // Buzz + Choice specific
   numChoices?: number;          // Options (default: 4)
@@ -243,6 +244,7 @@ export interface FinalScore {
 export const SYSTEM_DEFAULTS: Required<ModeParams> = {
   songDuration: 30,
   answerTimer: 5,
+  audioPlayback: 'master',     // Only master device plays audio by default
   numChoices: 4,
   pointsTitle: 1,
   pointsArtist: 1,
@@ -292,7 +294,7 @@ export type ServerMessage =
   | { type: 'round:ended'; data: { roundIndex: number; scores: Record<string, number> } }
 
   // Song Events
-  | { type: 'song:started'; data: { songIndex: number; duration: number; audioUrl: string; clipStart: number } }
+  | { type: 'song:started'; data: { songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all' } }
   | { type: 'song:ended'; data: { songIndex: number; correctTitle: string; correctArtist: string } }
 
   // Gameplay

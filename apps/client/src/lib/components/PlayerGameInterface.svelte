@@ -22,6 +22,9 @@
 	// Player score
 	let score = $state(player.score);
 
+	// Audio player (for when audio plays on player devices)
+	let audioElement: HTMLAudioElement | null = $state(null);
+
 	function handleBuzz() {
 		if (!canBuzz || hasBuzzed || isLockedOut) return;
 
@@ -55,6 +58,33 @@
 			isLockedOut = false;
 			currentSongIndex = event.songIndex;
 			timeRemaining = event.duration;
+
+			// Play audio if configured for players
+			if (audioElement && (event.audioPlayback === 'players' || event.audioPlayback === 'all')) {
+				console.log(`[Player] Playing audio (mode: ${event.audioPlayback})`);
+				audioElement.src = event.audioUrl;
+				audioElement.load();
+
+				// Wait for audio to be ready, then start at clipStart
+				audioElement.onloadedmetadata = () => {
+					if (audioElement) {
+						audioElement.currentTime = event.clipStart;
+						audioElement.play().catch(err => {
+							console.error('[Player Audio] Failed to play:', err);
+						});
+
+						// Stop after duration seconds
+						setTimeout(() => {
+							if (audioElement) {
+								audioElement.pause();
+								console.log(`[Player Audio] Stopped after ${event.duration}s`);
+							}
+						}, event.duration * 1000);
+					}
+				};
+			} else {
+				console.log(`[Player] Not playing audio (mode: ${event.audioPlayback})`);
+			}
 		}
 	});
 
@@ -116,6 +146,13 @@
 			showChoices = false;
 			hasBuzzed = false;
 			canBuzz = false;
+
+			// Stop audio if playing
+			if (audioElement) {
+				audioElement.pause();
+				audioElement.currentTime = 0;
+				audioElement.src = '';
+			}
 		}
 	});
 </script>
@@ -183,6 +220,9 @@
 			<p>🚫 You're locked out for this song</p>
 		</div>
 	{/if}
+
+	<!-- Audio player (hidden, for player-side audio playback) -->
+	<audio bind:this={audioElement} style="display: none;"></audio>
 </div>
 
 <style>

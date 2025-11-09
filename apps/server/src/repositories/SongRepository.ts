@@ -192,7 +192,7 @@ export class SongRepository implements Repository<Song> {
    * Combines genre, year range, and artist filters
    */
   async findByFilters(filters: {
-    genre?: string;
+    genre?: string | string[];
     yearMin?: number;
     yearMax?: number;
     artistName?: string;
@@ -206,8 +206,24 @@ export class SongRepository implements Repository<Song> {
     // Build WHERE conditions
     const conditions: any[] = [];
 
+    // Handle genre (single or multiple with OR logic)
     if (filters.genre) {
-      conditions.push(like(schema.songs.genre, `%${filters.genre}%`));
+      if (Array.isArray(filters.genre)) {
+        // Multiple genres - use OR logic
+        if (filters.genre.length > 0) {
+          const genreConditions = filters.genre.map(g =>
+            like(schema.songs.genre, `%${g}%`)
+          );
+          const genreOrClause = genreConditions.reduce((acc, condition, index) => {
+            if (index === 0) return condition;
+            return sql`${acc} OR ${condition}`;
+          });
+          conditions.push(sql`(${genreOrClause})`);
+        }
+      } else {
+        // Single genre
+        conditions.push(like(schema.songs.genre, `%${filters.genre}%`));
+      }
     }
 
     if (filters.yearMin !== undefined) {
