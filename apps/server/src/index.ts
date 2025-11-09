@@ -273,6 +273,12 @@ const app = new Elysia()
       const updated = await roomRepository.update(roomId, { status: 'playing' });
       console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name}`);
 
+      // Broadcast game start to all connected WebSocket clients
+      broadcastToRoom(roomId, {
+        type: 'game:started',
+        data: { room: updated }
+      });
+
       return {
         sessionId: 'placeholder', // Will be implemented in Phase 2
         roomId,

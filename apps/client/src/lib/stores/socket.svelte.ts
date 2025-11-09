@@ -148,6 +148,12 @@ export class RoomSocket {
         console.log(`Player reconnected: ${message.data.playerName}`);
         break;
 
+      case 'game:started':
+        // Update room status when game starts
+        this.room = message.data.room;
+        console.log('Game started:', message.data.room);
+        break;
+
       case 'error':
         this.error = message.data.message;
         console.error(`Server error [${message.data.code}]:`, message.data.message);
