@@ -421,36 +421,36 @@ const app = new Elysia()
   })
 
   // Upload new song
-  .post('/api/songs/upload', async ({ body, error }) => {
+  .post('/api/songs/upload', async ({ body, set }) => {
     console.log('[POST /api/songs/upload] Uploading song');
 
     // Validate file
     if (!body.file) {
-      return error(400, { error: 'No file provided' });
+      set.status = 400;
+      return { error: 'No file provided' };
     }
 
     const file = body.file as File;
 
     // Check file type
     if (!isSupportedAudioFormat(file.name)) {
-      return error(400, {
-        error: 'Unsupported file format. Supported: mp3, m4a, wav, flac',
-      });
+      set.status = 400;
+      return { error: 'Unsupported file format. Supported: mp3, m4a, wav, flac' };
     }
 
+    // Ensure uploads directory exists
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    if (!existsSync(uploadsDir)) {
+      await mkdir(uploadsDir, { recursive: true });
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const sanitizedName = file.name.replace(/[^a-z0-9.-]/gi, '_');
+    const filename = `${timestamp}_${sanitizedName}`;
+    const filePath = path.join(uploadsDir, filename);
+
     try {
-      // Ensure uploads directory exists
-      const uploadsDir = path.join(process.cwd(), 'uploads');
-      if (!existsSync(uploadsDir)) {
-        await mkdir(uploadsDir, { recursive: true });
-      }
-
-      // Generate unique filename
-      const timestamp = Date.now();
-      const sanitizedName = file.name.replace(/[^a-z0-9.-]/gi, '_');
-      const filename = `${timestamp}_${sanitizedName}`;
-      const filePath = path.join(uploadsDir, filename);
-
       // Write file to disk
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
@@ -467,14 +467,17 @@ const app = new Elysia()
       } catch (metadataError) {
         // Clean up file if metadata extraction fails
         await unlink(filePath);
-        throw metadataError;
+        const errorMsg = metadataError instanceof Error ? metadataError.message : 'Failed to extract metadata';
+        set.status = 400;
+        return { error: errorMsg };
       }
 
       // Check if song already exists (by file path or title+artist)
       const existingSong = await songRepository.findByFilePath(filePath);
       if (existingSong) {
         await unlink(filePath);
-        return error(409, { error: 'Song already exists in library' });
+        set.status = 409;
+        return { error: 'Song already exists in library' };
       }
 
       // Create song record
@@ -496,11 +499,17 @@ const app = new Elysia()
 
       return song;
     } catch (err) {
-      console.error('[POST /api/songs/upload] Error:', err);
-      if (err instanceof Error) {
-        return error(500, { error: err.message });
+      // Clean up file if it was created
+      try {
+        await unlink(filePath);
+      } catch (unlinkError) {
+        // Ignore if file doesn't exist
       }
-      return error(500, { error: 'Failed to upload song' });
+
+      console.error('[POST /api/songs/upload] Error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to upload song';
+      set.status = 500;
+      return { error: errorMsg };
     }
   }, {
     body: t.Object({

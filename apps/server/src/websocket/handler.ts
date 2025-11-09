@@ -50,7 +50,17 @@ export function handleMessage(
   ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
   message: string
 ) {
-  const roomId = ws.data?.roomId;
+  // Extract roomId - fall back to params.roomId in case of race condition
+  const roomId = ws.data?.roomId || ws.data?.params?.roomId;
+
+  if (!roomId) {
+    console.error('[WebSocket] No roomId available in handleMessage');
+    ws.send(JSON.stringify({
+      type: 'error',
+      data: { message: 'Connection not properly initialized' }
+    }));
+    return;
+  }
 
   try {
     const parsed: WebSocketMessage = JSON.parse(message);
@@ -96,7 +106,14 @@ export function handleMessage(
 }
 
 export function handleClose(ws: ServerWebSocket<{ roomId: string; playerId?: string }>) {
-  const { roomId, playerId } = ws.data;
+  // Extract roomId with fallback
+  const roomId = ws.data?.roomId || ws.data?.params?.roomId;
+  const playerId = ws.data?.playerId;
+
+  if (!roomId) {
+    console.log('[WebSocket] Connection closed without roomId');
+    return;
+  }
 
   // Remove from room connections
   const connections = roomConnections.get(roomId);

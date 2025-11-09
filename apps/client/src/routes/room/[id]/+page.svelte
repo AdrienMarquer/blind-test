@@ -25,11 +25,15 @@
 	let songCount = $state(10);
 	let showConfig = $state(false);
 
+	// Local state for tracking socket state (needed for proper reactivity)
+	let connected = $state(false);
+	let socketError = $state<string | null>(null);
+	let socketRoom = $state<Room | null>(null);
+	let socketPlayers = $state<Player[]>([]);
+
 	// Reactive access to socket state (prefer WebSocket data, fallback to HTTP)
-	const room = $derived(roomSocket?.room || initialRoom);
-	const players = $derived(roomSocket?.players || []);
-	const connected = $derived(roomSocket?.connected || false);
-	const socketError = $derived(roomSocket?.error || null);
+	const room = $derived(socketRoom || initialRoom);
+	const players = $derived(socketPlayers);
 
 	async function loadRoom() {
 		if (!roomId) {
@@ -227,6 +231,16 @@
 		// Create WebSocket connection
 		roomSocket = createRoomSocket(roomId, { role: isMaster ? 'master' : 'player' });
 		roomSocket.connect();
+
+		// Sync socket state to local reactive state
+		$effect(() => {
+			if (roomSocket) {
+				connected = roomSocket.connected;
+				socketError = roomSocket.error;
+				socketRoom = roomSocket.room;
+				socketPlayers = roomSocket.players;
+			}
+		});
 	});
 
 	onDestroy(() => {
@@ -240,6 +254,8 @@
 		<a href="/" class="back-button">← Back to Rooms</a>
 		{#if connected}
 			<span class="connection-status connected">● Connected</span>
+		{:else if socketError}
+			<span class="connection-status error">● {socketError}</span>
 		{:else}
 			<span class="connection-status disconnected">● Connecting...</span>
 		{/if}
@@ -477,6 +493,10 @@
 
 	.connection-status.disconnected {
 		color: #f59e0b;
+	}
+
+	.connection-status.error {
+		color: #ef4444;
 	}
 
 	.room-header {

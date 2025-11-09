@@ -38,6 +38,7 @@ export class RoomSocket {
   room = $state<Room | null>(null);
   players = $state<Player[]>([]);
   error = $state<string | null>(null);
+  private connectionTimeout: number | null = null;
 
   constructor(
     private roomId: string,
@@ -62,6 +63,16 @@ export class RoomSocket {
     console.log('[WebSocket] Server URL:', SERVER_URL);
     this.socket = new WebSocket(wsUrl);
 
+    // Set connection timeout (5 seconds)
+    this.connectionTimeout = window.setTimeout(() => {
+      if (!this.connected && this.socket) {
+        console.error('[WebSocket] Connection timeout');
+        this.error = 'Connection timeout - server may be unavailable';
+        this.socket.close();
+        this.socket = null;
+      }
+    }, 5000);
+
     this.setupListeners();
   }
 
@@ -74,6 +85,13 @@ export class RoomSocket {
     // Connection events
     this.socket.onopen = () => {
       console.log(`[WebSocket] onopen fired! Setting connected = true`);
+
+      // Clear connection timeout
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
+
       this.connected = true;
       this.error = null;
       console.log(`[WebSocket] Connected to room ${this.roomId}, connected state:`, this.connected);
@@ -83,12 +101,31 @@ export class RoomSocket {
     };
 
     this.socket.onclose = (event) => {
+      // Clear connection timeout
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
+
       this.connected = false;
-      console.log(`Disconnected from room ${this.roomId}:`, event.reason);
+      console.log(`[WebSocket] Disconnected from room ${this.roomId}. Code: ${event.code}, Reason: ${event.reason}`);
+
+      // Set error message based on close reason
+      if (event.code !== 1000 && event.code !== 1005) {
+        // Not a normal closure
+        this.error = event.reason || 'Connection closed unexpectedly';
+      }
     };
 
     this.socket.onerror = (error) => {
-      this.error = 'Connection error';
+      // Clear connection timeout
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
+
+      this.connected = false;
+      this.error = 'Connection error - check if server is running';
       console.error('[WebSocket] ERROR:', error);
       console.error('[WebSocket] Connection failed. Check if server is running on port 3007');
     };
@@ -327,6 +364,12 @@ export class RoomSocket {
    * Disconnect from the room
    */
   disconnect() {
+    // Clear any pending timeout
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+
     if (this.socket) {
       this.socket.close();
       this.socket = null;
