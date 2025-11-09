@@ -605,4 +605,161 @@
 	.placeholder p {
 		color: #6b7280;
 	}
+
+	.config-button {
+		width: 100%;
+		padding: 1rem;
+		margin-bottom: 0.5rem;
+		font-size: 1rem;
+		font-weight: 600;
+		color: white;
+		background-color: #6b7280;
+		border: none;
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.config-button:hover {
+		background-color: #4b5563;
+	}
+
+	.config-section {
+		padding: 1.5rem;
+		background-color: white;
+		border: 2px solid #e5e7eb;
+		border-radius: 0.5rem;
+	}
+
+	.config-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+	}
+
+	.config-header h2 {
+		margin: 0;
+		font-size: 1.5rem;
+	}
+
+	.close-button {
+		padding: 0.5rem;
+		background: none;
+		border: none;
+		font-size: 1.5rem;
+		cursor: pointer;
+		color: #6b7280;
+	}
+
+	.close-button:hover {
+		color: #374151;
+	}
+
+	.config-tabs h3 {
+		margin: 0 0 1rem 0;
+		font-size: 1.125rem;
+	}
+
+	.song-count-controls {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 1rem;
+		padding: 1rem;
+		background-color: #f9fafb;
+		border-radius: 0.375rem;
+		flex-wrap: wrap;
+	}
+
+	.song-count-controls label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.song-count-controls input[type="number"] {
+		width: 80px;
+		padding: 0.5rem;
+		border: 1px solid #d1d5db;
+		border-radius: 0.25rem;
+	}
+
+	.song-count-controls .or {
+		font-weight: 600;
+		color: #6b7280;
+	}
+
+	.songs-grid-mini {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 0.5rem;
+		max-height: 300px;
+		overflow-y: auto;
+		padding: 0.5rem;
+		border: 1px solid #e5e7eb;
+		border-radius: 0.375rem;
+	}
+
+	.song-item {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		padding: 0.75rem;
+		background-color: #f9fafb;
+		border: 2px solid #e5e7eb;
+		border-radius: 0.375rem;
+		cursor: pointer;
+		transition: all 0.2s;
+		text-align: left;
+	}
+
+	.song-item:hover {
+		border-color: #3b82f6;
+		background-color: #eff6ff;
+	}
+
+	.song-item.selected {
+		border-color: #10b981;
+		background-color: #d1fae5;
+	}
+
+	.song-title {
+		font-weight: 600;
+		color: #1f2937;
+		font-size: 0.875rem;
+	}
+
+	.song-artist {
+		color: #6b7280;
+		font-size: 0.75rem;
+	}
+
+	.config-actions {
+		display: flex;
+		gap: 1rem;
+		margin-top: 1.5rem;
+	}
+
+	.config-actions .start-button {
+		flex: 2;
+	}
+
+	.cancel-button {
+		flex: 1;
+		padding: 1rem;
+		font-size: 1rem;
+		font-weight: 600;
+		color: #374151;
+		background-color: white;
+		border: 2px solid #e5e7eb;
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.cancel-button:hover {
+		border-color: #9ca3af;
+		background-color: #f9fafb;
+	}
 </style>
