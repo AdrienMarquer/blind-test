@@ -46,3 +46,8 @@ apps/server/uploads/
 *.m4a
 *.wav
 *.flac
+
+# SQLite Database files (runtime, not source)
+# Excludes: *.db, *.db-shm (shared memory), *.db-wal (write-ahead log)
+apps/server/db/
+# Note: apps/server/drizzle/ is NOT ignored - it contains migration files which are source code
