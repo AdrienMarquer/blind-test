@@ -2,7 +2,7 @@
  * Song Repository - SQLite implementation with Drizzle ORM
  */
 
-import { eq, like, inArray } from 'drizzle-orm';
+import { eq, like, inArray, sql } from 'drizzle-orm';
 import type { Song, Repository } from '@blind-test/shared';
 import { generateId } from '@blind-test/shared';
 import { db, schema } from '../db';
@@ -185,5 +185,70 @@ export class SongRepository implements Repository<Song> {
   async count(): Promise<number> {
     const result = await db.select().from(schema.songs);
     return result.length;
+  }
+
+  /**
+   * Find songs by metadata filters
+   * Combines genre, year range, and artist filters
+   */
+  async findByFilters(filters: {
+    genre?: string;
+    yearMin?: number;
+    yearMax?: number;
+    artistName?: string;
+    songCount?: number;
+  }): Promise<Song[]> {
+    console.log('[SongRepository] Finding songs with filters:', filters);
+
+    // Start with base query
+    let query = db.select().from(schema.songs);
+
+    // Build WHERE conditions
+    const conditions: any[] = [];
+
+    if (filters.genre) {
+      conditions.push(like(schema.songs.genre, `%${filters.genre}%`));
+    }
+
+    if (filters.yearMin !== undefined) {
+      conditions.push(sql`${schema.songs.year} >= ${filters.yearMin}`);
+    }
+
+    if (filters.yearMax !== undefined) {
+      conditions.push(sql`${schema.songs.year} <= ${filters.yearMax}`);
+    }
+
+    if (filters.artistName) {
+      conditions.push(like(schema.songs.artist, `%${filters.artistName}%`));
+    }
+
+    // Apply all conditions with AND logic
+    if (conditions.length > 0) {
+      // For multiple conditions, we need to use sql template
+      const whereClause = conditions.reduce((acc, condition, index) => {
+        if (index === 0) return condition;
+        return sql`${acc} AND ${condition}`;
+      });
+      query = query.where(whereClause) as any;
+    }
+
+    const results = await query;
+    let songs = results.map(s => this.toSong(s));
+
+    console.log(`[SongRepository] Found ${songs.length} songs matching filters`);
+
+    // Shuffle and limit if songCount is specified
+    if (filters.songCount && filters.songCount < songs.length) {
+      // Shuffle using Fisher-Yates
+      const shuffled = [...songs];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      songs = shuffled.slice(0, filters.songCount);
+      console.log(`[SongRepository] Randomly selected ${songs.length} songs from ${results.length} matches`);
+    }
+
+    return songs;
   }
 }

@@ -42,6 +42,7 @@
 		if (audioElement) {
 			audioElement.pause();
 			audioElement.currentTime = 0;
+			audioElement.src = '';
 		}
 
 		socket.skipSong();
@@ -70,13 +71,34 @@
 	// Subscribe to song:started event
 	$effect(() => {
 		const event = socket.events.songStarted;
-		if (event) {
+		if (event && audioElement) {
 			currentSong = event.songIndex;
 			timeRemaining = event.duration;
 			activePlayerName = 'Waiting for buzz...';
 			currentTitle = `Song ${event.songIndex + 1}`;
 			currentArtist = '';
-			// TODO: Start playing audio
+
+			// Load and play audio
+			audioElement.src = event.audioUrl;
+			audioElement.load();
+
+			// Wait for audio to be ready, then start at clipStart
+			audioElement.onloadedmetadata = () => {
+				if (audioElement) {
+					audioElement.currentTime = event.clipStart;
+					audioElement.play().catch(err => {
+						console.error('[Audio] Failed to play:', err);
+					});
+
+					// Stop after duration seconds
+					setTimeout(() => {
+						if (audioElement) {
+							audioElement.pause();
+							console.log(`[Audio] Stopped after ${event.duration}s`);
+						}
+					}, event.duration * 1000);
+				}
+			};
 		}
 	});
 

@@ -27,7 +27,7 @@ const SERVER_URL = getServerUrl();
  */
 export class GameEvents {
   // Song events
-  songStarted = $state<{ songIndex: number; duration: number } | null>(null);
+  songStarted = $state<{ songIndex: number; duration: number; audioUrl: string; clipStart: number } | null>(null);
   songEnded = $state<{ songIndex: number; correctTitle: string; correctArtist: string } | null>(null);
 
   // Player events (gameplay)

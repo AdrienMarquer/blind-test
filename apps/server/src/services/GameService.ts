@@ -71,25 +71,44 @@ export class GameService {
   }
 
   /**
-   * Load songs for a round from the playlist
+   * Load songs for a round using metadata filters or legacy playlist
    */
   private async loadRoundSongs(round: Round): Promise<RoundSong[]> {
     console.log(`[GameService] Loading songs for round ${round.index}`);
 
-    // Get playlist songs
-    const playlist = await playlistRepository.findById(round.playlistId);
-    if (!playlist) {
-      throw new Error(`Playlist not found: ${round.playlistId}`);
-    }
+    let songs: Song[] = [];
 
-    // Load song details
-    const songs: Song[] = [];
-    for (const songId of playlist.songIds) {
-      const song = await songRepository.findById(songId);
-      if (song) {
-        songs.push(song);
+    // Prefer metadata-based filtering (new approach)
+    if (round.songFilters && Object.keys(round.songFilters).length > 0) {
+      console.log(`[GameService] Using metadata filters:`, round.songFilters);
+      songs = await songRepository.findByFilters(round.songFilters);
+
+      if (songs.length === 0) {
+        throw new Error(`No songs found matching filters: ${JSON.stringify(round.songFilters)}`);
       }
     }
+    // Fallback to playlist (legacy support)
+    else if (round.playlistId) {
+      console.log(`[GameService] Using legacy playlist: ${round.playlistId}`);
+      const playlist = await playlistRepository.findById(round.playlistId);
+      if (!playlist) {
+        throw new Error(`Playlist not found: ${round.playlistId}`);
+      }
+
+      // Load song details
+      for (const songId of playlist.songIds) {
+        const song = await songRepository.findById(songId);
+        if (song) {
+          songs.push(song);
+        }
+      }
+    }
+    // No filters or playlist provided
+    else {
+      throw new Error(`Round ${round.index} has no songFilters or playlistId configured`);
+    }
+
+    console.log(`[GameService] Loaded ${songs.length} songs for round ${round.index}`);
 
     // Create RoundSong objects
     const roundSongs: RoundSong[] = songs.map((song, index) => ({
@@ -130,13 +149,16 @@ export class GameService {
     // Update state
     gameStateManager.updateRound(roomId, round);
 
+    // Construct audio streaming URL
+    const audioUrl = `http://localhost:3007/api/songs/${song.song.id}/stream`;
+
     // Broadcast song started
     broadcastToRoom(roomId, {
       type: 'song:started',
       data: {
         songIndex,
         duration: round.params.songDuration || SYSTEM_DEFAULTS.songDuration,
-        // Don't send the correct answer to clients!
+        audioUrl,
         clipStart: song.song.clipStart,
       },
     });

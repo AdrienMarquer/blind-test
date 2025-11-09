@@ -15,7 +15,7 @@ import { runMigrations } from './db';
 import { extractMetadata, isSupportedAudioFormat, getFileFormat } from './utils/mp3-metadata';
 import { writeFile, unlink, stat } from 'fs/promises';
 import { mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, createReadStream } from 'fs';
 import path from 'path';
 import { modeRegistry } from './modes';
 import { mediaRegistry } from './media';
@@ -294,36 +294,63 @@ const app = new Elysia()
         roomId,
       });
 
-      // Get songs for the game
-      let songIds: string[];
-      if (body.playlistId) {
-        const playlist = await playlistRepository.findById(body.playlistId);
-        if (!playlist) {
-          return error(404, { error: 'Playlist not found' });
+      // Prepare round configuration
+      let songFilters: any = null;
+      let playlistId: string | null = null;
+      let songCount = 0;
+
+      // Priority 1: Use songFilters (new metadata-based approach)
+      if (body.songFilters) {
+        console.log(`[POST /api/game/${roomId}/start] Using metadata filters:`, body.songFilters);
+        songFilters = body.songFilters;
+
+        // Verify filters will return songs
+        const testSongs = await songRepository.findByFilters(body.songFilters);
+        if (testSongs.length === 0) {
+          await gameSessionRepository.delete(session.id);
+          return error(400, { error: 'No songs match the provided filters' });
         }
-        songIds = playlist.songIds;
-      } else if (body.songIds && body.songIds.length > 0) {
-        songIds = body.songIds;
-      } else {
-        // Get random songs from library
-        const randomSongs = await songRepository.getRandom(body.songCount || 10);
-        songIds = randomSongs.map(s => s.id);
+        songCount = testSongs.length;
       }
-
-      if (songIds.length === 0) {
-        await gameSessionRepository.delete(session.id);
-        return error(400, { error: 'No songs available for the game' });
-      }
-
-      // Create a simple playlist for this session if needed
-      let playlistId = body.playlistId;
-      if (!playlistId) {
+      // Priority 2: Use explicit songIds (create temp playlist for backwards compatibility)
+      else if (body.songIds && body.songIds.length > 0) {
+        console.log(`[POST /api/game/${roomId}/start] Using explicit songIds, creating temp playlist`);
         const tempPlaylist = await playlistRepository.create({
           name: `Game ${session.id}`,
-          description: 'Auto-generated playlist for game session',
-          songIds,
+          description: 'Auto-generated playlist from explicit song IDs',
+          songIds: body.songIds,
         });
         playlistId = tempPlaylist.id;
+        songCount = body.songIds.length;
+      }
+      // Priority 3: Use existing playlist (legacy)
+      else if (body.playlistId) {
+        console.log(`[POST /api/game/${roomId}/start] Using existing playlist: ${body.playlistId}`);
+        const playlist = await playlistRepository.findById(body.playlistId);
+        if (!playlist) {
+          await gameSessionRepository.delete(session.id);
+          return error(404, { error: 'Playlist not found' });
+        }
+        playlistId = body.playlistId;
+        songCount = playlist.songIds.length;
+      }
+      // Priority 4: Random selection with filters
+      else {
+        console.log(`[POST /api/game/${roomId}/start] Using random selection: ${body.songCount || 10} songs`);
+        songFilters = {
+          songCount: body.songCount || 10,
+          // Could add genre/year filters from body if provided
+          ...(body.genre && { genre: body.genre }),
+          ...(body.yearMin && { yearMin: body.yearMin }),
+          ...(body.yearMax && { yearMax: body.yearMax }),
+        };
+
+        const randomSongs = await songRepository.findByFilters(songFilters);
+        if (randomSongs.length === 0) {
+          await gameSessionRepository.delete(session.id);
+          return error(400, { error: 'No songs available in the library' });
+        }
+        songCount = randomSongs.length;
       }
 
       // Create single round for now (Phase 3 will support multiple rounds)
@@ -334,7 +361,8 @@ const app = new Elysia()
         index: 0,
         modeType: body.modeType || 'buzz_and_choice',
         mediaType: body.mediaType || 'music', // Default to music for MVP
-        playlistId,
+        playlistId: playlistId || undefined,
+        songFilters: songFilters ? JSON.stringify(songFilters) : null,
         params: body.params || null,
         status: 'pending',
         startedAt: null,
@@ -344,7 +372,7 @@ const app = new Elysia()
 
       // Update room status
       const updated = await roomRepository.update(roomId, { status: 'playing' });
-      console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name} with ${songIds.length} songs`);
+      console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name} with ~${songCount} songs`);
 
       // Start the first round
       try {
@@ -368,7 +396,7 @@ const app = new Elysia()
         sessionId: session.id,
         roomId,
         status: updated.status,
-        songCount: songIds.length,
+        songCount,
         modeType: body.modeType || 'buzz_and_choice',
       };
     } catch (err) {
@@ -377,10 +405,28 @@ const app = new Elysia()
     }
   }, {
     body: t.Object({
+      // Legacy playlist support
       playlistId: t.Optional(t.String()),
       songIds: t.Optional(t.Array(t.String())),
+
+      // Metadata-based filtering (NEW - preferred approach)
+      songFilters: t.Optional(t.Object({
+        genre: t.Optional(t.String()),
+        yearMin: t.Optional(t.Number()),
+        yearMax: t.Optional(t.Number()),
+        artistName: t.Optional(t.String()),
+        songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+      })),
+
+      // Quick filters (alternative to songFilters object)
       songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+      genre: t.Optional(t.String()),
+      yearMin: t.Optional(t.Number()),
+      yearMax: t.Optional(t.Number()),
+
+      // Game configuration
       modeType: t.Optional(t.String()),
+      mediaType: t.Optional(t.String()),
       params: t.Optional(t.Any()),
     }),
   })
@@ -408,6 +454,63 @@ const app = new Elysia()
     }
 
     return song;
+  })
+
+  // Stream song audio
+  .get('/api/songs/:songId/stream', async ({ params: { songId }, error, set, request }) => {
+    console.log(`[GET /api/songs/${songId}/stream] Streaming audio`);
+
+    const song = await songRepository.findById(songId);
+    if (!song) {
+      return error(404, { error: 'Song not found' });
+    }
+
+    const filePath = path.join(process.cwd(), song.filePath);
+    if (!existsSync(filePath)) {
+      console.error(`[Stream] File not found: ${filePath}`);
+      return error(404, { error: 'Audio file not found' });
+    }
+
+    try {
+      const fileStats = await stat(filePath);
+      const fileSize = fileStats.size;
+
+      // Get range header for seeking support
+      const range = request.headers.get('range');
+
+      if (range) {
+        // Parse range header (e.g., "bytes=0-1023")
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = (end - start) + 1;
+
+        set.status = 206; // Partial Content
+        set.headers = {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize.toString(),
+          'Content-Type': getContentType(song.format),
+        };
+
+        // Create read stream for the range
+        const stream = createReadStream(filePath, { start, end });
+        return new Response(stream as any);
+      } else {
+        // No range, stream the whole file
+        set.headers = {
+          'Content-Length': fileSize.toString(),
+          'Content-Type': getContentType(song.format),
+          'Accept-Ranges': 'bytes',
+        };
+
+        const stream = createReadStream(filePath);
+        return new Response(stream as any);
+      }
+    } catch (err) {
+      console.error(`[Stream] Error streaming file:`, err);
+      return error(500, { error: 'Failed to stream audio' });
+    }
   })
 
   // Search songs
@@ -761,9 +864,32 @@ const app = new Elysia()
     close(ws) {
       handleClose(ws);
     }
-  })
+  });
 
-  .listen(3007);
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Get MIME content type for audio format
+ */
+function getContentType(format: string): string {
+  switch (format.toLowerCase()) {
+    case 'mp3':
+      return 'audio/mpeg';
+    case 'm4a':
+      return 'audio/mp4';
+    case 'wav':
+      return 'audio/wav';
+    case 'flac':
+      return 'audio/flac';
+    default:
+      return 'audio/mpeg';
+  }
+}
+
+// Start server
+app.listen(3007);
 
 console.log(
   `🎵 Blind Test Server is running at http://${app.server?.hostname}:${app.server?.port}`

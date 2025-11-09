@@ -97,7 +97,10 @@ export const rounds = sqliteTable('rounds', {
   index: integer('index').notNull(),
   modeType: text('mode_type').notNull(), // 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'
   mediaType: text('media_type').notNull(), // 'music' | 'picture' | 'video' | 'text_question'
-  playlistId: text('playlist_id'),
+  playlistId: text('playlist_id'), // Optional - legacy support
+
+  // Metadata-based song filtering (stored as JSON)
+  songFilters: text('song_filters', { mode: 'json' }),
 
   // Configuration (stored as JSON)
   params: text('params', { mode: 'json' }),

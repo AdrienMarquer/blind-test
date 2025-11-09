@@ -91,7 +91,16 @@ export interface Round {
   index: number;             // Round number (0-based)
   modeType: ModeType;        // Game mechanic (HOW to play)
   mediaType: MediaType;      // Content type (WHAT to show)
-  playlistId: string;
+  playlistId?: string;       // Optional - legacy support
+
+  // Metadata-based song filtering (replaces playlists)
+  songFilters?: {
+    genre?: string;          // Filter by genre
+    yearMin?: number;        // Minimum year (inclusive)
+    yearMax?: number;        // Maximum year (inclusive)
+    artistName?: string;     // Filter by artist name (partial match)
+    songCount?: number;      // Number of songs to select (random if more available)
+  };
 
   // Configuration (simplified - no game-level config)
   params: ModeParams;
@@ -283,7 +292,7 @@ export type ServerMessage =
   | { type: 'round:ended'; data: { roundIndex: number; scores: Record<string, number> } }
 
   // Song Events
-  | { type: 'song:started'; data: { songIndex: number; duration: number } }
+  | { type: 'song:started'; data: { songIndex: number; duration: number; audioUrl: string; clipStart: number } }
   | { type: 'song:ended'; data: { songIndex: number; correctTitle: string; correctArtist: string } }
 
   // Gameplay
