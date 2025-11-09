@@ -232,7 +232,67 @@ POST /api/game/:roomId/start
 **Request Body**:
 ```typescript
 {
-  config?: GameConfig;  // Optional, uses defaults if not provided
+  // Option 1: Use metadata filters (NEW - preferred)
+  songFilters?: {
+    genre?: string | string[];    // Single genre or array for multiple (OR logic)
+    yearMin?: number;              // Minimum year (inclusive)
+    yearMax?: number;              // Maximum year (inclusive)
+    artistName?: string;           // Partial match on artist name
+    songCount?: number;            // Number of songs to randomly select
+  };
+
+  // Option 2: Explicit song IDs
+  songIds?: string[];              // Specific songs to use
+
+  // Option 3: Legacy playlist
+  playlistId?: string;             // Existing playlist
+
+  // Option 4: Random (if none above provided)
+  songCount?: number;              // Number of random songs (default: 10)
+
+  // Game mode configuration
+  modeType?: 'buzz_and_choice' | 'fast_buzz' | 'text_input';  // Default: buzz_and_choice
+  mediaType?: 'music' | 'picture' | 'video';                   // Default: music
+
+  // Mode parameters
+  params?: {
+    songDuration?: number;                        // Seconds (default: 30)
+    answerTimer?: number;                         // Seconds (default: 5)
+    audioPlayback?: 'master' | 'players' | 'all'; // Where audio plays (default: 'master')
+    // ... other mode-specific params
+  };
+}
+```
+
+**Examples**:
+```typescript
+// Multi-genre with year range
+{
+  "songFilters": {
+    "genre": ["Rock", "Metal", "Punk"],
+    "yearMin": 1980,
+    "yearMax": 1990,
+    "songCount": 15
+  },
+  "params": {
+    "audioPlayback": "all"  // Play on all devices
+  }
+}
+
+// Single genre
+{
+  "songFilters": {
+    "genre": "Jazz",
+    "songCount": 10
+  }
+}
+
+// Quick random start
+{
+  "songCount": 10,
+  "params": {
+    "audioPlayback": "players"  // Only players hear audio
+  }
 }
 ```
 
@@ -242,13 +302,13 @@ POST /api/game/:roomId/start
   sessionId: string;
   roomId: string;
   status: "playing";
-  currentRoundIndex: 0;
-  rounds: Round[];
+  songCount: number;
+  modeType: string;
 }
 ```
 
 **Errors**:
-- `400 Bad Request`: Not enough players (minimum 2)
+- `400 Bad Request`: Not enough players (minimum 2) or no songs match filters
 - `409 Conflict`: Game already started
 
 ---

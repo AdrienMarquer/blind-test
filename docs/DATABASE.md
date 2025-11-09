@@ -106,7 +106,17 @@ interface Round {
   sessionId: string;                   // Parent session
   index: number;                       // Round number (0-based)
   modeType: ModeType;                  // Which mode to use
-  playlistId: string;                  // Playlist for this round
+  mediaType: MediaType;                // Content type (music, picture, video)
+  playlistId?: string;                 // Optional - legacy playlist support
+
+  // Metadata-based song filtering (replaces playlists)
+  songFilters?: {
+    genre?: string | string[];         // Single or multiple genres (OR logic)
+    yearMin?: number;                  // Minimum year (inclusive)
+    yearMax?: number;                  // Maximum year (inclusive)
+    artistName?: string;               // Filter by artist name (partial match)
+    songCount?: number;                // Number of songs to select (random)
+  };
 
   // Configuration
   params: ModeParams;                  // Mode-specific parameters
@@ -125,7 +135,8 @@ interface Round {
 }
 
 type RoundStatus = 'pending' | 'active' | 'finished';
-type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'picture_round';
+type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
+type MediaType = 'music' | 'picture' | 'video' | 'text_question';
 ```
 
 #### Mode
@@ -144,8 +155,9 @@ interface Mode {
 
 interface ModeParams {
   // Universal parameters
-  songDuration?: number;               // Seconds (default: 15)
+  songDuration?: number;               // Seconds (default: 30)
   answerTimer?: number;                // Seconds (default: 5)
+  audioPlayback?: 'master' | 'players' | 'all';  // Where audio plays (default: 'master')
 
   // Buzz + Choice specific
   numChoices?: number;                 // Options (default: 4)
