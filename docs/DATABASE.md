@@ -175,13 +175,13 @@ interface Song {
   title: string;                       // Track title
   artist: string;                      // Artist name
   album?: string;                      // Album name
-  year?: number;                       // Release year
+  year: number;                        // Release year (mandatory)
   genre?: string;                      // Genre
-  duration: number;                    // Length in seconds
+  duration: number;                    // Full track length in seconds
 
-  // Playback
-  clipStart: number;                   // Start time (default: 30)
-  clipDuration: number;                // Clip length (default: 15)
+  // Playback configuration
+  clipStart: number;                   // Start time in seconds (default: 30)
+  // Note: Clip duration comes from ModeParams.songDuration, not stored here
 
   // Metadata
   createdAt: Date;                     // Upload time
@@ -189,6 +189,8 @@ interface Song {
   format: string;                      // 'mp3' | 'm4a' | 'wav' | 'flac'
 }
 ```
+
+**Playback Duration**: The actual playback duration is controlled by `ModeParams.songDuration` (inherited System → Mode → Round). Songs only define WHERE to start (`clipStart`), not HOW LONG to play. This separates content curation from gameplay rules.
 
 #### Playlist
 ```typescript
@@ -382,13 +384,13 @@ CREATE TABLE songs (
   title TEXT NOT NULL,
   artist TEXT NOT NULL,
   album TEXT,
-  year INTEGER,
+  year INTEGER NOT NULL,  -- Mandatory for music identification
   genre TEXT,
-  duration INTEGER NOT NULL,  -- Seconds
+  duration INTEGER NOT NULL,  -- Full track length in seconds
 
-  -- Playback
-  clip_start INTEGER NOT NULL DEFAULT 30,  -- Seconds
-  clip_duration INTEGER NOT NULL DEFAULT 15,  -- Seconds
+  -- Playback configuration
+  clip_start INTEGER NOT NULL DEFAULT 30,  -- Start time in seconds
+  -- Note: Clip duration controlled by ModeParams.songDuration, not stored per-song
 
   -- File info
   created_at INTEGER NOT NULL,
@@ -399,6 +401,7 @@ CREATE TABLE songs (
 CREATE INDEX idx_songs_artist ON songs(artist);
 CREATE INDEX idx_songs_title ON songs(title);
 CREATE INDEX idx_songs_genre ON songs(genre);
+CREATE INDEX idx_songs_year ON songs(year);
 ```
 
 #### playlists

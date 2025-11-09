@@ -139,13 +139,13 @@ export interface Song {
   title: string;
   artist: string;
   album?: string;
-  year?: number;
+  year: number;                // Mandatory - Release year
   genre?: string;
-  duration: number;            // Seconds
+  duration: number;            // Full track length in seconds
 
-  // Playback
-  clipStart: number;           // Default: 30
-  clipDuration: number;        // Default: 15
+  // Playback configuration
+  clipStart: number;           // Start time in seconds (default: 30)
+  // Note: Clip duration comes from ModeParams.songDuration, not stored here
 
   // File info
   createdAt: Date;
