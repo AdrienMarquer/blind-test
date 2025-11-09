@@ -19,7 +19,23 @@ export class GameSessionRepository implements Repository<GameSession> {
       .where(eq(schema.rounds.sessionId, dbSession.id))
       .orderBy(schema.rounds.index);
 
-    // For now, return basic structure - we'll populate full Round details later
+    // Convert database rounds to Round objects
+    const rounds = dbRounds.map(dbRound => ({
+      id: dbRound.id,
+      sessionId: dbRound.sessionId,
+      index: dbRound.index,
+      modeType: dbRound.modeType as any,
+      mediaType: dbRound.mediaType as any,
+      playlistId: dbRound.playlistId,
+      params: (dbRound.params as any) || {}, // Drizzle auto-parses JSON mode fields
+      status: dbRound.status as any,
+      startedAt: dbRound.startedAt ? new Date(dbRound.startedAt) : undefined,
+      endedAt: dbRound.endedAt ? new Date(dbRound.endedAt) : undefined,
+      songs: [], // Will be populated by GameService when round starts
+      currentSongIndex: dbRound.currentSongIndex,
+      scores: new Map<string, number>(),
+    }));
+
     return {
       id: dbSession.id,
       roomId: dbSession.roomId,
@@ -28,7 +44,7 @@ export class GameSessionRepository implements Repository<GameSession> {
       currentRoundIndex: dbSession.currentRoundIndex,
       currentSongIndex: dbSession.currentSongIndex,
       status: dbSession.status as GameSession['status'],
-      rounds: [], // Will be populated when we implement Round repository
+      rounds,
     };
   }
 
