@@ -2,18 +2,18 @@
  * Database connection and initialization
  */
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { Database } from 'bun:sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as schema from './schema';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import path from 'path';
 
 // Database file path
 const dbPath = path.join(process.cwd(), 'db', 'blind-test.db');
 
 // Initialize SQLite database
-const sqlite = new Database(dbPath);
-sqlite.pragma('journal_mode = WAL'); // Enable WAL mode for better concurrency
+const sqlite = new Database(dbPath, { create: true });
+sqlite.run('PRAGMA journal_mode = WAL'); // Enable WAL mode for better concurrency
 
 // Create Drizzle instance
 export const db = drizzle(sqlite, { schema });
