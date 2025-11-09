@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Room } from '@blind-test/shared';
+	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
 	// Props
 	export let room: Room;
-	export let socket: any; // WebSocket store
+	export let socket: RoomSocket;
 
 	// Game state
 	let currentSong = $state(0);
@@ -12,6 +13,9 @@
 	let timeRemaining = $state(15);
 	let isPaused = $state(false);
 	let isPlaying = $state(false);
+	let activePlayerName = $state<string>('Waiting for buzz...');
+	let currentTitle = $state('Loading...');
+	let currentArtist = $state('');
 
 	// Audio player
 	let audioElement: HTMLAudioElement | null = $state(null);
@@ -28,9 +32,11 @@
 			}
 		}
 
-		socket.send({
-			type: isPaused ? 'game:pause' : 'game:resume'
-		});
+		if (isPaused) {
+			socket.pauseGame();
+		} else {
+			socket.resumeGame();
+		}
 	}
 
 	function handleSkip() {
@@ -40,12 +46,7 @@
 			audioElement.currentTime = 0;
 		}
 
-		// Move to next song
-		currentSong++;
-
-		socket.send({
-			type: 'game:skip'
-		});
+		socket.skipSong();
 	}
 
 	function handleEndGame() {
@@ -57,8 +58,61 @@
 
 	// Listen for socket events
 	onMount(() => {
-		// TODO: Setup audio context for Web Audio API
-		// audioContext = new AudioContext();
+		const originalOnMessage = socket.socket?.onmessage;
+
+		if (socket.socket) {
+			socket.socket.onmessage = (event) => {
+				// Call original handler first
+				originalOnMessage?.call(socket.socket, event);
+
+				// Handle game events
+				try {
+					const message = JSON.parse(event.data);
+
+					switch (message.type) {
+						case 'round:started':
+							totalSongs = message.data.songCount;
+							isPlaying = true;
+							break;
+
+						case 'song:started':
+							currentSong = message.data.songIndex;
+							timeRemaining = message.data.duration;
+							activePlayerName = 'Waiting for buzz...';
+							currentTitle = `Song ${message.data.songIndex + 1}`;
+							currentArtist = '';
+							// TODO: Start playing audio
+							break;
+
+						case 'player:buzzed':
+							// Find player name
+							const player = socket.players.find((p) => p.id === message.data.playerId);
+							activePlayerName = player?.name || 'Unknown Player';
+							break;
+
+						case 'song:ended':
+							currentTitle = message.data.correctTitle;
+							currentArtist = message.data.correctArtist;
+							activePlayerName = 'Song ended';
+							break;
+
+						case 'game:paused':
+							isPaused = true;
+							break;
+
+						case 'game:resumed':
+							isPaused = false;
+							break;
+
+						case 'round:ended':
+							isPlaying = false;
+							break;
+					}
+				} catch (error) {
+					console.error('Error handling game event:', error);
+				}
+			};
+		}
 	});
 </script>
 
@@ -78,8 +132,8 @@
 		</div>
 		<div class="song-details">
 			<p class="label">Now Playing</p>
-			<h3 class="song-title">Song {currentSong + 1}</h3>
-			<p class="song-artist">Artist Name</p>
+			<h3 class="song-title">{currentTitle}</h3>
+			<p class="song-artist">{currentArtist || '...'}</p>
 		</div>
 	</div>
 
@@ -102,7 +156,7 @@
 		</div>
 		<div class="indicator">
 			<span class="indicator-label">Active Player:</span>
-			<span class="indicator-value">Waiting for buzz...</span>
+			<span class="indicator-value">{activePlayerName}</span>
 		</div>
 	</div>
 

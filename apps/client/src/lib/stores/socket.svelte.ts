@@ -161,6 +161,58 @@ export class RoomSocket {
         console.log('Game started:', message.data.room);
         break;
 
+      case 'round:started':
+        console.log('Round started:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'song:started':
+        console.log('Song started:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'player:buzzed':
+        console.log('Player buzzed:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'buzz:rejected':
+        console.log('Buzz rejected:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'answer:result':
+        console.log('Answer result:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'choices:artist':
+        console.log('Artist choices:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'song:ended':
+        console.log('Song ended:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'round:ended':
+        console.log('Round ended:', message.data);
+        // Will be handled by game components
+        break;
+
+      case 'game:paused':
+        console.log('Game paused');
+        break;
+
+      case 'game:resumed':
+        console.log('Game resumed');
+        break;
+
+      case 'game:skipped':
+        console.log('Game skipped');
+        break;
+
       case 'error':
         this.error = message.data.message;
         console.error(`Server error [${message.data.code}]:`, message.data.message);
@@ -217,6 +269,57 @@ export class RoomSocket {
   requestStateSync() {
     this.send({
       type: 'state:sync'
+    });
+  }
+
+  // ========================================================================
+  // Gameplay Methods
+  // ========================================================================
+
+  /**
+   * Buzz in for the current song
+   */
+  buzz(songIndex: number) {
+    this.send({
+      type: 'player:buzz',
+      data: { songIndex }
+    });
+  }
+
+  /**
+   * Submit an answer
+   */
+  submitAnswer(songIndex: number, answerType: 'title' | 'artist', value: string) {
+    this.send({
+      type: 'player:answer',
+      data: { songIndex, answerType, value }
+    });
+  }
+
+  /**
+   * Pause the game (master only)
+   */
+  pauseGame() {
+    this.send({
+      type: 'game:pause'
+    });
+  }
+
+  /**
+   * Resume the game (master only)
+   */
+  resumeGame() {
+    this.send({
+      type: 'game:resume'
+    });
+  }
+
+  /**
+   * Skip current song (master only)
+   */
+  skipSong() {
+    this.send({
+      type: 'game:skip'
     });
   }
 

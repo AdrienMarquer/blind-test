@@ -1,17 +1,21 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { Player } from '@blind-test/shared';
+	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
 	// Props
 	export let player: Player;
-	export let socket: any; // WebSocket store
+	export let socket: RoomSocket;
 
 	// Game state
 	let canBuzz = $state(true);
-	let hasB uzzed = $state(false);
+	let hasBuzzed = $state(false);
 	let showChoices = $state(false);
 	let answerType: 'title' | 'artist' = $state('title');
 	let timeRemaining = $state(15);
 	let answerTimeRemaining = $state(5);
+	let currentSongIndex = $state(0);
+	let isLockedOut = $state(false);
 
 	// Choices
 	let titleChoices = $state<string[]>([]);
@@ -21,39 +25,100 @@
 	let score = $state(player.score);
 
 	function handleBuzz() {
-		if (!canBuzz || hasBuzzed) return;
+		if (!canBuzz || hasBuzzed || isLockedOut) return;
 
 		hasBuzzed = true;
 		canBuzz = false;
 
 		// Send buzz to server
-		socket.send({
-			type: 'player:buzz',
-			data: {
-				songIndex: 0, // TODO: Track current song index
-			}
-		});
+		socket.buzz(currentSongIndex);
 	}
 
 	function handleAnswer(value: string) {
 		// Send answer to server
-		socket.send({
-			type: 'player:answer',
-			data: {
-				songIndex: 0, // TODO: Track current song index
-				answerType,
-				value,
-			}
-		});
+		socket.submitAnswer(currentSongIndex, answerType, value);
 
 		// Hide choices and wait for result
 		showChoices = false;
 	}
 
-	// TODO: Listen for socket events
-	// - 'player:buzzed' -> Show choices
-	// - 'answer:result' -> Update score, show next choices or reset
-	// - 'song:started' -> Reset buzz state
+	// Listen for WebSocket events
+	onMount(() => {
+		const originalOnMessage = socket.socket?.onmessage;
+
+		if (socket.socket) {
+			socket.socket.onmessage = (event) => {
+				// Call original handler first
+				originalOnMessage?.call(socket.socket, event);
+
+				// Handle game events
+				try {
+					const message = JSON.parse(event.data);
+
+					switch (message.type) {
+						case 'song:started':
+							// Reset for new song
+							hasBuzzed = false;
+							canBuzz = true;
+							showChoices = false;
+							isLockedOut = false;
+							currentSongIndex = message.data.songIndex;
+							timeRemaining = message.data.duration;
+							break;
+
+						case 'player:buzzed':
+							// Someone buzzed - show choices if it's us
+							if (message.data.playerId === player.id) {
+								titleChoices = message.data.titleChoices || [];
+								showChoices = true;
+								answerType = 'title';
+							}
+							break;
+
+						case 'buzz:rejected':
+							// Our buzz was rejected - allow to rebuzz
+							hasBuzzed = false;
+							canBuzz = true;
+							break;
+
+						case 'answer:result':
+							if (message.data.playerId === player.id) {
+								if (message.data.isCorrect) {
+									score += message.data.pointsAwarded;
+								}
+
+								// Check if we should show artist choices
+								if (message.data.shouldShowArtistChoices) {
+									// Will receive choices:artist event
+								} else if (message.data.lockOutPlayer) {
+									isLockedOut = true;
+									canBuzz = false;
+									showChoices = false;
+								}
+							}
+							break;
+
+						case 'choices:artist':
+							if (message.data.playerId === player.id) {
+								artistChoices = message.data.artistChoices || [];
+								showChoices = true;
+								answerType = 'artist';
+							}
+							break;
+
+						case 'song:ended':
+							// Song finished
+							showChoices = false;
+							hasBuzzed = false;
+							canBuzz = false;
+							break;
+					}
+				} catch (error) {
+					console.error('Error handling game event:', error);
+				}
+			};
+		}
+	});
 </script>
 
 <div class="player-interface">
