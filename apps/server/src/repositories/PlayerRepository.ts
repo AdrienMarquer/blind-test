@@ -1,32 +1,71 @@
 /**
- * Player Repository - In-memory implementation
+ * Player Repository - SQLite implementation with Drizzle ORM
  */
 
+import { eq, and } from 'drizzle-orm';
 import type { Player, Repository } from '@blind-test/shared';
 import { generateId } from '@blind-test/shared';
+import { db, schema } from '../db';
 
 export class PlayerRepository implements Repository<Player> {
-  private players = new Map<string, Player>();
-  private roomIndex = new Map<string, Set<string>>(); // roomId → Set<playerId>
+  /**
+   * Convert database row to Player type
+   */
+  private toPlayer(dbPlayer: typeof schema.players.$inferSelect): Player {
+    return {
+      id: dbPlayer.id,
+      roomId: dbPlayer.roomId,
+      name: dbPlayer.name,
+      role: dbPlayer.role as 'master' | 'player',
+      connected: dbPlayer.connected,
+      joinedAt: new Date(dbPlayer.joinedAt),
+      score: dbPlayer.score,
+      roundScore: dbPlayer.roundScore,
+      isActive: dbPlayer.isActive,
+      isLockedOut: dbPlayer.isLockedOut,
+      stats: dbPlayer.stats as any,
+    };
+  }
 
   async findById(id: string): Promise<Player | null> {
-    return this.players.get(id) || null;
+    const result = await db
+      .select()
+      .from(schema.players)
+      .where(eq(schema.players.id, id))
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return this.toPlayer(result[0]);
   }
 
   async findAll(): Promise<Player[]> {
-    return Array.from(this.players.values());
+    const results = await db.select().from(schema.players);
+    return results.map(p => this.toPlayer(p));
   }
 
   async findByRoom(roomId: string): Promise<Player[]> {
-    const playerIds = this.roomIndex.get(roomId) || new Set();
-    return Array.from(playerIds)
-      .map(id => this.players.get(id))
-      .filter(Boolean) as Player[];
+    const results = await db
+      .select()
+      .from(schema.players)
+      .where(eq(schema.players.roomId, roomId));
+
+    return results.map(p => this.toPlayer(p));
   }
 
   async findByRoomAndName(roomId: string, name: string): Promise<Player | null> {
-    const players = await this.findByRoom(roomId);
-    return players.find(p => p.name === name) || null;
+    const result = await db
+      .select()
+      .from(schema.players)
+      .where(
+        and(
+          eq(schema.players.roomId, roomId),
+          eq(schema.players.name, name)
+        )
+      )
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return this.toPlayer(result[0]);
   }
 
   async create(data: Partial<Player>): Promise<Player> {
@@ -37,7 +76,7 @@ export class PlayerRepository implements Repository<Player> {
     const id = generateId();
     const now = new Date();
 
-    const player: Player = {
+    const newPlayer = {
       id,
       roomId: data.roomId,
       name: data.name,
@@ -55,82 +94,77 @@ export class PlayerRepository implements Repository<Player> {
         buzzCount: 0,
         averageAnswerTime: 0,
       },
-      ...data,
-    } as Player;
+    };
 
-    this.players.set(id, player);
+    await db.insert(schema.players).values(newPlayer);
 
-    // Update room index
-    if (!this.roomIndex.has(player.roomId)) {
-      this.roomIndex.set(player.roomId, new Set());
-    }
-    this.roomIndex.get(player.roomId)!.add(id);
-
-    return player;
+    return this.toPlayer(newPlayer as any);
   }
 
   async update(id: string, data: Partial<Player>): Promise<Player> {
-    const player = this.players.get(id);
-    if (!player) throw new Error('Player not found');
+    const existing = await this.findById(id);
+    if (!existing) throw new Error('Player not found');
 
-    const updated = {
-      ...player,
-      ...data,
-    };
+    const updateData: any = {};
 
-    this.players.set(id, updated);
-    return updated;
+    // Only update allowed fields
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.role !== undefined) updateData.role = data.role;
+    if (data.connected !== undefined) updateData.connected = data.connected;
+    if (data.score !== undefined) updateData.score = data.score;
+    if (data.roundScore !== undefined) updateData.roundScore = data.roundScore;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.isLockedOut !== undefined) updateData.isLockedOut = data.isLockedOut;
+    if (data.stats !== undefined) updateData.stats = data.stats;
+
+    await db
+      .update(schema.players)
+      .set(updateData)
+      .where(eq(schema.players.id, id));
+
+    return this.findById(id) as Promise<Player>;
   }
 
   async delete(id: string): Promise<void> {
-    const player = this.players.get(id);
-    if (player) {
-      // Remove from room index
-      const playerIds = this.roomIndex.get(player.roomId);
-      if (playerIds) {
-        playerIds.delete(id);
-        if (playerIds.size === 0) {
-          this.roomIndex.delete(player.roomId);
-        }
-      }
-
-      this.players.delete(id);
-    }
+    await db.delete(schema.players).where(eq(schema.players.id, id));
   }
 
   /**
    * Delete all players in a room
    */
   async deleteByRoom(roomId: string): Promise<void> {
-    const playerIds = this.roomIndex.get(roomId);
-    if (playerIds) {
-      for (const id of playerIds) {
-        this.players.delete(id);
-      }
-      this.roomIndex.delete(roomId);
-    }
+    await db.delete(schema.players).where(eq(schema.players.roomId, roomId));
   }
 
   /**
    * Reset scores for all players in a room
    */
   async resetScores(roomId: string): Promise<void> {
-    const players = await this.findByRoom(roomId);
-    for (const player of players) {
-      await this.update(player.id, {
+    await db
+      .update(schema.players)
+      .set({
         score: 0,
         roundScore: 0,
         isActive: false,
         isLockedOut: false,
-      });
-    }
+      })
+      .where(eq(schema.players.roomId, roomId));
   }
 
   /**
    * Count connected players in a room
    */
   async countConnected(roomId: string): Promise<number> {
-    const players = await this.findByRoom(roomId);
-    return players.filter(p => p.connected).length;
+    const players = await db
+      .select()
+      .from(schema.players)
+      .where(
+        and(
+          eq(schema.players.roomId, roomId),
+          eq(schema.players.connected, true)
+        )
+      );
+
+    return players.length;
   }
 }

@@ -9,6 +9,26 @@ import { roomRepository, playerRepository } from './repositories';
 import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './websocket/handler';
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
+import { runMigrations } from './db';
+import { mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import path from 'path';
+
+// Ensure database directory exists
+const dbDir = path.join(process.cwd(), 'db');
+if (!existsSync(dbDir)) {
+  await mkdir(dbDir, { recursive: true });
+  console.log('📁 Created database directory');
+}
+
+// Run database migrations
+try {
+  runMigrations();
+  console.log('✅ Database ready');
+} catch (error) {
+  console.error('❌ Database initialization failed:', error);
+  process.exit(1);
+}
 
 // Initialize Elysia app
 const app = new Elysia()

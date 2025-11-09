@@ -10,9 +10,13 @@
   "dependencies": {
     "elysia": "^1.0.0",
     "@elysiajs/cors": "^1.0.0",
-    "@blind-test/shared": "workspace:*"
+    "@blind-test/shared": "workspace:*",
+    "drizzle-orm": "^0.29.3",
+    "better-sqlite3": "^9.2.2"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "drizzle-kit": "^0.20.9",
+    "@types/better-sqlite3": "^7.6.8"
   }
 }
