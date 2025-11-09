@@ -49,7 +49,7 @@ export function handleMessage(
   ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
   message: string
 ) {
-  const { roomId } = ws.data;
+  const roomId = ws.data?.roomId;
 
   try {
     const parsed: WebSocketMessage = JSON.parse(message);
@@ -111,6 +111,7 @@ async function handleStateSync(ws: ServerWebSocket<{ roomId: string; playerId?: 
       data: { room, players }
     }));
   } catch (error) {
+    console.error('[State Sync] Error:', error);
     ws.send(JSON.stringify({
       type: 'error',
       data: { message: 'Failed to sync state' }
@@ -285,7 +286,7 @@ async function handlePlayerDisconnect(roomId: string, playerId: string) {
 
 // Utility functions
 
-function broadcastToRoom(
+export function broadcastToRoom(
   roomId: string,
   message: WebSocketMessage,
   excludeWs?: ServerWebSocket<{ roomId: string; playerId?: string }>

@@ -5,7 +5,23 @@
 
 import type { Room, Player } from '@blind-test/shared';
 
-const SERVER_URL = 'ws://localhost:3007';
+// Auto-detect server URL based on current host
+// In dev: uses localhost, in production: uses same host as client
+const getServerUrl = () => {
+  if (typeof window === 'undefined') return 'ws://localhost:3007';
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.hostname;
+
+  // If accessing from local network (not localhost), use that IP
+  if (host !== 'localhost' && host !== '127.0.0.1') {
+    return `${protocol}//${host}:3007`;
+  }
+
+  return 'ws://localhost:3007';
+};
+
+const SERVER_URL = getServerUrl();
 
 interface WebSocketMessage {
   type: string;

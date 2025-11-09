@@ -6,7 +6,7 @@
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { roomRepository, playerRepository } from './repositories';
-import { handleWebSocket, handleMessage, handleClose } from './websocket/handler';
+import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './websocket/handler';
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
 
@@ -188,6 +188,13 @@ const app = new Elysia()
       });
 
       console.log(`[POST /api/rooms/${roomId}/players] Added player: ${player.name}`);
+
+      // Broadcast player join event to all connected WebSocket clients
+      broadcastToRoom(roomId, {
+        type: 'player:joined',
+        data: { player, room }
+      });
+
       return player;
     } catch (err) {
       console.error(`[POST /api/rooms/${roomId}/players] Error:`, err);
@@ -221,6 +228,18 @@ const app = new Elysia()
     try {
       await playerRepository.delete(playerId);
       console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Removed player: ${player.name}`);
+
+      // Broadcast player left event to all connected WebSocket clients
+      const remainingPlayers = await playerRepository.countConnected(roomId);
+      broadcastToRoom(roomId, {
+        type: 'player:left',
+        data: {
+          playerId: player.id,
+          playerName: player.name,
+          remainingPlayers
+        }
+      });
+
       return new Response(null, { status: 204 });
     } catch (err) {
       console.error(`[DELETE /api/rooms/${roomId}/players/${playerId}] Error:`, err);
@@ -272,7 +291,7 @@ const app = new Elysia()
       roomId: t.String()
     }),
     open(ws) {
-      // Extract roomId from ws.data which now contains validated params
+      // Extract roomId from route params
       const roomId = ws.data?.params?.roomId;
 
       if (!roomId) {
@@ -281,8 +300,8 @@ const app = new Elysia()
         return;
       }
 
-      // Store roomId in ws.data for easy access
-      ws.data = { roomId, params: ws.data.params };
+      // Store roomId in ws.data for access in message handlers
+      ws.data.roomId = roomId;
       handleWebSocket(ws);
     },
     message(ws, message) {
