@@ -52,9 +52,14 @@ export class RoomSocket {
    * Connect to the room WebSocket
    */
   connect() {
-    if (this.socket?.readyState === WebSocket.OPEN) return;
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      console.log('[WebSocket] Already connected');
+      return;
+    }
 
     const wsUrl = `${SERVER_URL}/ws/rooms/${this.roomId}`;
+    console.log('[WebSocket] Attempting to connect to:', wsUrl);
+    console.log('[WebSocket] Server URL:', SERVER_URL);
     this.socket = new WebSocket(wsUrl);
 
     this.setupListeners();
@@ -68,9 +73,10 @@ export class RoomSocket {
 
     // Connection events
     this.socket.onopen = () => {
+      console.log(`[WebSocket] onopen fired! Setting connected = true`);
       this.connected = true;
       this.error = null;
-      console.log(`Connected to room ${this.roomId}`);
+      console.log(`[WebSocket] Connected to room ${this.roomId}, connected state:`, this.connected);
 
       // Request initial state sync
       this.requestStateSync();
@@ -83,7 +89,8 @@ export class RoomSocket {
 
     this.socket.onerror = (error) => {
       this.error = 'Connection error';
-      console.error('WebSocket error:', error);
+      console.error('[WebSocket] ERROR:', error);
+      console.error('[WebSocket] Connection failed. Check if server is running on port 3007');
     };
 
     this.socket.onmessage = (event) => {
