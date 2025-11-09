@@ -575,12 +575,12 @@ const app = new Elysia()
         return { error: errorMsg };
       }
 
-      // Check if song already exists (by file path or title+artist)
-      const existingSong = await songRepository.findByFilePath(filePath);
+      // Check if song already exists (by title+artist)
+      const existingSong = await songRepository.findByTitleAndArtist(metadata.title, metadata.artist);
       if (existingSong) {
         await unlink(filePath);
         set.status = 409;
-        return { error: 'Song already exists in library' };
+        return { error: `Song already exists in library: "${metadata.title}" by ${metadata.artist}` };
       }
 
       // Create song record

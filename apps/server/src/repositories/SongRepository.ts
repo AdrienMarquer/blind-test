@@ -56,6 +56,19 @@ export class SongRepository implements Repository<Song> {
     return this.toSong(result[0]);
   }
 
+  async findByTitleAndArtist(title: string, artist: string): Promise<Song | null> {
+    const result = await db
+      .select()
+      .from(schema.songs)
+      .where(
+        sql`LOWER(${schema.songs.title}) = LOWER(${title}) AND LOWER(${schema.songs.artist}) = LOWER(${artist})`
+      )
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return this.toSong(result[0]);
+  }
+
   async findByArtist(artist: string): Promise<Song[]> {
     const results = await db
       .select()
