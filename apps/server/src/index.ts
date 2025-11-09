@@ -5,7 +5,7 @@
 
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { roomRepository, playerRepository, songRepository, gameSessionRepository, playlistRepository } from './repositories';
+import { roomRepository, playerRepository, songRepository, gameSessionRepository } from './repositories';
 import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './websocket/handler';
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
@@ -296,10 +296,9 @@ const app = new Elysia()
 
       // Prepare round configuration
       let songFilters: any = null;
-      let playlistId: string | null = null;
       let songCount = 0;
 
-      // Priority 1: Use songFilters (new metadata-based approach)
+      // Priority 1: Use songFilters (metadata-based approach)
       if (body.songFilters) {
         console.log(`[POST /api/game/${roomId}/start] Using metadata filters:`, body.songFilters);
         songFilters = body.songFilters;
@@ -312,37 +311,20 @@ const app = new Elysia()
         }
         songCount = testSongs.length;
       }
-      // Priority 2: Use explicit songIds (create temp playlist for backwards compatibility)
+      // Priority 2: Use explicit songIds
       else if (body.songIds && body.songIds.length > 0) {
-        console.log(`[POST /api/game/${roomId}/start] Using explicit songIds, creating temp playlist`);
-        const tempPlaylist = await playlistRepository.create({
-          name: `Game ${session.id}`,
-          description: 'Auto-generated playlist from explicit song IDs',
+        console.log(`[POST /api/game/${roomId}/start] Using explicit songIds: ${body.songIds.length} songs`);
+        // Store songIds as a filter
+        songFilters = {
           songIds: body.songIds,
-        });
-        playlistId = tempPlaylist.id;
+        };
         songCount = body.songIds.length;
       }
-      // Priority 3: Use existing playlist (legacy)
-      else if (body.playlistId) {
-        console.log(`[POST /api/game/${roomId}/start] Using existing playlist: ${body.playlistId}`);
-        const playlist = await playlistRepository.findById(body.playlistId);
-        if (!playlist) {
-          await gameSessionRepository.delete(session.id);
-          return error(404, { error: 'Playlist not found' });
-        }
-        playlistId = body.playlistId;
-        songCount = playlist.songIds.length;
-      }
-      // Priority 4: Random selection with filters
+      // Priority 3: Random selection
       else {
         console.log(`[POST /api/game/${roomId}/start] Using random selection: ${body.songCount || 10} songs`);
         songFilters = {
           songCount: body.songCount || 10,
-          // Could add genre/year filters from body if provided
-          ...(body.genre && { genre: body.genre }),
-          ...(body.yearMin && { yearMin: body.yearMin }),
-          ...(body.yearMax && { yearMax: body.yearMax }),
         };
 
         const randomSongs = await songRepository.findByFilters(songFilters);
@@ -361,9 +343,8 @@ const app = new Elysia()
         index: 0,
         modeType: body.modeType || 'buzz_and_choice',
         mediaType: body.mediaType || 'music', // Default to music for MVP
-        playlistId: playlistId || undefined,
         songFilters: songFilters ? JSON.stringify(songFilters) : null,
-        params: body.params || null,
+        params: body.params ? JSON.stringify(body.params) : null,
         status: 'pending',
         startedAt: null,
         endedAt: null,
@@ -673,96 +654,6 @@ const app = new Elysia()
     } catch (err) {
       console.error(`[DELETE /api/songs/${songId}] Error:`, err);
       return error(500, { error: 'Failed to delete song' });
-    }
-  })
-
-  // ========================================================================
-  // Playlist Endpoints
-  // ========================================================================
-
-  // Get all playlists
-  .get('/api/playlists', async () => {
-    console.log('[GET /api/playlists] Fetching all playlists');
-    const playlists = await playlistRepository.findAll();
-    return {
-      playlists,
-      total: playlists.length,
-    };
-  })
-
-  // Get playlist by ID
-  .get('/api/playlists/:playlistId', async ({ params: { playlistId }, error }) => {
-    const playlist = await playlistRepository.findById(playlistId);
-
-    if (!playlist) {
-      return error(404, { error: 'Playlist not found' });
-    }
-
-    return playlist;
-  })
-
-  // Create playlist
-  .post('/api/playlists', async ({ body, error }) => {
-    try {
-      const playlist = await playlistRepository.create({
-        name: body.name,
-        description: body.description,
-        songIds: body.songIds || [],
-      });
-
-      console.log(`[POST /api/playlists] Created playlist: ${playlist.name} with ${playlist.songCount} songs`);
-      return playlist;
-    } catch (err) {
-      console.error('[POST /api/playlists] Error:', err);
-      return error(500, { error: 'Failed to create playlist' });
-    }
-  }, {
-    body: t.Object({
-      name: t.String({ minLength: 1, maxLength: 100 }),
-      description: t.Optional(t.String()),
-      songIds: t.Optional(t.Array(t.String())),
-    }),
-  })
-
-  // Update playlist
-  .patch('/api/playlists/:playlistId', async ({ params: { playlistId }, body, error }) => {
-    const playlist = await playlistRepository.findById(playlistId);
-
-    if (!playlist) {
-      return error(404, { error: 'Playlist not found' });
-    }
-
-    try {
-      const updated = await playlistRepository.update(playlistId, body);
-      console.log(`[PATCH /api/playlists/${playlistId}] Updated playlist: ${updated.name}`);
-      return updated;
-    } catch (err) {
-      console.error(`[PATCH /api/playlists/${playlistId}] Error:`, err);
-      return error(500, { error: 'Failed to update playlist' });
-    }
-  }, {
-    body: t.Object({
-      name: t.Optional(t.String()),
-      description: t.Optional(t.String()),
-      songIds: t.Optional(t.Array(t.String())),
-    }),
-  })
-
-  // Delete playlist
-  .delete('/api/playlists/:playlistId', async ({ params: { playlistId }, error }) => {
-    const playlist = await playlistRepository.findById(playlistId);
-
-    if (!playlist) {
-      return error(404, { error: 'Playlist not found' });
-    }
-
-    try {
-      await playlistRepository.delete(playlistId);
-      console.log(`[DELETE /api/playlists/${playlistId}] Deleted playlist: ${playlist.name}`);
-      return new Response(null, { status: 204 });
-    } catch (err) {
-      console.error(`[DELETE /api/playlists/${playlistId}] Error:`, err);
-      return error(500, { error: 'Failed to delete playlist' });
     }
   })
 

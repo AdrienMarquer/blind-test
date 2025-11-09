@@ -10,7 +10,7 @@
 
 import type { GameSession, Round, RoundSong, Song, Player, MediaType, Answer } from '@blind-test/shared';
 import { generateId, SYSTEM_DEFAULTS } from '@blind-test/shared';
-import { gameSessionRepository, songRepository, playlistRepository } from '../repositories';
+import { gameSessionRepository, songRepository } from '../repositories';
 import { modeRegistry } from '../modes';
 import { mediaRegistry } from '../media';
 import { broadcastToRoom } from '../websocket/handler';
@@ -78,34 +78,26 @@ export class GameService {
 
     let songs: Song[] = [];
 
-    // Prefer metadata-based filtering (new approach)
     if (round.songFilters && Object.keys(round.songFilters).length > 0) {
-      console.log(`[GameService] Using metadata filters:`, round.songFilters);
-      songs = await songRepository.findByFilters(round.songFilters);
+      console.log(`[GameService] Using song filters:`, round.songFilters);
+
+      // Handle explicit songIds
+      if (round.songFilters.songIds && Array.isArray(round.songFilters.songIds)) {
+        console.log(`[GameService] Loading ${round.songFilters.songIds.length} explicit songs`);
+        songs = await songRepository.findByIds(round.songFilters.songIds);
+      }
+      // Handle metadata filters
+      else {
+        songs = await songRepository.findByFilters(round.songFilters);
+      }
 
       if (songs.length === 0) {
         throw new Error(`No songs found matching filters: ${JSON.stringify(round.songFilters)}`);
       }
     }
-    // Fallback to playlist (legacy support)
-    else if (round.playlistId) {
-      console.log(`[GameService] Using legacy playlist: ${round.playlistId}`);
-      const playlist = await playlistRepository.findById(round.playlistId);
-      if (!playlist) {
-        throw new Error(`Playlist not found: ${round.playlistId}`);
-      }
-
-      // Load song details
-      for (const songId of playlist.songIds) {
-        const song = await songRepository.findById(songId);
-        if (song) {
-          songs.push(song);
-        }
-      }
-    }
-    // No filters or playlist provided
+    // No filters provided
     else {
-      throw new Error(`Round ${round.index} has no songFilters or playlistId configured`);
+      throw new Error(`Round ${round.index} has no songFilters configured`);
     }
 
     console.log(`[GameService] Loaded ${songs.length} songs for round ${round.index}`);

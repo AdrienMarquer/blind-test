@@ -10,7 +10,7 @@
 
 ### Phase 2: SQLite Persistence
 - Migrate to SQLite database
-- Persistent playlists and music library
+- Persistent music library with metadata filtering
 - Optional game history
 - Easy backup and migration
 
@@ -107,9 +107,8 @@ interface Round {
   index: number;                       // Round number (0-based)
   modeType: ModeType;                  // Which mode to use
   mediaType: MediaType;                // Content type (music, picture, video)
-  playlistId?: string;                 // Optional - legacy playlist support
 
-  // Metadata-based song filtering (replaces playlists)
+  // Metadata-based song filtering
   songFilters?: {
     genre?: string | string[];         // Single or multiple genres (OR logic)
     yearMin?: number;                  // Minimum year (inclusive)
@@ -203,22 +202,6 @@ interface Song {
 ```
 
 **Playback Duration**: The actual playback duration is controlled by `ModeParams.songDuration` (inherited System → Mode → Round). Songs only define WHERE to start (`clipStart`), not HOW LONG to play. This separates content curation from gameplay rules.
-
-#### Playlist
-```typescript
-interface Playlist {
-  id: string;                          // Unique playlist ID
-  name: string;                        // Display name
-  description?: string;                // Optional description
-  songIds: string[];                   // Ordered song IDs
-
-  // Metadata
-  createdAt: Date;
-  updatedAt: Date;
-  songCount: number;                   // Cached count
-  totalDuration: number;               // Cached duration
-}
-```
 
 #### RoundSong
 ```typescript
@@ -414,38 +397,6 @@ CREATE INDEX idx_songs_artist ON songs(artist);
 CREATE INDEX idx_songs_title ON songs(title);
 CREATE INDEX idx_songs_genre ON songs(genre);
 CREATE INDEX idx_songs_year ON songs(year);
-```
-
-#### playlists
-```sql
-CREATE TABLE playlists (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT,
-
-  -- Metadata
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  song_count INTEGER NOT NULL DEFAULT 0,
-  total_duration INTEGER NOT NULL DEFAULT 0  -- Seconds
-);
-
-CREATE INDEX idx_playlists_name ON playlists(name);
-```
-
-#### playlist_songs
-```sql
-CREATE TABLE playlist_songs (
-  playlist_id TEXT NOT NULL,
-  song_id TEXT NOT NULL,
-  position INTEGER NOT NULL,  -- Order in playlist
-
-  PRIMARY KEY (playlist_id, song_id),
-  FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
-  FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_playlist_songs_playlist ON playlist_songs(playlist_id, position);
 ```
 
 #### answers

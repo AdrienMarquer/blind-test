@@ -97,7 +97,6 @@ export const rounds = sqliteTable('rounds', {
   index: integer('index').notNull(),
   modeType: text('mode_type').notNull(), // 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'
   mediaType: text('media_type').notNull(), // 'music' | 'picture' | 'video' | 'text_question'
-  playlistId: text('playlist_id'), // Optional - legacy support
 
   // Metadata-based song filtering (stored as JSON)
   songFilters: text('song_filters', { mode: 'json' }),
@@ -112,29 +111,6 @@ export const rounds = sqliteTable('rounds', {
   currentSongIndex: integer('current_song_index').notNull().default(0),
 });
 
-// ============================================================================
-// Playlists Table (Phase 2+)
-// ============================================================================
-
-export const playlists = sqliteTable('playlists', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-});
-
-// ============================================================================
-// Playlist Songs Table (Many-to-Many)
-// ============================================================================
-
-export const playlistSongs = sqliteTable('playlist_songs', {
-  id: text('id').primaryKey(),
-  playlistId: text('playlist_id').notNull().references(() => playlists.id, { onDelete: 'cascade' }),
-  songId: text('song_id').notNull().references(() => songs.id, { onDelete: 'cascade' }),
-  order: integer('order').notNull(), // Position in playlist
-});
-
 // Type exports for use in repositories
 export type Room = typeof rooms.$inferSelect;
 export type NewRoom = typeof rooms.$inferInsert;
@@ -146,7 +122,3 @@ export type GameSession = typeof gameSessions.$inferSelect;
 export type NewGameSession = typeof gameSessions.$inferInsert;
 export type Round = typeof rounds.$inferSelect;
 export type NewRound = typeof rounds.$inferInsert;
-export type Playlist = typeof playlists.$inferSelect;
-export type NewPlaylist = typeof playlists.$inferInsert;
-export type PlaylistSong = typeof playlistSongs.$inferSelect;
-export type NewPlaylistSong = typeof playlistSongs.$inferInsert;

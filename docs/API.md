@@ -232,7 +232,7 @@ POST /api/game/:roomId/start
 **Request Body**:
 ```typescript
 {
-  // Option 1: Use metadata filters (NEW - preferred)
+  // Option 1: Use metadata filters (preferred)
   songFilters?: {
     genre?: string | string[];    // Single genre or array for multiple (OR logic)
     yearMin?: number;              // Minimum year (inclusive)
@@ -244,10 +244,7 @@ POST /api/game/:roomId/start
   // Option 2: Explicit song IDs
   songIds?: string[];              // Specific songs to use
 
-  // Option 3: Legacy playlist
-  playlistId?: string;             // Existing playlist
-
-  // Option 4: Random (if none above provided)
+  // Option 3: Random (if none above provided)
   songCount?: number;              // Number of random songs (default: 10)
 
   // Game mode configuration
@@ -556,152 +553,6 @@ Content-Length: <file-size>
 
 ---
 
-## 📋 Playlists API
-
-### Create Playlist
-Create a new playlist.
-
-```http
-POST /api/playlists
-```
-
-**Request Body**:
-```typescript
-{
-  name: string;
-  description?: string;
-  songIds?: string[];  // Initial songs
-}
-```
-
-**Response** `201 Created`:
-```typescript
-{
-  id: string;
-  name: string;
-  description?: string;
-  songIds: string[];
-  songCount: number;
-  totalDuration: number;
-  createdAt: string;
-}
-```
-
----
-
-### Get All Playlists
-List all playlists.
-
-```http
-GET /api/playlists
-```
-
-**Response** `200 OK`:
-```typescript
-{
-  playlists: Playlist[];
-  total: number;
-}
-```
-
----
-
-### Get Playlist by ID
-Get playlist details with songs.
-
-```http
-GET /api/playlists/:playlistId
-```
-
-**Response** `200 OK`:
-```typescript
-{
-  id: string;
-  name: string;
-  description?: string;
-  songs: Song[];  // Full song objects, ordered
-  songCount: number;
-  totalDuration: number;
-  createdAt: string;
-  updatedAt: string;
-}
-```
-
----
-
-### Update Playlist
-Update playlist metadata or song order.
-
-```http
-PATCH /api/playlists/:playlistId
-```
-
-**Request Body**:
-```typescript
-{
-  name?: string;
-  description?: string;
-  songIds?: string[];  // Reorder or modify songs
-}
-```
-
-**Response** `200 OK`:
-```typescript
-{
-  ...updatedPlaylist
-}
-```
-
----
-
-### Add Songs to Playlist
-Add one or more songs to a playlist.
-
-```http
-POST /api/playlists/:playlistId/songs
-```
-
-**Request Body**:
-```typescript
-{
-  songIds: string[];
-  position?: number;  // Insert position (default: end)
-}
-```
-
-**Response** `200 OK`:
-```typescript
-{
-  ...updatedPlaylist
-}
-```
-
----
-
-### Remove Song from Playlist
-Remove a song from a playlist.
-
-```http
-DELETE /api/playlists/:playlistId/songs/:songId
-```
-
-**Response** `204 No Content`
-
----
-
-### Delete Playlist
-Delete a playlist.
-
-```http
-DELETE /api/playlists/:playlistId
-```
-
-**Response** `204 No Content`
-
-**Note**: Cannot delete if playlist is used in an active game.
-
----
-
 ## 📊 Statistics API
 
 ### Get Player Statistics
@@ -889,13 +740,10 @@ curl -X POST http://localhost:3007/api/rooms/abc123/players \
 curl -X POST http://localhost:3007/api/game/abc123/start \
   -H "Content-Type: application/json" \
   -d '{
-    "config": {
-      "numRounds": 2,
-      "playlistId": "playlist1",
-      "defaultParams": {
-        "songDuration": 15,
-        "answerTimer": 5
-      }
+    "songCount": 10,
+    "params": {
+      "songDuration": 15,
+      "answerTimer": 5
     }
   }'
 # Response: { sessionId: "session1", status: "playing", ... }
