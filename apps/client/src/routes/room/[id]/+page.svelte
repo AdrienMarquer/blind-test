@@ -13,9 +13,10 @@
 	let error = $state<string | null>(null);
 	let joining = $state(false);
 	let starting = $state(false);
+	let initialRoom = $state<Room | null>(null);
 
-	// Reactive access to socket state
-	const room = $derived(roomSocket?.room || null);
+	// Reactive access to socket state (prefer WebSocket data, fallback to HTTP)
+	const room = $derived(roomSocket?.room || initialRoom);
 	const players = $derived(roomSocket?.players || []);
 	const connected = $derived(roomSocket?.connected || false);
 	const socketError = $derived(roomSocket?.error || null);
@@ -32,8 +33,9 @@
 			const response = await api.api.rooms[roomId].get();
 
 			if (response.data) {
+				initialRoom = response.data;
 				console.log('Loaded room:', response.data);
-				// Room data will be synced via WebSocket
+				// WebSocket will update this with real-time changes
 			} else if (response.error) {
 				error = 'Room not found';
 			}
