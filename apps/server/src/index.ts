@@ -10,7 +10,7 @@ import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
 import { generateId } from '@blind-test/shared';
-import { schema } from './db';
+import { db, schema } from './db';
 import { runMigrations } from './db';
 import { extractMetadata, isSupportedAudioFormat, getFileFormat } from './utils/mp3-metadata';
 import { writeFile, unlink, stat } from 'fs/promises';
