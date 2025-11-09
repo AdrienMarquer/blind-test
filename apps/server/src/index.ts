@@ -16,14 +16,7 @@ import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 
-// Ensure database directory exists
-const dbDir = path.join(process.cwd(), 'db');
-if (!existsSync(dbDir)) {
-  await mkdir(dbDir, { recursive: true });
-  console.log('📁 Created database directory');
-}
-
-// Run database migrations
+// Run database migrations (db directory created in db/index.ts)
 try {
   runMigrations();
   console.log('✅ Database ready');

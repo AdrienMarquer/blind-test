@@ -7,9 +7,17 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as schema from './schema';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import path from 'path';
+import { mkdirSync, existsSync } from 'fs';
+
+// Ensure database directory exists
+const dbDir = path.join(process.cwd(), 'db');
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true });
+  console.log('📁 Created database directory');
+}
 
 // Database file path
-const dbPath = path.join(process.cwd(), 'db', 'blind-test.db');
+const dbPath = path.join(dbDir, 'blind-test.db');
 
 // Initialize SQLite database
 const sqlite = new Database(dbPath, { create: true });
