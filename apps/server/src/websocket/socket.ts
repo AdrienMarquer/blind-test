@@ -4,17 +4,16 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
-import type { Server } from 'http';
 import { roomRepository, playerRepository } from '../repositories';
 import type { Player, Room } from '@blind-test/shared';
 
-export function setupWebSocket(httpServer: Server) {
+export function setupWebSocket(httpServer: any) {
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: '*', // For development - restrict in production
       methods: ['GET', 'POST'],
     },
-    transports: ['websocket'], // WebSocket-only (no polling)
+    transports: ['websocket', 'polling'], // Allow both transports for Bun compatibility
   });
 
   console.log('✓ WebSocket server initialized');

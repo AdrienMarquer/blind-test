@@ -1,19 +1,23 @@
 /**
  * WebSocket Connection Manager (Svelte 5 Runes)
- * Manages Socket.io connections to room namespaces
+ * Manages native WebSocket connections to room endpoints
  */
 
-import { io, type Socket } from 'socket.io-client';
 import type { Room, Player } from '@blind-test/shared';
 
-const SERVER_URL = 'http://localhost:3007';
+const SERVER_URL = 'ws://localhost:3007';
+
+interface WebSocketMessage {
+  type: string;
+  data?: any;
+}
 
 /**
  * Room Socket Manager
  * Manages connection to a specific room namespace
  */
 export class RoomSocket {
-  socket: Socket | null = $state(null);
+  socket: WebSocket | null = $state(null);
   connected = $state(false);
   room = $state<Room | null>(null);
   players = $state<Player[]>([]);
@@ -29,18 +33,13 @@ export class RoomSocket {
   ) {}
 
   /**
-   * Connect to the room namespace
+   * Connect to the room WebSocket
    */
   connect() {
-    if (this.socket?.connected) return;
+    if (this.socket?.readyState === WebSocket.OPEN) return;
 
-    this.socket = io(`${SERVER_URL}/rooms/${this.roomId}`, {
-      auth: this.auth,
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    const wsUrl = `${SERVER_URL}/ws/rooms/${this.roomId}`;
+    this.socket = new WebSocket(wsUrl);
 
     this.setupListeners();
   }
@@ -52,112 +51,155 @@ export class RoomSocket {
     if (!this.socket) return;
 
     // Connection events
-    this.socket.on('connect', () => {
+    this.socket.onopen = () => {
       this.connected = true;
       this.error = null;
       console.log(`Connected to room ${this.roomId}`);
 
       // Request initial state sync
       this.requestStateSync();
-    });
+    };
 
-    this.socket.on('disconnect', (reason) => {
+    this.socket.onclose = (event) => {
       this.connected = false;
-      console.log(`Disconnected from room ${this.roomId}:`, reason);
-    });
+      console.log(`Disconnected from room ${this.roomId}:`, event.reason);
+    };
 
-    this.socket.on('connection_error', (error) => {
-      this.error = error.message;
-      console.error('Connection error:', error);
-    });
+    this.socket.onerror = (error) => {
+      this.error = 'Connection error';
+      console.error('WebSocket error:', error);
+    };
 
-    // State sync
-    this.socket.on('state:synced', (data: { room: Room; players: Player[] }) => {
-      this.room = data.room;
-      this.players = data.players;
-      console.log('State synced:', data);
-    });
-
-    // Player events
-    this.socket.on('player:joined', (data: { player: Player; room: Room }) => {
-      this.room = data.room;
-
-      // Add player if not already in list
-      if (!this.players.find((p) => p.id === data.player.id)) {
-        this.players = [...this.players, data.player];
+    this.socket.onmessage = (event) => {
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        this.handleMessage(message);
+      } catch (error) {
+        console.error('Error parsing message:', error);
       }
+    };
+  }
 
-      console.log(`Player joined: ${data.player.name}`);
-    });
+  /**
+   * Handle incoming WebSocket messages
+   */
+  private handleMessage(message: WebSocketMessage) {
+    console.log('Received message:', message.type, message.data);
 
-    this.socket.on('player:left', (data: { playerId: string; playerName: string; remainingPlayers: number }) => {
-      this.players = this.players.filter((p) => p.id !== data.playerId);
-      console.log(`Player left: ${data.playerName}`);
-    });
+    switch (message.type) {
+      case 'connected':
+        // Initial connection confirmed
+        break;
 
-    this.socket.on('player:kicked', (data: { reason: string }) => {
-      this.error = `You were kicked: ${data.reason}`;
-      this.disconnect();
-    });
+      case 'state:synced':
+        this.room = message.data.room;
+        this.players = message.data.players || [];
+        console.log('State synced:', message.data);
+        break;
 
-    this.socket.on('player:disconnected', (data: { playerId: string; playerName: string }) => {
-      // Mark player as disconnected
-      this.players = this.players.map((p) =>
-        p.id === data.playerId ? { ...p, connected: false } : p
-      );
-      console.log(`Player disconnected: ${data.playerName}`);
-    });
+      case 'player:joined':
+        this.room = message.data.room;
+        // Add player if not already in list
+        if (message.data.player && !this.players.find((p) => p.id === message.data.player.id)) {
+          this.players = [...this.players, message.data.player];
+        }
+        console.log(`Player joined: ${message.data.player?.name}`);
+        break;
 
-    this.socket.on('player:reconnected', (data: { playerId: string; playerName: string }) => {
-      // Mark player as reconnected
-      this.players = this.players.map((p) =>
-        p.id === data.playerId ? { ...p, connected: true } : p
-      );
-      console.log(`Player reconnected: ${data.playerName}`);
-    });
+      case 'player:left':
+        this.players = this.players.filter((p) => p.id !== message.data.playerId);
+        console.log(`Player left: ${message.data.playerName}`);
+        break;
 
-    // Error events
-    this.socket.on('error', (data: { code: string; message: string }) => {
-      this.error = data.message;
-      console.error(`Server error [${data.code}]:`, data.message);
-    });
+      case 'player:kicked':
+        this.error = `You were kicked: ${message.data.reason}`;
+        this.disconnect();
+        break;
+
+      case 'player:disconnected':
+        // Mark player as disconnected
+        this.players = this.players.map((p) =>
+          p.id === message.data.playerId ? { ...p, connected: false } : p
+        );
+        console.log(`Player disconnected: ${message.data.playerName}`);
+        break;
+
+      case 'player:reconnected':
+        // Mark player as reconnected
+        this.players = this.players.map((p) =>
+          p.id === message.data.playerId ? { ...p, connected: true } : p
+        );
+        console.log(`Player reconnected: ${message.data.playerName}`);
+        break;
+
+      case 'error':
+        this.error = message.data.message;
+        console.error(`Server error [${message.data.code}]:`, message.data.message);
+        break;
+
+      default:
+        console.log('Unknown message type:', message.type);
+    }
+  }
+
+  /**
+   * Send a message to the server
+   */
+  private send(message: WebSocketMessage) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(message));
+    } else {
+      console.error('WebSocket is not open');
+    }
   }
 
   /**
    * Join the room as a player
    */
   joinRoom(playerName: string) {
-    this.socket?.emit('player:join', { name: playerName });
+    this.send({
+      type: 'player:join',
+      data: { name: playerName }
+    });
   }
 
   /**
    * Leave the room
    */
   leaveRoom() {
-    this.socket?.emit('player:leave');
+    this.send({
+      type: 'player:leave'
+    });
   }
 
   /**
    * Kick a player (master only)
    */
   kickPlayer(playerId: string) {
-    this.socket?.emit('player:kick', { playerId });
+    this.send({
+      type: 'player:kick',
+      data: { playerId }
+    });
   }
 
   /**
    * Request state synchronization
    */
   requestStateSync() {
-    this.socket?.emit('state:sync');
+    this.send({
+      type: 'state:sync'
+    });
   }
 
   /**
    * Disconnect from the room
    */
   disconnect() {
-    this.socket?.disconnect();
-    this.socket = null;
-    this.connected = false;
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+      this.connected = false;
+    }
   }
 
   /**

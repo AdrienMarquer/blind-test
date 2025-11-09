@@ -21,9 +21,15 @@
 	const socketError = $derived(roomSocket?.error || null);
 
 	async function loadRoom() {
+		if (!roomId) {
+			error = 'Invalid room ID';
+			loading = false;
+			return;
+		}
+
 		try {
 			error = null;
-			const response = await api.api.rooms({ id: roomId }).get();
+			const response = await api.api.rooms[roomId].get();
 
 			if (response.data) {
 				console.log('Loaded room:', response.data);
@@ -40,13 +46,13 @@
 	}
 
 	async function joinRoom() {
-		if (!playerName.trim() || !room) return;
+		if (!playerName.trim() || !room || !roomId) return;
 
 		try {
 			joining = true;
 			error = null;
 
-			const response = await api.api.rooms({ id: roomId }).players.post({
+			const response = await api.api.rooms[roomId].players.post({
 				name: playerName.trim()
 			});
 
@@ -71,7 +77,7 @@
 		try {
 			error = null;
 
-			const response = await api.api.rooms({ roomId: room.id }).players({ playerId }).delete();
+			const response = await api.api.rooms[room.id].players[playerId].delete();
 
 			if (response.data) {
 				console.log('Removed player:', response.data);
@@ -92,7 +98,7 @@
 			starting = true;
 			error = null;
 
-			const response = await api.api.game({ roomId: room.id }).start.post();
+			const response = await api.api.game[room.id].start.post();
 
 			if (response.data) {
 				console.log('Game started:', response.data);
@@ -142,8 +148,10 @@
 		loadRoom();
 
 		// Create WebSocket connection
-		roomSocket = createRoomSocket(roomId, { role: 'master' });
-		roomSocket.connect();
+		if (roomId) {
+			roomSocket = createRoomSocket(roomId, { role: 'master' });
+			roomSocket.connect();
+		}
 	});
 
 	onDestroy(() => {

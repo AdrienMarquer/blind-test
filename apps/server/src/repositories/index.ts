@@ -2,6 +2,10 @@
  * Repository exports
  */
 
+import { RoomRepository } from './RoomRepository';
+import { PlayerRepository } from './PlayerRepository';
+
+// Re-export classes
 export { RoomRepository } from './RoomRepository';
 export { PlayerRepository } from './PlayerRepository';
 

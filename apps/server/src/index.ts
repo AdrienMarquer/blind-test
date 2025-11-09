@@ -1,12 +1,12 @@
 /**
  * Blind Test - Main Server
- * Elysia REST API + Socket.io WebSockets
+ * Elysia REST API + WebSockets
  */
 
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { roomRepository, playerRepository } from './repositories';
-import { setupWebSocket } from './websocket/socket';
+import { handleWebSocket, handleMessage, handleClose } from './websocket/handler';
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
 
@@ -79,25 +79,25 @@ const app = new Elysia()
   })
 
   // Get room by ID
-  .get('/api/rooms/:id', async ({ params: { id }, error }) => {
-    const room = await roomRepository.findById(id);
+  .get('/api/rooms/:roomId', async ({ params: { roomId }, error }) => {
+    const room = await roomRepository.findById(roomId);
 
     if (!room) {
-      console.log(`[GET /api/rooms/${id}] Room not found`);
+      console.log(`[GET /api/rooms/${roomId}] Room not found`);
       return error(404, { error: 'Room not found' });
     }
 
     // Populate players
-    const players = await playerRepository.findByRoom(id);
+    const players = await playerRepository.findByRoom(roomId);
     room.players = players;
 
-    console.log(`[GET /api/rooms/${id}] Fetching room: ${room.name}`);
+    console.log(`[GET /api/rooms/${roomId}] Fetching room: ${room.name}`);
     return room;
   })
 
   // Update room
-  .patch('/api/rooms/:id', async ({ params: { id }, body, error }) => {
-    const room = await roomRepository.findById(id);
+  .patch('/api/rooms/:roomId', async ({ params: { roomId }, body, error }) => {
+    const room = await roomRepository.findById(roomId);
 
     if (!room) {
       return error(404, { error: 'Room not found' });
@@ -112,11 +112,11 @@ const app = new Elysia()
     }
 
     try {
-      const updated = await roomRepository.update(id, body);
-      console.log(`[PATCH /api/rooms/${id}] Updated room: ${updated.name}`);
+      const updated = await roomRepository.update(roomId, body);
+      console.log(`[PATCH /api/rooms/${roomId}] Updated room: ${updated.name}`);
       return updated;
     } catch (err) {
-      console.error(`[PATCH /api/rooms/${id}] Error:`, err);
+      console.error(`[PATCH /api/rooms/${roomId}] Error:`, err);
       return error(500, { error: 'Failed to update room' });
     }
   }, {
@@ -127,8 +127,8 @@ const app = new Elysia()
   })
 
   // Delete room
-  .delete('/api/rooms/:id', async ({ params: { id }, error }) => {
-    const room = await roomRepository.findById(id);
+  .delete('/api/rooms/:roomId', async ({ params: { roomId }, error }) => {
+    const room = await roomRepository.findById(roomId);
 
     if (!room) {
       return error(404, { error: 'Room not found' });
@@ -136,14 +136,14 @@ const app = new Elysia()
 
     try {
       // Delete all players first
-      await playerRepository.deleteByRoom(id);
+      await playerRepository.deleteByRoom(roomId);
       // Delete room
-      await roomRepository.delete(id);
+      await roomRepository.delete(roomId);
 
-      console.log(`[DELETE /api/rooms/${id}] Deleted room: ${room.name}`);
+      console.log(`[DELETE /api/rooms/${roomId}] Deleted room: ${room.name}`);
       return new Response(null, { status: 204 });
     } catch (err) {
-      console.error(`[DELETE /api/rooms/${id}] Error:`, err);
+      console.error(`[DELETE /api/rooms/${roomId}] Error:`, err);
       return error(500, { error: 'Failed to delete room' });
     }
   })
@@ -266,13 +266,23 @@ const app = new Elysia()
     }
   })
 
-  .listen(3007);
+  // WebSocket endpoint for room connections
+  .ws('/ws/rooms/:roomId', {
+    open(ws, ctx) {
+      // Extract roomId from route params
+      const roomId = ctx?.params?.roomId;
+      ws.data = { roomId };
+      handleWebSocket(ws);
+    },
+    message(ws, message) {
+      handleMessage(ws, typeof message === 'string' ? message : JSON.stringify(message));
+    },
+    close(ws) {
+      handleClose(ws);
+    }
+  })
 
-// Setup WebSocket server
-const httpServer = app.server;
-if (httpServer) {
-  setupWebSocket(httpServer);
-}
+  .listen(3007);
 
 console.log(
   `🎵 Blind Test Server is running at http://${app.server?.hostname}:${app.server?.port}`
