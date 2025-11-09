@@ -268,10 +268,21 @@ const app = new Elysia()
 
   // WebSocket endpoint for room connections
   .ws('/ws/rooms/:roomId', {
-    open(ws, ctx) {
-      // Extract roomId from route params
-      const roomId = ctx?.params?.roomId;
-      ws.data = { roomId };
+    params: t.Object({
+      roomId: t.String()
+    }),
+    open(ws) {
+      // Extract roomId from ws.data which now contains validated params
+      const roomId = ws.data?.params?.roomId;
+
+      if (!roomId) {
+        console.error('No roomId found in WebSocket connection');
+        ws.close();
+        return;
+      }
+
+      // Store roomId in ws.data for easy access
+      ws.data = { roomId, params: ws.data.params };
       handleWebSocket(ws);
     },
     message(ws, message) {

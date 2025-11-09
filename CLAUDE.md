@@ -9,7 +9,7 @@ This is a **local blind test system** where players compete to guess songs in re
 ## Tech Stack
 
 - **Runtime**: Bun (JavaScript/TypeScript runtime and package manager)
-- **Backend**: Elysia (high-performance web framework) + Socket.io (WebSockets)
+- **Backend**: Elysia (high-performance web framework) + Native WebSockets
 - **Frontend**: SvelteKit + Svelte 5 (modern reactive framework)
 - **Type Safety**: Eden Treaty (end-to-end type safety between frontend and backend)
 - **Architecture**: Monorepo with workspaces
@@ -81,7 +81,7 @@ blind-test/
 
 3. **Repository Pattern**: The server uses repository classes (RoomRepository, PlayerRepository) for data access. Currently in-memory implementation using Maps. Future phases will migrate to SQLite then PostgreSQL.
 
-4. **WebSocket Architecture**: Real-time communication uses Socket.io with room-specific namespaces (`/rooms/:roomId`). WebSocket events handle player joins, game state updates, buzz actions, and answers.
+4. **WebSocket Architecture**: Real-time communication uses native browser WebSockets with room-specific endpoints (`/ws/rooms/:roomId`). The server uses Elysia's built-in WebSocket support. Messages are JSON-formatted with a `type` field for event routing.
 
 ## Data Layer Details
 
@@ -201,9 +201,10 @@ Validation utilities live in `packages/shared/src/utils.ts`:
 
 1. **Port Conflicts**: Server runs on 3007, client on 5173. If startup fails, check if ports are in use.
 2. **Type Imports**: Always import shared types from `@blind-test/shared`, not from relative paths.
-3. **WebSocket Rooms**: Don't confuse Socket.io "rooms" (connection groups) with game "rooms" (Room entity).
+3. **WebSocket Routes**: WebSocket endpoints use `/ws/` prefix (e.g., `/ws/rooms/:roomId`) to distinguish from REST API routes (`/api/`).
 4. **Repository Methods**: All repository methods are async even though in-memory. This prepares for database migration.
 5. **Year Field**: Song `year` is mandatory (not optional) - required for music identification.
+6. **WebSocket Params**: Always define params schema in WebSocket routes using `params: t.Object({...})` for route parameters to be accessible.
 
 ## File Watching & Hot Reload
 
