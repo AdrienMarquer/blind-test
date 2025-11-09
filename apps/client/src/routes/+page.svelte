@@ -56,6 +56,23 @@
 		}
 	}
 
+	async function deleteRoom(roomId: string, roomName: string, e: Event) {
+		e.preventDefault(); // Prevent navigation
+		e.stopPropagation();
+
+		if (!confirm(`Delete room "${roomName}"?`)) return;
+
+		try {
+			error = null;
+			await api.api.rooms[roomId].delete();
+			console.log('Room deleted successfully');
+			await loadRooms();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to delete room';
+			console.error('Error deleting room:', err);
+		}
+	}
+
 	function getStatusColor(status: Room['status']): string {
 		switch (status) {
 			case 'lobby':
@@ -124,20 +141,29 @@
 		{:else}
 			<div class="rooms">
 				{#each rooms as room (room.id)}
-					<a href="/room/{room.id}" class="room-card">
-						<div class="room-header">
-							<h3>{room.name}</h3>
-							<span class="status" style="background-color: {getStatusColor(room.status)}">
-								{getStatusLabel(room.status)}
-							</span>
-						</div>
-						<div class="room-info">
-							<div class="info-row">
-								<span>🔑 Code: <strong>{room.code}</strong></span>
-								<span>👥 {room.players.length}/{room.maxPlayers} players</span>
+					<div class="room-card-wrapper">
+						<a href="/room/{room.id}" class="room-card">
+							<div class="room-header">
+								<h3>{room.name}</h3>
+								<span class="status" style="background-color: {getStatusColor(room.status)}">
+									{getStatusLabel(room.status)}
+								</span>
 							</div>
-						</div>
-					</a>
+							<div class="room-info">
+								<div class="info-row">
+									<span>🔑 Code: <strong>{room.code}</strong></span>
+									<span>👥 {room.players.length}/{room.maxPlayers} players</span>
+								</div>
+							</div>
+						</a>
+						<button
+							class="delete-button"
+							onclick={(e) => deleteRoom(room.id, room.name, e)}
+							title="Delete room"
+						>
+							🗑️
+						</button>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -235,9 +261,14 @@
 		gap: 1rem;
 	}
 
+	.room-card-wrapper {
+		position: relative;
+	}
+
 	.room-card {
 		display: block;
 		padding: 1.5rem;
+		padding-right: 4rem;
 		background-color: white;
 		border: 2px solid #e5e7eb;
 		border-radius: 0.5rem;
@@ -250,6 +281,25 @@
 		border-color: #3b82f6;
 		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 		transform: translateY(-2px);
+	}
+
+	.delete-button {
+		position: absolute;
+		top: 50%;
+		right: 1rem;
+		transform: translateY(-50%);
+		padding: 0.5rem;
+		background-color: #ef4444;
+		border: none;
+		border-radius: 0.375rem;
+		font-size: 1.25rem;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		line-height: 1;
+	}
+
+	.delete-button:hover {
+		background-color: #dc2626;
 	}
 
 	.room-header {

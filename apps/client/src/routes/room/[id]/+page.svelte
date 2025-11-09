@@ -78,15 +78,9 @@
 
 		try {
 			error = null;
-
-			const response = await api.api.rooms[room.id].players[playerId].delete();
-
-			if (response.data) {
-				console.log('Removed player:', response.data);
-				// Player removal will be broadcast via WebSocket
-			} else {
-				error = 'Failed to remove player';
-			}
+			await api.api.rooms[room.id].players[playerId].delete();
+			console.log('Player removed successfully');
+			// Player removal will be broadcast via WebSocket
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to remove player';
 			console.error('Error removing player:', err);
