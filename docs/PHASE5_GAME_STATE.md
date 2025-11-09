@@ -219,9 +219,16 @@ The Blind Test game follows a hierarchical state machine with three levels:
 - Update overall scores
 - Generate scoreboard
 - Broadcast `round:ended`
+- Start auto-advance timer (10s default, configurable)
+
+**Auto-Advance**:
+- Automatically transition to next round after 10 seconds
+- Timer displayed on all clients
+- Master can manually advance immediately
 
 **Transitions**:
-- `next_round()` → `WAITING` (if more rounds)
+- `auto_advance()` → `WAITING` (if more rounds, after 10s)
+- `manual_advance()` → `WAITING` (if master clicks Continue)
 - `game_complete()` → `FINISHED` (if last round)
 
 ---
@@ -356,30 +363,27 @@ if (choice === correctTitle) {
 **Validation Logic**:
 ```typescript
 if (choice === correctArtist) {
+  // Correct artist - award bonus point
   awardPoints(player, params.pointsArtist);
   transition_to('SONG_COMPLETE');
-  broadcast('song:ended', { reason: 'correct_answer' });
+  broadcast('song:ended', { reason: 'perfect_answer' });
 } else {
-  if (params.penaltyEnabled) {
-    deductPoints(player, params.penaltyAmount);
-  }
-  lockoutPlayer(player);
-  // Player keeps points from correct title
-
-  if (params.allowRebuzz && remainingPlayers > 0) {
-    transition_to('WAITING_TO_BUZZ');
-    broadcast('buzz:unlocked');
-  } else {
-    transition_to('SONG_COMPLETE');
-  }
+  // Wrong artist BUT title was correct
+  // Artist is bonus only - player WINS with title points
+  // Song ends immediately (no rebuzz)
+  transition_to('SONG_COMPLETE');
+  broadcast('song:ended', {
+    reason: 'title_correct_artist_wrong',
+    winnerId: player.id,
+    pointsAwarded: params.pointsTitle  // Keeps +1 from title
+  });
 }
 ```
 
 **Transitions**:
-- `artist_correct()` → `SONG_COMPLETE`
-- `artist_wrong() + rebuzz_allowed` → `WAITING_TO_BUZZ`
-- `artist_wrong() + no_rebuzz` → `SONG_COMPLETE`
-- `answer_timeout()` → Same logic as wrong answer
+- `artist_correct()` → `SONG_COMPLETE` (player gets +2 total)
+- `artist_wrong()` → `SONG_COMPLETE` (player wins with +1 from title, no rebuzz)
+- `answer_timeout()` → Same as wrong answer (song ends, player wins with +1)
 
 ---
 
@@ -523,7 +527,9 @@ class TimerManager {
 
 ## 🎯 Multiple Choice Generation
 
-### Algorithm
+### Simplified Algorithm (MVP)
+
+**Note**: For MVP, use random songs. Genre/era matching can be added in future phases.
 
 ```typescript
 async function generateChoices(
@@ -533,22 +539,27 @@ async function generateChoices(
 ): Promise<string[]> {
   const wrongChoices: string[] = [];
 
-  // Get all songs from same genre/era
-  const candidateSongs = await getSimilarSongs(currentSong);
+  // Get random songs from library (excluding current song)
+  const randomSongs = await getRandomSongs(
+    numChoices - 1,
+    { exclude: currentSong.id }
+  );
 
   // Extract values of specified type
-  const candidates = candidateSongs
+  wrongChoices = randomSongs
     .map(s => type === 'title' ? s.title : s.artist)
     .filter(v => v !== correctValue)  // Exclude correct answer
     .filter(distinct);  // Remove duplicates
 
-  // Randomly select wrong answers
-  wrongChoices = shuffle(candidates).slice(0, numChoices - 1);
-
-  // If not enough candidates, use random songs
-  if (wrongChoices.length < numChoices - 1) {
-    const additional = await getRandomSongs(numChoices - 1 - wrongChoices.length);
-    wrongChoices.push(...additional.map(s => type === 'title' ? s.title : s.artist));
+  // Ensure we have exactly numChoices - 1 wrong answers
+  while (wrongChoices.length < numChoices - 1) {
+    const additional = await getRandomSongs(1, {
+      exclude: [...wrongChoices, correctValue]
+    });
+    const value = type === 'title' ? additional[0].title : additional[0].artist;
+    if (value !== correctValue && !wrongChoices.includes(value)) {
+      wrongChoices.push(value);
+    }
   }
 
   // Combine and shuffle
@@ -565,12 +576,10 @@ function ensureDistinctChoices(choices: string[]): boolean {
   return new Set(choices).size === choices.length;
 }
 
-// Similarity check (for better wrong answers)
-function areChoicesSimilar(correct: string, wrong: string): boolean {
-  // Same decade, genre, or artist style
-  return compareGenre(correct, wrong)
-    || compareEra(correct, wrong)
-    || comparePopularity(correct, wrong);
+// Store choices for future reference
+function storeChoices(songId: string, titleChoices: string[], artistChoices: string[]): void {
+  // Save to database for analytics and replay
+  // Future feature: analyze choice difficulty
 }
 ```
 

@@ -14,6 +14,12 @@
 - Optional game history
 - Easy backup and migration
 
+### Phase 3: PostgreSQL Migration (Future)
+- Scale to PostgreSQL for production
+- Schema designed to be PostgreSQL-compatible from the start
+- Use standard SQL (no SQLite-specific features)
+- Smooth migration path
+
 ## 🗂 TypeScript Data Models
 
 ### Core Entities
@@ -23,7 +29,7 @@
 interface Room {
   id: string;                          // Unique room identifier
   name: string;                        // Display name
-  code: string;                        // 6-character join code
+  code: string;                        // 4-character join code (uppercase alphanumeric)
   qrCode: string;                      // Data URL for QR code
   masterIp: string;                    // Master device IP
   status: RoomStatus;                  // Current room state
@@ -34,7 +40,6 @@ interface Room {
   // Relations
   players: Player[];                   // Connected players
   session?: GameSession;               // Active game session
-  config: GameConfig;                  // Game configuration
 }
 
 type RoomStatus = 'lobby' | 'playing' | 'between_rounds' | 'finished';
@@ -79,9 +84,6 @@ interface GameSession {
   startedAt: Date;                     // Start time
   endedAt?: Date;                      // End time
 
-  // Configuration
-  config: GameConfig;                  // Game settings
-
   // State
   currentRoundIndex: number;           // Index in rounds array
   currentSongIndex: number;            // Index in current playlist
@@ -95,16 +97,6 @@ interface GameSession {
 }
 
 type GameStatus = 'waiting' | 'playing' | 'paused' | 'finished';
-
-interface GameConfig {
-  numRounds: number;                   // Total rounds
-  playlistId: string;                  // Selected playlist
-  shuffleSongs: boolean;               // Randomize song order
-  allowRejoin: boolean;                // Rejoin if disconnected
-
-  // Default parameters (can be overridden per round)
-  defaultParams: ModeParams;
-}
 ```
 
 #### Round
@@ -161,7 +153,7 @@ interface ModeParams {
   pointsArtist?: number;               // Points for artist (default: 1)
   penaltyEnabled?: boolean;            // Enable penalties (default: false)
   penaltyAmount?: number;              // Penalty points (default: 0)
-  allowRebuzz?: boolean;               // Rebuzz after wrong (default: true)
+  allowRebuzz?: boolean;               // Rebuzz after wrong (default: false)
 
   // Fast Buzz specific
   manualValidation?: boolean;          // Master validates (default: true)
@@ -232,8 +224,9 @@ interface RoundSong {
   answers: Answer[];                   // All submitted answers
 
   // Generated choices (for multiple choice modes)
-  titleChoices?: string[];             // 4 title options
-  artistChoices?: string[];            // 4 artist options
+  // Stored for future reference and analytics
+  titleChoices?: string[];             // 4 title options (1 correct, 3 random)
+  artistChoices?: string[];            // 4 artist options (1 correct, 3 random)
 }
 
 type SongStatus = 'pending' | 'playing' | 'answering' | 'finished';
@@ -340,9 +333,6 @@ CREATE TABLE game_sessions (
   room_id TEXT NOT NULL UNIQUE,
   started_at INTEGER NOT NULL,
   ended_at INTEGER,
-
-  -- Configuration (JSON)
-  config TEXT NOT NULL,  -- Stored as JSON
 
   -- State
   current_round_index INTEGER NOT NULL DEFAULT 0,
@@ -488,12 +478,13 @@ CREATE INDEX idx_round_scores_round ON round_scores(round_id);
 
 ## 🔄 Parameter Inheritance Implementation
 
-### Resolution Order
+### Simplified Resolution Order
+**Note**: Game-level configuration has been removed for simplicity. Each mode is self-contained.
+
 ```typescript
 function resolveParam<T>(
   paramName: keyof ModeParams,
   round: Round,
-  game: GameSession,
   mode: Mode
 ): T {
   // 1. Round-level override (highest priority)
@@ -501,19 +492,23 @@ function resolveParam<T>(
     return round.params[paramName] as T;
   }
 
-  // 2. Game-level default
-  if (game.config.defaultParams[paramName] !== undefined) {
-    return game.config.defaultParams[paramName] as T;
-  }
-
-  // 3. Mode-level default
+  // 2. Mode-level default
   if (mode.defaultParams[paramName] !== undefined) {
     return mode.defaultParams[paramName] as T;
   }
 
-  // 4. System-level fallback
+  // 3. System-level fallback
   return SYSTEM_DEFAULTS[paramName] as T;
 }
+```
+
+**Example**:
+```
+System default: songDuration = 30s
+Mode default (Buzz + Choice): songDuration = 15s
+Round 3 override: songDuration = 10s
+
+→ Round 3 uses 10s, other rounds use 15s (mode default)
 ```
 
 ### System Defaults
@@ -526,7 +521,7 @@ const SYSTEM_DEFAULTS: ModeParams = {
   pointsArtist: 1,
   penaltyEnabled: false,
   penaltyAmount: 0,
-  allowRebuzz: true,
+  allowRebuzz: false,  // Changed from true - disabled by default
   manualValidation: false,
   fuzzyMatch: true,
   levenshteinDistance: 2,

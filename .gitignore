@@ -39,3 +39,10 @@ coverage/
 # Temporary files
 *.tmp
 .temp/
+
+# Music files (uploaded MP3s)
+apps/server/uploads/
+*.mp3
+*.m4a
+*.wav
+*.flac

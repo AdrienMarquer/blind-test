@@ -32,7 +32,7 @@ POST /api/rooms
 {
   id: string;
   name: string;
-  code: string;         // 6-char join code
+  code: string;         // 4-char join code (uppercase alphanumeric)
   qrCode: string;       // Data URL for QR code image
   masterIp: string;     // Master device IP
   status: "lobby";
@@ -348,9 +348,11 @@ GET /api/game/:roomId
 
 ## 🎵 Music Library API
 
-### Upload Music Files
-Upload MP3 files to the music library.
+### Upload Music Files ⚠️ **Future Feature**
 
+> **MVP Note**: File upload UI is not implemented in Phase 1. Place MP3 files directly in `apps/server/uploads/` directory. The server will scan and load them on startup.
+
+**Planned Endpoint** (Future):
 ```http
 POST /api/music/upload
 Content-Type: multipart/form-data

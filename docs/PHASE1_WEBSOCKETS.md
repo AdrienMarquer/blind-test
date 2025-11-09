@@ -2,12 +2,16 @@
 
 ## 🔌 WebSocket Overview
 
+**Architecture**: **WebSocket-Only** (no HTTP polling fallback)
+
 **Protocol**: Socket.io v4.x
 
 **Connection URL**: `ws://localhost:3007`
 
 **Namespaces**: Room-specific namespaces for isolation
 - `/rooms/:roomId` - All events for a specific room
+
+**Note**: All real-time communication uses WebSockets exclusively. HTTP endpoints are only for initial data fetching and mutations.
 
 ## 🔗 Connection Lifecycle
 
