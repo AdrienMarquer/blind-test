@@ -691,10 +691,12 @@ Track unresolved product questions here:
 
 ## 🔗 Related Documentation
 
-- Technical Architecture: `/docs/ARCHITECTURE.md`
-- API Specification: `/docs/API.md`
-- WebSocket Events: `/docs/WEBSOCKETS.md`
-- Database Schema: `/docs/DATABASE.md`
+- Technical Architecture: `/docs/00_ARCHITECTURE.md`
+- Phase 1 - Database Schema: `/docs/PHASE1_DATABASE.md`
+- Phase 1 - API Specification: `/docs/PHASE1_API.md`
+- Phase 1 - WebSocket Events: `/docs/PHASE1_WEBSOCKETS.md`
+- Phase 5 - Game State Machine: `/docs/PHASE5_GAME_STATE.md`
+- Phase 6 - UI Components: `/docs/PHASE6_UI_SPEC.md`
 
 ---
 
