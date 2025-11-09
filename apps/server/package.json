@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "elysia": "^1.0.0",
-    "@elysiajs/cors": "^1.0.0"
+    "@elysiajs/cors": "^1.0.0",
+    "socket.io": "^4.7.0",
+    "@blind-test/shared": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "latest"

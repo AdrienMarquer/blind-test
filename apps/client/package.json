@@ -19,7 +19,9 @@
     "vite": "^5.0.0"
   },
   "dependencies": {
-    "@elysiajs/eden": "^1.0.0"
+    "@elysiajs/eden": "^1.0.0",
+    "socket.io-client": "^4.7.0",
+    "@blind-test/shared": "workspace:*"
   },
   "type": "module"
 }

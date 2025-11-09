@@ -1,198 +1,283 @@
-import { Elysia, t } from "elysia";
-import { cors } from "@elysiajs/cors";
+/**
+ * Blind Test - Main Server
+ * Elysia REST API + Socket.io WebSockets
+ */
 
-// Data models
-interface Player {
-  id: string;
-  name: string;
-  score: number;
-}
-
-interface Room {
-  id: string;
-  name: string;
-  players: Player[];
-  currentTrack?: string;
-  status: "waiting" | "playing" | "finished";
-}
-
-// In-memory storage
-const rooms = new Map<string, Room>();
-
-// Utility function to generate unique IDs
-const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 9);
-};
+import { Elysia, t } from 'elysia';
+import { cors } from '@elysiajs/cors';
+import { roomRepository, playerRepository } from './repositories';
+import { setupWebSocket } from './websocket/socket';
+import { validateRoomName, validatePlayerName } from '@blind-test/shared';
+import type { Room, Player } from '@blind-test/shared';
 
 // Initialize Elysia app
 const app = new Elysia()
   .use(cors())
-  .get("/", () => {
+  .get('/', () => {
     return {
-      message: "Blind Test API Server",
-      status: "running",
-      version: "1.0.0"
+      message: 'Blind Test API Server',
+      status: 'running',
+      version: '1.0.0',
+      websocket: 'enabled',
     };
   })
 
+  // ========================================================================
+  // Room Endpoints
+  // ========================================================================
+
   // Get all rooms
-  .get("/api/rooms", () => {
-    console.log(`[GET /api/rooms] Fetching all rooms. Total: ${rooms.size}`);
-    return Array.from(rooms.values());
+  .get('/api/rooms', async ({ query }) => {
+    console.log('[GET /api/rooms] Fetching rooms');
+
+    let rooms: Room[];
+
+    if (query.status) {
+      rooms = await roomRepository.findByStatus(query.status as Room['status']);
+    } else {
+      rooms = await roomRepository.findAll();
+    }
+
+    return {
+      rooms,
+      total: rooms.length,
+    };
+  }, {
+    query: t.Optional(t.Object({
+      status: t.Optional(t.String()),
+    })),
   })
 
   // Create new room
-  .post(
-    "/api/rooms",
-    ({ body }) => {
-      const roomId = generateId();
-      const newRoom: Room = {
-        id: roomId,
-        name: body.name,
-        players: [],
-        status: "waiting",
-      };
-
-      rooms.set(roomId, newRoom);
-      console.log(`[POST /api/rooms] Created room: ${newRoom.name} (ID: ${roomId})`);
-
-      return newRoom;
-    },
-    {
-      body: t.Object({
-        name: t.String({ minLength: 1 }),
-      }),
+  .post('/api/rooms', async ({ body, error }) => {
+    // Validate room name
+    if (!validateRoomName(body.name)) {
+      return error(400, {
+        error: 'Invalid room name. Must be 1-50 characters, alphanumeric, spaces, hyphens, underscores only.',
+      });
     }
-  )
+
+    try {
+      const room = await roomRepository.create({
+        name: body.name,
+        maxPlayers: body.maxPlayers || 8,
+        masterIp: 'localhost', // TODO: Extract from request in production
+      });
+
+      console.log(`[POST /api/rooms] Created room: ${room.name} (code: ${room.code})`);
+
+      return room;
+    } catch (err) {
+      console.error('[POST /api/rooms] Error:', err);
+      return error(500, { error: 'Failed to create room' });
+    }
+  }, {
+    body: t.Object({
+      name: t.String({ minLength: 1, maxLength: 50 }),
+      maxPlayers: t.Optional(t.Number({ minimum: 2, maximum: 20 })),
+    }),
+  })
 
   // Get room by ID
-  .get(
-    "/api/rooms/:id",
-    ({ params: { id }, error }) => {
-      const room = rooms.get(id);
+  .get('/api/rooms/:id', async ({ params: { id }, error }) => {
+    const room = await roomRepository.findById(id);
 
-      if (!room) {
-        console.log(`[GET /api/rooms/${id}] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      console.log(`[GET /api/rooms/${id}] Fetching room: ${room.name}`);
-      return room;
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
+    if (!room) {
+      console.log(`[GET /api/rooms/${id}] Room not found`);
+      return error(404, { error: 'Room not found' });
     }
-  )
+
+    // Populate players
+    const players = await playerRepository.findByRoom(id);
+    room.players = players;
+
+    console.log(`[GET /api/rooms/${id}] Fetching room: ${room.name}`);
+    return room;
+  })
+
+  // Update room
+  .patch('/api/rooms/:id', async ({ params: { id }, body, error }) => {
+    const room = await roomRepository.findById(id);
+
+    if (!room) {
+      return error(404, { error: 'Room not found' });
+    }
+
+    if (room.status !== 'lobby') {
+      return error(400, { error: 'Cannot update room while game is in progress' });
+    }
+
+    if (body.name && !validateRoomName(body.name)) {
+      return error(400, { error: 'Invalid room name' });
+    }
+
+    try {
+      const updated = await roomRepository.update(id, body);
+      console.log(`[PATCH /api/rooms/${id}] Updated room: ${updated.name}`);
+      return updated;
+    } catch (err) {
+      console.error(`[PATCH /api/rooms/${id}] Error:`, err);
+      return error(500, { error: 'Failed to update room' });
+    }
+  }, {
+    body: t.Object({
+      name: t.Optional(t.String({ minLength: 1, maxLength: 50 })),
+      maxPlayers: t.Optional(t.Number({ minimum: 2, maximum: 20 })),
+    }),
+  })
+
+  // Delete room
+  .delete('/api/rooms/:id', async ({ params: { id }, error }) => {
+    const room = await roomRepository.findById(id);
+
+    if (!room) {
+      return error(404, { error: 'Room not found' });
+    }
+
+    try {
+      // Delete all players first
+      await playerRepository.deleteByRoom(id);
+      // Delete room
+      await roomRepository.delete(id);
+
+      console.log(`[DELETE /api/rooms/${id}] Deleted room: ${room.name}`);
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      console.error(`[DELETE /api/rooms/${id}] Error:`, err);
+      return error(500, { error: 'Failed to delete room' });
+    }
+  })
+
+  // ========================================================================
+  // Player Endpoints
+  // ========================================================================
 
   // Add player to room
-  .post(
-    "/api/rooms/:id/players",
-    ({ params: { id }, body, error }) => {
-      const room = rooms.get(id);
+  .post('/api/rooms/:roomId/players', async ({ params: { roomId }, body, error }) => {
+    const room = await roomRepository.findById(roomId);
 
-      if (!room) {
-        console.log(`[POST /api/rooms/${id}/players] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      if (room.status !== "waiting") {
-        console.log(`[POST /api/rooms/${id}/players] Cannot add player - game already started`);
-        return error(400, { message: "Cannot add player - game already started" });
-      }
-
-      const playerId = generateId();
-      const newPlayer: Player = {
-        id: playerId,
-        name: body.name,
-        score: 0,
-      };
-
-      room.players.push(newPlayer);
-      console.log(`[POST /api/rooms/${id}/players] Added player: ${newPlayer.name} (ID: ${playerId})`);
-
-      return newPlayer;
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-      body: t.Object({
-        name: t.String({ minLength: 1 }),
-      }),
+    if (!room) {
+      return error(404, { error: 'Room not found' });
     }
-  )
+
+    if (room.status !== 'lobby') {
+      return error(400, { error: 'Cannot join - game already in progress' });
+    }
+
+    if (!validatePlayerName(body.name)) {
+      return error(400, { error: 'Invalid player name. Must be 1-20 characters, alphanumeric and spaces only.' });
+    }
+
+    // Check if room is full
+    const playerCount = await playerRepository.countConnected(roomId);
+    if (playerCount >= room.maxPlayers) {
+      return error(400, { error: 'Room is full' });
+    }
+
+    // Check for duplicate name
+    const existing = await playerRepository.findByRoomAndName(roomId, body.name);
+    if (existing) {
+      return error(400, { error: 'Name already taken in this room' });
+    }
+
+    try {
+      const player = await playerRepository.create({
+        roomId,
+        name: body.name,
+        role: 'player',
+      });
+
+      console.log(`[POST /api/rooms/${roomId}/players] Added player: ${player.name}`);
+      return player;
+    } catch (err) {
+      console.error(`[POST /api/rooms/${roomId}/players] Error:`, err);
+      return error(500, { error: 'Failed to add player' });
+    }
+  }, {
+    body: t.Object({
+      name: t.String({ minLength: 1, maxLength: 20 }),
+    }),
+  })
+
+  // Get player info
+  .get('/api/rooms/:roomId/players/:playerId', async ({ params: { roomId, playerId }, error }) => {
+    const player = await playerRepository.findById(playerId);
+
+    if (!player || player.roomId !== roomId) {
+      return error(404, { error: 'Player not found' });
+    }
+
+    return player;
+  })
 
   // Remove player from room
-  .delete(
-    "/api/rooms/:roomId/players/:playerId",
-    ({ params: { roomId, playerId }, error }) => {
-      const room = rooms.get(roomId);
+  .delete('/api/rooms/:roomId/players/:playerId', async ({ params: { roomId, playerId }, error }) => {
+    const player = await playerRepository.findById(playerId);
 
-      if (!room) {
-        console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      const playerIndex = room.players.findIndex((p) => p.id === playerId);
-
-      if (playerIndex === -1) {
-        console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Player not found`);
-        return error(404, { message: "Player not found" });
-      }
-
-      const removedPlayer = room.players.splice(playerIndex, 1)[0];
-      console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Removed player: ${removedPlayer.name}`);
-
-      return { message: "Player removed successfully", player: removedPlayer };
-    },
-    {
-      params: t.Object({
-        roomId: t.String(),
-        playerId: t.String(),
-      }),
+    if (!player || player.roomId !== roomId) {
+      return error(404, { error: 'Player not found' });
     }
-  )
+
+    try {
+      await playerRepository.delete(playerId);
+      console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Removed player: ${player.name}`);
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      console.error(`[DELETE /api/rooms/${roomId}/players/${playerId}] Error:`, err);
+      return error(500, { error: 'Failed to remove player' });
+    }
+  })
+
+  // ========================================================================
+  // Game Control Endpoints (Stubs for future phases)
+  // ========================================================================
 
   // Start game
-  .post(
-    "/api/rooms/:id/start",
-    ({ params: { id }, error }) => {
-      const room = rooms.get(id);
+  .post('/api/game/:roomId/start', async ({ params: { roomId }, error }) => {
+    const room = await roomRepository.findById(roomId);
 
-      if (!room) {
-        console.log(`[POST /api/rooms/${id}/start] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      if (room.status !== "waiting") {
-        console.log(`[POST /api/rooms/${id}/start] Game already started`);
-        return error(400, { message: "Game already started" });
-      }
-
-      if (room.players.length < 2) {
-        console.log(`[POST /api/rooms/${id}/start] Not enough players (need at least 2)`);
-        return error(400, { message: "Need at least 2 players to start" });
-      }
-
-      room.status = "playing";
-      console.log(`[POST /api/rooms/${id}/start] Game started for room: ${room.name}`);
-
-      return room;
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
+    if (!room) {
+      return error(404, { error: 'Room not found' });
     }
-  )
+
+    if (room.status !== 'lobby') {
+      return error(409, { error: 'Game already started' });
+    }
+
+    const playerCount = await playerRepository.countConnected(roomId);
+    if (playerCount < 2) {
+      return error(400, { error: 'Need at least 2 players to start' });
+    }
+
+    try {
+      // TODO: Implement game session creation in Phase 2
+      const updated = await roomRepository.update(roomId, { status: 'playing' });
+      console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name}`);
+
+      return {
+        sessionId: 'placeholder', // Will be implemented in Phase 2
+        roomId,
+        status: updated.status,
+        message: 'Game start will be fully implemented in Phase 2',
+      };
+    } catch (err) {
+      console.error(`[POST /api/game/${roomId}/start] Error:`, err);
+      return error(500, { error: 'Failed to start game' });
+    }
+  })
 
   .listen(3007);
 
+// Setup WebSocket server
+const httpServer = app.server;
+if (httpServer) {
+  setupWebSocket(httpServer);
+}
+
 console.log(
-  `🎵 Blind Test API Server is running at http://${app.server?.hostname}:${app.server?.port}`
+  `🎵 Blind Test Server is running at http://${app.server?.hostname}:${app.server?.port}`
 );
+console.log(`📡 WebSocket server ready on ws://${app.server?.hostname}:${app.server?.port}`);
 
 // Export app type for Eden Treaty
 export type App = typeof app;
