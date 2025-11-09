@@ -5,11 +5,13 @@
 
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { roomRepository, playerRepository } from './repositories';
+import { roomRepository, playerRepository, songRepository } from './repositories';
 import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './websocket/handler';
 import { validateRoomName, validatePlayerName } from '@blind-test/shared';
 import type { Room, Player } from '@blind-test/shared';
 import { runMigrations } from './db';
+import { extractMetadata, isSupportedAudioFormat, getFileFormat } from './utils/mp3-metadata';
+import { writeFile, unlink, stat } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -308,6 +310,185 @@ const app = new Elysia()
     } catch (err) {
       console.error(`[POST /api/game/${roomId}/start] Error:`, err);
       return error(500, { error: 'Failed to start game' });
+    }
+  })
+
+  // ========================================================================
+  // Music Library Endpoints
+  // ========================================================================
+
+  // Get all songs
+  .get('/api/songs', async () => {
+    console.log('[GET /api/songs] Fetching all songs');
+    const songs = await songRepository.findAll();
+    return {
+      songs,
+      total: songs.length,
+    };
+  })
+
+  // Get song by ID
+  .get('/api/songs/:songId', async ({ params: { songId }, error }) => {
+    const song = await songRepository.findById(songId);
+
+    if (!song) {
+      return error(404, { error: 'Song not found' });
+    }
+
+    return song;
+  })
+
+  // Search songs
+  .get('/api/songs/search/:query', async ({ params: { query } }) => {
+    console.log(`[GET /api/songs/search/${query}] Searching songs`);
+    const songs = await songRepository.searchByTitle(query);
+    return {
+      songs,
+      total: songs.length,
+    };
+  })
+
+  // Upload new song
+  .post('/api/songs/upload', async ({ body, error }) => {
+    console.log('[POST /api/songs/upload] Uploading song');
+
+    // Validate file
+    if (!body.file) {
+      return error(400, { error: 'No file provided' });
+    }
+
+    const file = body.file as File;
+
+    // Check file type
+    if (!isSupportedAudioFormat(file.name)) {
+      return error(400, {
+        error: 'Unsupported file format. Supported: mp3, m4a, wav, flac',
+      });
+    }
+
+    try {
+      // Ensure uploads directory exists
+      const uploadsDir = path.join(process.cwd(), 'uploads');
+      if (!existsSync(uploadsDir)) {
+        await mkdir(uploadsDir, { recursive: true });
+      }
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const sanitizedName = file.name.replace(/[^a-z0-9.-]/gi, '_');
+      const filename = `${timestamp}_${sanitizedName}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      // Write file to disk
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      await writeFile(filePath, buffer);
+
+      // Get file size
+      const stats = await stat(filePath);
+      const fileSize = stats.size;
+
+      // Extract metadata
+      let metadata;
+      try {
+        metadata = await extractMetadata(filePath);
+      } catch (metadataError) {
+        // Clean up file if metadata extraction fails
+        await unlink(filePath);
+        throw metadataError;
+      }
+
+      // Check if song already exists (by file path or title+artist)
+      const existingSong = await songRepository.findByFilePath(filePath);
+      if (existingSong) {
+        await unlink(filePath);
+        return error(409, { error: 'Song already exists in library' });
+      }
+
+      // Create song record
+      const song = await songRepository.create({
+        filePath,
+        fileName: filename,
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        year: metadata.year,
+        genre: metadata.genre,
+        duration: metadata.duration,
+        clipStart: 30, // Default clip start
+        fileSize,
+        format: getFileFormat(file.name),
+      });
+
+      console.log(`[POST /api/songs/upload] Uploaded song: ${song.title} by ${song.artist}`);
+
+      return song;
+    } catch (err) {
+      console.error('[POST /api/songs/upload] Error:', err);
+      if (err instanceof Error) {
+        return error(500, { error: err.message });
+      }
+      return error(500, { error: 'Failed to upload song' });
+    }
+  }, {
+    body: t.Object({
+      file: t.File({
+        maxSize: 50 * 1024 * 1024, // 50MB max
+      }),
+    }),
+  })
+
+  // Update song metadata
+  .patch('/api/songs/:songId', async ({ params: { songId }, body, error }) => {
+    const song = await songRepository.findById(songId);
+
+    if (!song) {
+      return error(404, { error: 'Song not found' });
+    }
+
+    try {
+      const updated = await songRepository.update(songId, body);
+      console.log(`[PATCH /api/songs/${songId}] Updated song: ${updated.title}`);
+      return updated;
+    } catch (err) {
+      console.error(`[PATCH /api/songs/${songId}] Error:`, err);
+      return error(500, { error: 'Failed to update song' });
+    }
+  }, {
+    body: t.Object({
+      title: t.Optional(t.String()),
+      artist: t.Optional(t.String()),
+      album: t.Optional(t.String()),
+      year: t.Optional(t.Number()),
+      genre: t.Optional(t.String()),
+      clipStart: t.Optional(t.Number({ minimum: 0 })),
+    }),
+  })
+
+  // Delete song
+  .delete('/api/songs/:songId', async ({ params: { songId }, error }) => {
+    const song = await songRepository.findById(songId);
+
+    if (!song) {
+      return error(404, { error: 'Song not found' });
+    }
+
+    try {
+      // Delete file from disk
+      try {
+        await unlink(song.filePath);
+      } catch (fileError) {
+        console.warn(`Could not delete file: ${song.filePath}`, fileError);
+      }
+
+      // Delete from database
+      await songRepository.delete(songId);
+      console.log(`[DELETE /api/songs/${songId}] Deleted song: ${song.title}`);
+
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      console.error(`[DELETE /api/songs/${songId}] Error:`, err);
+      return error(500, { error: 'Failed to delete song' });
     }
   })
 
