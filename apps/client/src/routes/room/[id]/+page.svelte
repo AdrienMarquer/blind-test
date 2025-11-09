@@ -222,6 +222,18 @@
 		{/if}
 
 		{#if room.status === 'lobby'}
+			<section class="qr-section">
+				<div class="qr-container">
+					<h2>📱 Scan to Join</h2>
+					<img src={room.qrCode} alt="QR Code to join room" class="qr-code" />
+					<p class="qr-hint">
+						Players can scan this QR code with their phone camera to join the room
+					</p>
+				</div>
+			</section>
+		{/if}
+
+		{#if room.status === 'lobby'}
 			<section class="join-section">
 				<h2>Join Room</h2>
 				<form onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
@@ -761,5 +773,54 @@
 	.cancel-button:hover {
 		border-color: #9ca3af;
 		background-color: #f9fafb;
+	}
+
+	.qr-section {
+		margin-bottom: 2rem;
+	}
+
+	.qr-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 2rem;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		border-radius: 1rem;
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+	}
+
+	.qr-container h2 {
+		margin: 0 0 1.5rem 0;
+		color: white;
+		font-size: 1.5rem;
+		text-align: center;
+	}
+
+	.qr-code {
+		width: 300px;
+		height: 300px;
+		padding: 1rem;
+		background: white;
+		border-radius: 0.75rem;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		image-rendering: pixelated;
+		image-rendering: -moz-crisp-edges;
+		image-rendering: crisp-edges;
+	}
+
+	.qr-hint {
+		margin: 1.5rem 0 0 0;
+		color: white;
+		text-align: center;
+		font-size: 0.875rem;
+		max-width: 400px;
+		opacity: 0.9;
+	}
+
+	@media (max-width: 640px) {
+		.qr-code {
+			width: 250px;
+			height: 250px;
+		}
 	}
 </style>

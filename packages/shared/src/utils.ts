@@ -85,19 +85,16 @@ export function resolveAllParams(round: Round, mode: Mode): Required<ModeParams>
 // ============================================================================
 
 /**
- * Generate a QR code data URL for room joining
- * For Phase 1, this is a placeholder that returns a simple data URL
- * In Phase 3, we'll integrate a proper QR code library
+ * Generate a room join URL
+ * Note: Actual QR code image generation happens server-side
  *
- * @param roomCode - The 4-character room code
+ * @param roomId - The room UUID
  * @param serverIp - The server IP address
- * @returns Data URL for QR code image
+ * @param port - The client port (default: 5173)
+ * @returns Join URL for the room
  */
-export function generateQRCode(roomCode: string, serverIp: string): string {
-  // Placeholder: Returns a simple data URL
-  // TODO: Integrate QR code library in Phase 3
-  const joinUrl = `http://${serverIp}:5173/room/${roomCode}`;
-  return `data:text/plain;base64,${btoa(joinUrl)}`;
+export function generateRoomJoinURL(roomId: string, serverIp: string, port: number = 5173): string {
+  return `http://${serverIp}:${port}/room/${roomId}`;
 }
 
 // ============================================================================

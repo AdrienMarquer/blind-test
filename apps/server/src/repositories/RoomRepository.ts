@@ -4,8 +4,9 @@
 
 import { eq, and, lt } from 'drizzle-orm';
 import type { Room, Repository } from '@blind-test/shared';
-import { generateId, generateRoomCode, generateQRCode } from '@blind-test/shared';
+import { generateId, generateRoomCode, generateRoomJoinURL } from '@blind-test/shared';
 import { db, schema } from '../db';
+import { getLocalNetworkIP, generateQRCodeDataURL } from '../utils/network';
 
 export class RoomRepository implements Repository<Room> {
   /**
@@ -88,12 +89,17 @@ export class RoomRepository implements Repository<Room> {
     const code = await this.generateUniqueCode();
     const now = new Date();
 
+    // Get local network IP for QR code
+    const localIP = getLocalNetworkIP();
+    const joinURL = generateRoomJoinURL(id, localIP, 5173);
+    const qrCode = await generateQRCodeDataURL(joinURL);
+
     const newRoom = {
       id,
       name: data.name || 'New Room',
       code,
-      qrCode: generateQRCode(code, data.masterIp || 'localhost'),
-      masterIp: data.masterIp || 'localhost',
+      qrCode,
+      masterIp: localIP,
       status: 'lobby' as const,
       createdAt: now,
       updatedAt: now,
@@ -101,6 +107,8 @@ export class RoomRepository implements Repository<Room> {
     };
 
     await db.insert(schema.rooms).values(newRoom);
+
+    console.log(`[RoomRepository] Created room with QR code URL: ${joinURL}`);
 
     return {
       ...newRoom,

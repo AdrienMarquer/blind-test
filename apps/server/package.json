@@ -12,10 +12,12 @@
     "@elysiajs/cors": "^1.0.0",
     "@blind-test/shared": "workspace:*",
     "drizzle-orm": "^0.38.0",
-    "music-metadata": "^8.1.4"
+    "music-metadata": "^8.1.4",
+    "qrcode": "^1.5.3"
   },
   "devDependencies": {
     "bun-types": "latest",
-    "drizzle-kit": "^0.30.0"
+    "drizzle-kit": "^0.30.0",
+    "@types/qrcode": "^1.5.5"
   }
 }
