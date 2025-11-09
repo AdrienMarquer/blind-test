@@ -62,6 +62,30 @@ Le script :
 - ✅ Extrait les métadonnées (titre, artiste, genre, année)
 - ✅ Affiche une progression en temps réel avec un résumé
 
+## 💾 Base de données et migrations
+
+Le projet utilise **Drizzle ORM** avec SQLite pour la persistance des données.
+
+### Modifications du schéma
+
+Si vous modifiez le schéma de la base de données dans `apps/server/src/db/schema.ts` :
+
+```bash
+# Générer automatiquement une migration SQL
+cd apps/server
+bunx drizzle-kit generate
+```
+
+Cela créera un nouveau fichier de migration dans `apps/server/drizzle/`.
+
+Les migrations s'exécutent **automatiquement au démarrage du serveur**.
+
+### Fichiers importants
+
+- `apps/server/src/db/schema.ts` - Définition du schéma TypeScript
+- `apps/server/drizzle/*.sql` - Migrations SQL générées
+- `apps/server/db/sqlite.db` - Base de données SQLite (gitignorée)
+
 ## 🛠 Stack technique
 
 - **Runtime** : Bun
