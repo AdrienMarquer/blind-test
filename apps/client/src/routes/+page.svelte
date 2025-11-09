@@ -1,13 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-
-	interface Room {
-		id: string;
-		name: string;
-		players: Array<{ id: string; name: string; score: number }>;
-		status: 'waiting' | 'playing' | 'finished';
-	}
+	import type { Room } from '@blind-test/shared';
 
 	let rooms = $state<Room[]>([]);
 	let newRoomName = $state('');
@@ -22,7 +16,8 @@
 			const response = await api.api.rooms.get();
 
 			if (response.data) {
-				rooms = response.data as Room[];
+				// New API returns { rooms, total }
+				rooms = response.data.rooms || [];
 				console.log('Loaded rooms:', rooms);
 			} else {
 				error = 'Failed to load rooms';
@@ -61,16 +56,33 @@
 		}
 	}
 
-	function getStatusColor(status: string): string {
+	function getStatusColor(status: Room['status']): string {
 		switch (status) {
-			case 'waiting':
+			case 'lobby':
 				return '#3b82f6'; // blue
 			case 'playing':
 				return '#10b981'; // green
+			case 'between_rounds':
+				return '#f59e0b'; // amber
 			case 'finished':
 				return '#6b7280'; // gray
 			default:
 				return '#6b7280';
+		}
+	}
+
+	function getStatusLabel(status: Room['status']): string {
+		switch (status) {
+			case 'lobby':
+				return 'Waiting';
+			case 'playing':
+				return 'Playing';
+			case 'between_rounds':
+				return 'Between Rounds';
+			case 'finished':
+				return 'Finished';
+			default:
+				return status;
 		}
 	}
 
@@ -116,11 +128,14 @@
 						<div class="room-header">
 							<h3>{room.name}</h3>
 							<span class="status" style="background-color: {getStatusColor(room.status)}">
-								{room.status}
+								{getStatusLabel(room.status)}
 							</span>
 						</div>
 						<div class="room-info">
-							<span>👥 {room.players.length} player{room.players.length !== 1 ? 's' : ''}</span>
+							<div class="info-row">
+								<span>🔑 Code: <strong>{room.code}</strong></span>
+								<span>👥 {room.players.length}/{room.maxPlayers} players</span>
+							</div>
 						</div>
 					</a>
 				{/each}
@@ -241,7 +256,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.75rem;
 	}
 
 	.room-header h3 {
@@ -262,5 +277,17 @@
 	.room-info {
 		color: #6b7280;
 		font-size: 0.875rem;
+	}
+
+	.info-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.info-row strong {
+		color: #1f2937;
+		font-family: monospace;
+		font-size: 1rem;
 	}
 </style>
