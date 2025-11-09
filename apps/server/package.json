@@ -11,11 +11,11 @@
     "elysia": "^1.0.0",
     "@elysiajs/cors": "^1.0.0",
     "@blind-test/shared": "workspace:*",
-    "drizzle-orm": "^0.29.3",
+    "drizzle-orm": "^0.36.0",
     "music-metadata": "^8.1.4"
   },
   "devDependencies": {
     "bun-types": "latest",
-    "drizzle-kit": "^0.20.9"
+    "drizzle-kit": "^0.28.0"
   }
 }

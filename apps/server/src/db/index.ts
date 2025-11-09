@@ -5,8 +5,9 @@
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as schema from './schema';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import path from 'path';
-import { mkdirSync, existsSync, readFileSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 
 // Ensure database directory exists
 const dbDir = path.join(process.cwd(), 'db');
@@ -25,31 +26,11 @@ sqlite.run('PRAGMA journal_mode = WAL'); // Enable WAL mode for better concurren
 // Create Drizzle instance
 export const db = drizzle(sqlite, { schema });
 
-// Run migrations
+// Run migrations using Drizzle's migration runner
 export function runMigrations() {
   try {
-    // Check if tables already exist
-    const tableCheck = sqlite.query("SELECT name FROM sqlite_master WHERE type='table' AND name='rooms'").get();
-
-    if (!tableCheck) {
-      // Tables don't exist, run migration SQL directly
-      const migrationPath = path.join(process.cwd(), 'drizzle', '0000_initial_schema.sql');
-      const migrationSQL = readFileSync(migrationPath, 'utf-8');
-
-      // Split by semicolon and execute each statement
-      const statements = migrationSQL
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
-
-      for (const statement of statements) {
-        sqlite.run(statement);
-      }
-
-      console.log('✅ Database migrations completed');
-    } else {
-      console.log('✅ Database schema already exists');
-    }
+    migrate(db, { migrationsFolder: './drizzle' });
+    console.log('✅ Database migrations completed');
   } catch (error) {
     console.error('❌ Migration failed:', error);
     throw error;
