@@ -14,6 +14,7 @@
 	let joining = $state(false);
 	let starting = $state(false);
 	let initialRoom = $state<Room | null>(null);
+	let isMaster = $state(false);
 
 	// Game configuration
 	let songs = $state<any[]>([]);
@@ -176,11 +177,18 @@
 	}
 
 	onMount(() => {
+		// Check if this user is the master of this room
+		if (roomId) {
+			const masterKey = `master_${roomId}`;
+			isMaster = localStorage.getItem(masterKey) === 'true';
+			console.log(`[Role] User is ${isMaster ? 'MASTER' : 'PLAYER'} of room ${roomId}`);
+		}
+
 		loadRoom();
 
 		// Create WebSocket connection
 		if (roomId) {
-			roomSocket = createRoomSocket(roomId, { role: 'master' });
+			roomSocket = createRoomSocket(roomId, { role: isMaster ? 'master' : 'player' });
 			roomSocket.connect();
 		}
 	});
@@ -210,7 +218,12 @@
 		<div class="room-header">
 			<div>
 				<h1>{room.name}</h1>
-				<p class="room-code">Join Code: <strong>{room.code}</strong></p>
+				<div class="header-info">
+					<p class="room-code">Join Code: <strong>{room.code}</strong></p>
+					<span class="role-badge" class:master={isMaster}>
+						{isMaster ? '👑 Master' : '🎮 Player'}
+					</span>
+				</div>
 			</div>
 			<span class="status" style="background-color: {getStatusColor(room.status)}">
 				{getStatusLabel(room.status)}
@@ -221,7 +234,7 @@
 			<div class="error">{error || socketError}</div>
 		{/if}
 
-		{#if room.status === 'lobby'}
+		{#if room.status === 'lobby' && isMaster}
 			<section class="qr-section">
 				<div class="qr-container">
 					<h2>📱 Scan to Join</h2>
@@ -233,7 +246,7 @@
 			</section>
 		{/if}
 
-		{#if room.status === 'lobby'}
+		{#if room.status === 'lobby' && !isMaster}
 			<section class="join-section">
 				<h2>Join Room</h2>
 				<form onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
@@ -269,7 +282,7 @@
 								</span>
 								<span class="player-score">Score: {player.score}</span>
 							</div>
-							{#if room.status === 'lobby'}
+							{#if room.status === 'lobby' && isMaster}
 								<button
 									class="remove-button"
 									onclick={() => removePlayer(player.id)}
@@ -283,7 +296,7 @@
 			{/if}
 		</section>
 
-		{#if room.status === 'lobby' && players.length >= 2}
+		{#if room.status === 'lobby' && players.length >= 2 && isMaster}
 			{#if !showConfig}
 				<section class="game-controls">
 					<button
@@ -350,9 +363,13 @@
 					</div>
 				</section>
 			{/if}
-		{:else if room.status === 'lobby' && players.length < 2}
+		{:else if room.status === 'lobby' && players.length < 2 && isMaster}
 			<section class="game-controls">
 				<p class="info">Need at least 2 players to start the game</p>
+			</section>
+		{:else if room.status === 'lobby' && !isMaster}
+			<section class="game-controls">
+				<p class="info">Waiting for the master to start the game...</p>
 			</section>
 		{/if}
 
@@ -420,6 +437,12 @@
 		color: #1f2937;
 	}
 
+	.header-info {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
 	.room-code {
 		margin: 0;
 		color: #6b7280;
@@ -433,6 +456,21 @@
 		background-color: #f3f4f6;
 		padding: 0.25rem 0.5rem;
 		border-radius: 0.25rem;
+	}
+
+	.role-badge {
+		display: inline-block;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		border-radius: 0.5rem;
+		background-color: #e5e7eb;
+		color: #374151;
+	}
+
+	.role-badge.master {
+		background-color: #fef3c7;
+		color: #92400e;
 	}
 
 	h2 {

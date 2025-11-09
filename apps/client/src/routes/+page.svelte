@@ -43,8 +43,14 @@
 
 			if (response.data) {
 				console.log('Room created:', response.data);
-				newRoomName = '';
-				await loadRooms();
+				const roomId = response.data.id;
+
+				// Mark this user as the master of this room
+				localStorage.setItem(`master_${roomId}`, 'true');
+				console.log(`[Master] User marked as master of room ${roomId}`);
+
+				// Navigate to the room
+				window.location.href = `/room/${roomId}`;
 			} else {
 				error = 'Failed to create room';
 			}
