@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^3.0.0",
+    "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "svelte": "^5.0.0",
@@ -19,7 +20,8 @@
     "vite": "^5.0.0"
   },
   "dependencies": {
-    "@elysiajs/eden": "^1.0.0"
+    "@elysiajs/eden": "^1.0.0",
+    "@blind-test/shared": "workspace:*"
   },
   "type": "module"
 }

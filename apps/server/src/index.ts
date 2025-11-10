@@ -1,198 +1,139 @@
-import { Elysia, t } from "elysia";
-import { cors } from "@elysiajs/cors";
+/**
+ * Blind Test - Main Server
+ * Elysia REST API + WebSockets
+ */
 
-// Data models
-interface Player {
-  id: string;
-  name: string;
-  score: number;
+import { Elysia, t } from 'elysia';
+import { cors } from '@elysiajs/cors';
+import { staticPlugin } from '@elysiajs/static';
+import { runMigrations } from './db';
+import { handleWebSocket, handleMessage, handleClose } from './websocket/handler';
+import { logger } from './utils/logger';
+import { existsSync } from 'fs';
+import path from 'path';
+
+// Import route modules
+import { roomRoutes } from './routes/rooms';
+import { playerRoutes } from './routes/players';
+import { gameRoutes } from './routes/game';
+import { songRoutes } from './routes/songs';
+import { modeRoutes } from './routes/modes';
+import { mediaRoutes } from './routes/media';
+
+// Run database migrations
+try {
+  await runMigrations();
+  logger.info('Database ready');
+} catch (error) {
+  logger.error('Database initialization failed', error);
+  process.exit(1);
 }
 
-interface Room {
-  id: string;
-  name: string;
-  players: Player[];
-  currentTrack?: string;
-  status: "waiting" | "playing" | "finished";
+// Create child logger for WebSocket
+const wsLogger = logger.child({ module: 'WebSocket' });
+
+// Determine client build path
+const clientBuildPath = path.join(process.cwd(), '../client/build');
+const hasClientBuild = existsSync(clientBuildPath);
+
+if (!hasClientBuild) {
+  logger.warn('Client build not found', {
+    path: clientBuildPath,
+    message: 'Run `bun run build:client` to build the client for production'
+  });
 }
-
-// In-memory storage
-const rooms = new Map<string, Room>();
-
-// Utility function to generate unique IDs
-const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 9);
-};
 
 // Initialize Elysia app
 const app = new Elysia()
   .use(cors())
-  .get("/", () => {
+
+  // Health check endpoint (for Docker/monitoring)
+  .get('/health', () => {
     return {
-      message: "Blind Test API Server",
-      status: "running",
-      version: "1.0.0"
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
     };
   })
 
-  // Get all rooms
-  .get("/api/rooms", () => {
-    console.log(`[GET /api/rooms] Fetching all rooms. Total: ${rooms.size}`);
-    return Array.from(rooms.values());
+  // API routes (must come before static files to take precedence)
+  .use(roomRoutes)
+  .use(playerRoutes)
+  .use(gameRoutes)
+  .use(songRoutes)
+  .use(modeRoutes)
+  .use(mediaRoutes)
+
+  // WebSocket endpoint for room connections
+  .ws('/ws/rooms/:roomId', {
+    params: t.Object({
+      roomId: t.String()
+    }),
+    query: t.Object({
+      token: t.Optional(t.String()),
+      playerId: t.Optional(t.String())
+    }),
+    open(ws) {
+      // Extract roomId from route params
+      const roomId = ws.data?.params?.roomId;
+
+      if (!roomId) {
+        wsLogger.error('WebSocket connection missing roomId');
+        ws.close();
+        return;
+      }
+
+      // Store roomId and optional token/playerId in ws.data for access in message handlers
+      ws.data.roomId = roomId;
+      ws.data.token = ws.data?.query?.token;
+      ws.data.playerId = ws.data?.query?.playerId;
+      handleWebSocket(ws);
+    },
+    message(ws, message) {
+      handleMessage(ws, typeof message === 'string' ? message : JSON.stringify(message));
+    },
+    close(ws) {
+      handleClose(ws);
+    }
   })
 
-  // Create new room
-  .post(
-    "/api/rooms",
-    ({ body }) => {
-      const roomId = generateId();
-      const newRoom: Room = {
-        id: roomId,
-        name: body.name,
-        players: [],
-        status: "waiting",
+  // Serve static client files (SPA fallback)
+  // This must come AFTER all API routes and WebSocket
+  .use(hasClientBuild
+    ? staticPlugin({
+        assets: clientBuildPath,
+        prefix: '/',
+        // Enable SPA fallback - serve index.html for non-file routes
+        alwaysStatic: false,
+        // This allows the index.html to handle client-side routing
+      })
+    : (app) => app  // No-op if client not built
+  )
+
+  // Fallback for SPA routing - serve index.html for all non-API routes
+  .get('*', ({ set }) => {
+    if (!hasClientBuild) {
+      set.status = 503;
+      return {
+        error: 'Client not built',
+        message: 'Run `bun run build:client` to build the client'
       };
-
-      rooms.set(roomId, newRoom);
-      console.log(`[POST /api/rooms] Created room: ${newRoom.name} (ID: ${roomId})`);
-
-      return newRoom;
-    },
-    {
-      body: t.Object({
-        name: t.String({ minLength: 1 }),
-      }),
     }
-  )
 
-  // Get room by ID
-  .get(
-    "/api/rooms/:id",
-    ({ params: { id }, error }) => {
-      const room = rooms.get(id);
+    // Serve index.html for client-side routing
+    return Bun.file(path.join(clientBuildPath, 'index.html'));
+  });
 
-      if (!room) {
-        console.log(`[GET /api/rooms/${id}] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
+// Start server
+app.listen({
+  port: 3007,
+  hostname: '0.0.0.0'
+});
 
-      console.log(`[GET /api/rooms/${id}] Fetching room: ${room.name}`);
-      return room;
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-    }
-  )
-
-  // Add player to room
-  .post(
-    "/api/rooms/:id/players",
-    ({ params: { id }, body, error }) => {
-      const room = rooms.get(id);
-
-      if (!room) {
-        console.log(`[POST /api/rooms/${id}/players] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      if (room.status !== "waiting") {
-        console.log(`[POST /api/rooms/${id}/players] Cannot add player - game already started`);
-        return error(400, { message: "Cannot add player - game already started" });
-      }
-
-      const playerId = generateId();
-      const newPlayer: Player = {
-        id: playerId,
-        name: body.name,
-        score: 0,
-      };
-
-      room.players.push(newPlayer);
-      console.log(`[POST /api/rooms/${id}/players] Added player: ${newPlayer.name} (ID: ${playerId})`);
-
-      return newPlayer;
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-      body: t.Object({
-        name: t.String({ minLength: 1 }),
-      }),
-    }
-  )
-
-  // Remove player from room
-  .delete(
-    "/api/rooms/:roomId/players/:playerId",
-    ({ params: { roomId, playerId }, error }) => {
-      const room = rooms.get(roomId);
-
-      if (!room) {
-        console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      const playerIndex = room.players.findIndex((p) => p.id === playerId);
-
-      if (playerIndex === -1) {
-        console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Player not found`);
-        return error(404, { message: "Player not found" });
-      }
-
-      const removedPlayer = room.players.splice(playerIndex, 1)[0];
-      console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Removed player: ${removedPlayer.name}`);
-
-      return { message: "Player removed successfully", player: removedPlayer };
-    },
-    {
-      params: t.Object({
-        roomId: t.String(),
-        playerId: t.String(),
-      }),
-    }
-  )
-
-  // Start game
-  .post(
-    "/api/rooms/:id/start",
-    ({ params: { id }, error }) => {
-      const room = rooms.get(id);
-
-      if (!room) {
-        console.log(`[POST /api/rooms/${id}/start] Room not found`);
-        return error(404, { message: "Room not found" });
-      }
-
-      if (room.status !== "waiting") {
-        console.log(`[POST /api/rooms/${id}/start] Game already started`);
-        return error(400, { message: "Game already started" });
-      }
-
-      if (room.players.length < 2) {
-        console.log(`[POST /api/rooms/${id}/start] Not enough players (need at least 2)`);
-        return error(400, { message: "Need at least 2 players to start" });
-      }
-
-      room.status = "playing";
-      console.log(`[POST /api/rooms/${id}/start] Game started for room: ${room.name}`);
-
-      return room;
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-    }
-  )
-
-  .listen(3000);
-
-console.log(
-  `🎵 Blind Test API Server is running at http://${app.server?.hostname}:${app.server?.port}`
-);
+logger.info(`Server started`, {
+  http: `http://${app.server?.hostname}:${app.server?.port}`,
+  ws: `ws://${app.server?.hostname}:${app.server?.port}`
+});
 
 // Export app type for Eden Treaty
 export type App = typeof app;

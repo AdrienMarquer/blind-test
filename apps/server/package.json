@@ -8,10 +8,21 @@
     "start": "bun run dist/index.js"
   },
   "dependencies": {
+    "@blind-test/shared": "workspace:*",
+    "@elysiajs/cors": "^1.0.0",
+    "@elysiajs/static": "^1.4.6",
+    "@spotify/web-api-ts-sdk": "^1.2.0",
+    "drizzle-orm": "^0.44.7",
     "elysia": "^1.0.0",
-    "@elysiajs/cors": "^1.0.0"
+    "music-metadata": "^11.10.0",
+    "postgres": "^3.4.7",
+    "qrcode": "^1.5.3",
+    "youtube-dl-exec": "^3.0.26",
+    "youtube-search-api": "^2.0.1"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/qrcode": "^1.5.5",
+    "bun-types": "latest",
+    "drizzle-kit": "^0.30.0"
   }
 }

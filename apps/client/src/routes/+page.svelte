@@ -1,13 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-
-	interface Room {
-		id: string;
-		name: string;
-		players: Array<{ id: string; name: string; score: number }>;
-		status: 'waiting' | 'playing' | 'finished';
-	}
+	import type { Room } from '@blind-test/shared';
 
 	let rooms = $state<Room[]>([]);
 	let newRoomName = $state('');
@@ -22,7 +16,8 @@
 			const response = await api.api.rooms.get();
 
 			if (response.data) {
-				rooms = response.data as Room[];
+				// New API returns { rooms, total }
+				rooms = response.data.rooms || [];
 				console.log('Loaded rooms:', rooms);
 			} else {
 				error = 'Failed to load rooms';
@@ -48,8 +43,17 @@
 
 			if (response.data) {
 				console.log('Room created:', response.data);
-				newRoomName = '';
-				await loadRooms();
+				const roomId = response.data.id;
+				const masterToken = (response.data as any).masterToken;
+
+				// Store master token (in-memory via URL param, no localStorage)
+				if (masterToken) {
+					console.log(`[Master] Navigating with master token for room ${roomId}`);
+					window.location.href = `/room/${roomId}?token=${masterToken}`;
+				} else {
+					console.warn('[Master] No masterToken in response, navigating without auth');
+					window.location.href = `/room/${roomId}`;
+				}
 			} else {
 				error = 'Failed to create room';
 			}
@@ -61,16 +65,50 @@
 		}
 	}
 
-	function getStatusColor(status: string): string {
+	async function deleteRoom(roomId: string, roomName: string, e: Event) {
+		e.preventDefault(); // Prevent navigation
+		e.stopPropagation();
+
+		if (!confirm(`Delete room "${roomName}"?`)) return;
+
+		try {
+			error = null;
+			await api.api.rooms[roomId].delete();
+			console.log('Room deleted successfully');
+			await loadRooms();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to delete room';
+			console.error('Error deleting room:', err);
+		}
+	}
+
+	function getStatusColor(status: Room['status']): string {
 		switch (status) {
-			case 'waiting':
+			case 'lobby':
 				return '#3b82f6'; // blue
 			case 'playing':
 				return '#10b981'; // green
+			case 'between_rounds':
+				return '#f59e0b'; // amber
 			case 'finished':
 				return '#6b7280'; // gray
 			default:
 				return '#6b7280';
+		}
+	}
+
+	function getStatusLabel(status: Room['status']): string {
+		switch (status) {
+			case 'lobby':
+				return 'Waiting';
+			case 'playing':
+				return 'Playing';
+			case 'between_rounds':
+				return 'Between Rounds';
+			case 'finished':
+				return 'Finished';
+			default:
+				return status;
 		}
 	}
 
@@ -80,7 +118,10 @@
 </script>
 
 <main>
-	<h1>🎵 Blind Test</h1>
+	<div class="page-header">
+		<h1>🎵 Blind Test</h1>
+		<a href="/music" class="music-library-link">📚 Music Library</a>
+	</div>
 
 	<section class="create-room">
 		<h2>Create New Room</h2>
@@ -112,17 +153,29 @@
 		{:else}
 			<div class="rooms">
 				{#each rooms as room (room.id)}
-					<a href="/room/{room.id}" class="room-card">
-						<div class="room-header">
-							<h3>{room.name}</h3>
-							<span class="status" style="background-color: {getStatusColor(room.status)}">
-								{room.status}
-							</span>
-						</div>
-						<div class="room-info">
-							<span>👥 {room.players.length} player{room.players.length !== 1 ? 's' : ''}</span>
-						</div>
-					</a>
+					<div class="room-card-wrapper">
+						<a href="/room/{room.id}" class="room-card">
+							<div class="room-header">
+								<h3>{room.name}</h3>
+								<span class="status" style="background-color: {getStatusColor(room.status)}">
+									{getStatusLabel(room.status)}
+								</span>
+							</div>
+							<div class="room-info">
+								<div class="info-row">
+									<span>🔑 Code: <strong>{room.code}</strong></span>
+									<span>👥 {room.players.length}/{room.maxPlayers} players</span>
+								</div>
+							</div>
+						</a>
+						<button
+							class="delete-button"
+							onclick={(e) => deleteRoom(room.id, room.name, e)}
+							title="Delete room"
+						>
+							🗑️
+						</button>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -136,11 +189,33 @@
 		padding: 2rem;
 	}
 
+	.page-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 2rem;
+	}
+
 	h1 {
 		font-size: 2.5rem;
-		margin-bottom: 2rem;
-		text-align: center;
+		margin: 0;
 		color: #1f2937;
+	}
+
+	.music-library-link {
+		display: inline-block;
+		padding: 0.75rem 1.5rem;
+		font-size: 1rem;
+		font-weight: 600;
+		color: white;
+		background-color: #10b981;
+		text-decoration: none;
+		border-radius: 0.5rem;
+		transition: background-color 0.2s;
+	}
+
+	.music-library-link:hover {
+		background-color: #059669;
 	}
 
 	h2 {
@@ -220,9 +295,14 @@
 		gap: 1rem;
 	}
 
+	.room-card-wrapper {
+		position: relative;
+	}
+
 	.room-card {
 		display: block;
 		padding: 1.5rem;
+		padding-right: 4rem;
 		background-color: white;
 		border: 2px solid #e5e7eb;
 		border-radius: 0.5rem;
@@ -237,11 +317,30 @@
 		transform: translateY(-2px);
 	}
 
+	.delete-button {
+		position: absolute;
+		top: 50%;
+		right: 1rem;
+		transform: translateY(-50%);
+		padding: 0.5rem;
+		background-color: #ef4444;
+		border: none;
+		border-radius: 0.375rem;
+		font-size: 1.25rem;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		line-height: 1;
+	}
+
+	.delete-button:hover {
+		background-color: #dc2626;
+	}
+
 	.room-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.75rem;
 	}
 
 	.room-header h3 {
@@ -262,5 +361,17 @@
 	.room-info {
 		color: #6b7280;
 		font-size: 0.875rem;
+	}
+
+	.info-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.info-row strong {
+		color: #1f2937;
+		font-family: monospace;
+		font-size: 1rem;
 	}
 </style>

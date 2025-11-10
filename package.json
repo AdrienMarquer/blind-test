@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "bun run dev:server & bun run dev:client",
     "dev:server": "cd apps/server && bun run dev",
-    "dev:client": "cd apps/client && bun run dev",
+    "dev:client": "cd apps/client && bun run dev --host",
     "build": "bun run build:server && bun run build:client",
     "build:server": "cd apps/server && bun run build",
-    "build:client": "cd apps/client && bun run build"
+    "build:client": "cd apps/client && bun run build",
+    "db:migrate": "cd apps/server && bunx drizzle-kit push",
+    "db:studio": "cd apps/server && bunx drizzle-kit studio"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
