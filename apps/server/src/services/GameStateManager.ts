@@ -6,6 +6,9 @@
  */
 
 import type { GameSession, Round, RoundSong } from '@blind-test/shared';
+import { logger } from '../utils/logger';
+
+const stateLogger = logger.child({ module: 'GameState' });
 
 interface ActiveGameState {
   session: GameSession;
@@ -30,7 +33,7 @@ class GameStateManager {
     this.activeSessions.set(session.id, state);
     this.roomSessions.set(roomId, session.id);
 
-    console.log(`[GameState] Registered session ${session.id} for room ${roomId}`);
+    stateLogger.debug('Registered session', { sessionId: session.id, roomId });
   }
 
   /**
@@ -86,7 +89,7 @@ class GameStateManager {
     if (sessionId) {
       this.activeSessions.delete(sessionId);
       this.roomSessions.delete(roomId);
-      console.log(`[GameState] Removed session for room ${roomId}`);
+      stateLogger.debug('Removed session', { sessionId, roomId });
     }
   }
 

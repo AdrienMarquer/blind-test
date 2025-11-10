@@ -7,6 +7,9 @@
 
 import type { ModeType } from '@blind-test/shared';
 import type { ModeHandler } from './types';
+import { logger } from '../utils/logger';
+
+const registryLogger = logger.child({ module: 'ModeRegistry' });
 
 /**
  * Singleton registry for all game modes
@@ -32,11 +35,11 @@ export class ModeRegistry {
    */
   register(handler: ModeHandler): void {
     if (this.handlers.has(handler.type)) {
-      console.warn(`[ModeRegistry] Overwriting existing handler for mode: ${handler.type}`);
+      registryLogger.warn('Overwriting existing mode handler', { modeType: handler.type });
     }
 
     this.handlers.set(handler.type, handler);
-    console.log(`[ModeRegistry] Registered mode: ${handler.type} (${handler.name})`);
+    registryLogger.debug('Registered mode', { modeType: handler.type, name: handler.name });
   }
 
   /**

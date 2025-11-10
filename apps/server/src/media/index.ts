@@ -15,6 +15,9 @@ import { VideoMediaHandler } from './VideoMediaHandler';
 import { TextQuestionMediaHandler } from './TextQuestionMediaHandler';
 
 import { mediaRegistry } from './MediaRegistry';
+import { logger } from '../utils/logger';
+
+const mediaLogger = logger.child({ module: 'MediaSystem' });
 
 // Register all available media types
 mediaRegistry.register(new MusicMediaHandler());
@@ -22,8 +25,10 @@ mediaRegistry.register(new PictureMediaHandler());
 mediaRegistry.register(new VideoMediaHandler());
 mediaRegistry.register(new TextQuestionMediaHandler());
 
-console.log('[Media System] Initialized with', mediaRegistry.getAvailableTypes().length, 'media types');
-console.log('[Media System] Available:', mediaRegistry.getAvailableTypes().join(', '));
+mediaLogger.info('Media system initialized', {
+  count: mediaRegistry.getAvailableTypes().length,
+  types: mediaRegistry.getAvailableTypes()
+});
 
 // Export the initialized registry
 export { mediaRegistry };

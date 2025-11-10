@@ -27,7 +27,7 @@ const SERVER_URL = getServerUrl();
  */
 export class GameEvents {
   // Song events
-  songStarted = $state<{ songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all' } | null>(null);
+  songStarted = $state<{ songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all'; songTitle?: string; songArtist?: string } | null>(null);
   songEnded = $state<{ songIndex: number; correctTitle: string; correctArtist: string } | null>(null);
 
   // Player events (gameplay)
@@ -45,6 +45,7 @@ export class GameEvents {
   // Round events
   roundStarted = $state<{ roundIndex: number; songCount: number; modeType: string } | null>(null);
   roundEnded = $state<{ roundIndex: number; scores: Record<string, number> } | null>(null);
+  gameEnded = $state<{ finalScores: import('@blind-test/shared').FinalScore[] } | null>(null);
 
   // Game control events
   gamePaused = $state<{ timestamp: number } | null>(null);
@@ -77,9 +78,15 @@ export class RoomSocket {
   // Reactive event stream
   events = new GameEvents();
 
+  // Timer state
+  songTimeRemaining = $state<number>(0);
+  answerTimeRemaining = $state<number>(0);
+  answerPlayerId = $state<string | null>(null);
+
   constructor(
     private roomId: string,
     private auth: {
+      token?: string;
       playerId?: string;
       playerName?: string;
       role?: 'master' | 'player';
@@ -95,7 +102,21 @@ export class RoomSocket {
       return;
     }
 
-    const wsUrl = `${SERVER_URL}/ws/rooms/${this.roomId}`;
+    // Build WebSocket URL with optional auth query parameters
+    let wsUrl = `${SERVER_URL}/ws/rooms/${this.roomId}`;
+    const params = new URLSearchParams();
+
+    if (this.auth.token) {
+      params.append('token', this.auth.token);
+    }
+    if (this.auth.playerId) {
+      params.append('playerId', this.auth.playerId);
+    }
+
+    if (params.toString()) {
+      wsUrl += `?${params.toString()}`;
+    }
+
     console.log('[WebSocket] Connecting to:', wsUrl);
 
     this.socket = new WebSocket(wsUrl);
@@ -233,6 +254,14 @@ export class RoomSocket {
         this.events.roundEnded = message.data;
         break;
 
+      case 'game:ended':
+        console.log('[WS] Received game:ended event', {
+          finalScoresCount: message.data.finalScores?.length,
+          scores: message.data.finalScores?.map(fs => ({ name: fs.playerName, score: fs.totalScore }))
+        });
+        this.events.gameEnded = message.data;
+        break;
+
       // Song Events - emit to reactive stream
       case 'song:started':
         this.events.songStarted = message.data;
@@ -240,6 +269,8 @@ export class RoomSocket {
 
       case 'song:ended':
         this.events.songEnded = message.data;
+        // Reset timer when song ends
+        this.songTimeRemaining = 0;
         break;
 
       // Gameplay - emit to reactive stream
@@ -270,6 +301,26 @@ export class RoomSocket {
 
       case 'game:skipped':
         this.events.gameSkipped = message.data;
+        break;
+
+      // Timer Events
+      case 'timer:song':
+        this.songTimeRemaining = message.data.timeRemaining;
+        break;
+
+      case 'timer:answer':
+        this.answerTimeRemaining = message.data.timeRemaining;
+        this.answerPlayerId = message.data.playerId;
+        break;
+
+      // Score Updates
+      case 'score:updated':
+        // Update player score in local players array
+        this.players = this.players.map(p =>
+          p.id === message.data.playerId
+            ? { ...p, score: message.data.score }
+            : p
+        );
         break;
     }
   }
@@ -369,6 +420,7 @@ export class RoomSocket {
 export function createRoomSocket(
   roomId: string,
   auth?: {
+    token?: string;
     playerId?: string;
     playerName?: string;
     role?: 'master' | 'player';

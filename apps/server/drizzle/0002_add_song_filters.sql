@@ -1,1 +1,0 @@
-ALTER TABLE `rounds` ADD `song_filters` text;

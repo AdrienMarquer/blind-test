@@ -6,6 +6,13 @@
 	import type { Room, Player } from '@blind-test/shared';
 	import MasterGameControl from '$lib/components/MasterGameControl.svelte';
 	import PlayerGameInterface from '$lib/components/PlayerGameInterface.svelte';
+	import RoomHeader from '$lib/components/room/RoomHeader.svelte';
+	import PlayersList from '$lib/components/room/PlayersList.svelte';
+	import GameConfig from '$lib/components/room/GameConfig.svelte';
+	import JoinSection from '$lib/components/room/JoinSection.svelte';
+	import QRSection from '$lib/components/room/QRSection.svelte';
+	import FinalScores from '$lib/components/room/FinalScores.svelte';
+	import type { FinalScore } from '@blind-test/shared';
 
 	const roomId = $derived($page.params.id);
 
@@ -18,6 +25,7 @@
 	let initialRoom = $state<Room | null>(null);
 	let isMaster = $state(false);
 	let currentPlayer = $state<Player | null>(null); // Current user's player object if they joined
+	let authToken = $state<string | null>(null); // Master or player token for authentication
 
 	// Game configuration
 	let songs = $state<any[]>([]);
@@ -49,6 +57,10 @@
 	let socketRoom = $state<Room | null>(null);
 	let socketPlayers = $state<Player[]>([]);
 
+	// Game ended state
+	let showFinalScores = $state(false);
+	let finalScores = $state<FinalScore[]>([]);
+
 	// Reactive access to socket state (prefer WebSocket data, fallback to HTTP)
 	const room = $derived(socketRoom || initialRoom);
 	const players = $derived(socketPlayers);
@@ -74,10 +86,9 @@
 						(p: Player) => p.id === currentPlayer.id
 					);
 					if (!playerStillExists) {
-						console.log('[Player] Saved player was removed, clearing localStorage');
-						const playerKey = `player_${roomId}`;
-						localStorage.removeItem(playerKey);
+						console.log('[Player] Saved player was removed from room');
 						currentPlayer = null;
+						authToken = null;
 					}
 				}
 
@@ -107,13 +118,34 @@
 			if (response.data) {
 				console.log('Joined room as:', response.data);
 
-				// Save player info to localStorage for persistence
-				const playerKey = `player_${roomId}`;
-				localStorage.setItem(playerKey, JSON.stringify(response.data));
+				// Store player info and token in memory
 				currentPlayer = response.data;
+				authToken = (response.data as any).token;
+
+				// Save to localStorage for reconnection
+				const storageKey = `room_${roomId}_auth`;
+				localStorage.setItem(storageKey, JSON.stringify({
+					token: authToken,
+					isMaster: false,
+					playerId: response.data.id,
+					playerName: response.data.name,
+					timestamp: Date.now()
+				}));
 
 				playerName = '';
-				console.log(`[Player] Saved player info for room ${roomId}`);
+				console.log(`[Player] Joined as ${response.data.name} with token, saved to localStorage`);
+
+				// Reconnect WebSocket with player token
+				if (roomSocket) {
+					roomSocket.disconnect();
+				}
+				roomSocket = createRoomSocket(roomId, {
+					role: 'player',
+					token: authToken || undefined,
+					playerId: currentPlayer.id
+				});
+				roomSocket.connect();
+
 				// Player join will be broadcast via WebSocket
 			} else {
 				error = 'Failed to join room';
@@ -138,6 +170,29 @@
 			error = err instanceof Error ? err.message : 'Failed to remove player';
 			console.error('Error removing player:', err);
 		}
+	}
+
+	function leaveRoom() {
+		if (!confirm('Leave this room? You can rejoin later.')) return;
+
+		// Clear localStorage
+		const storageKey = `room_${roomId}_auth`;
+		localStorage.removeItem(storageKey);
+
+		// Clear state
+		currentPlayer = null;
+		authToken = null;
+		isMaster = false;
+
+		// Disconnect socket
+		if (roomSocket) {
+			roomSocket.disconnect();
+		}
+
+		console.log('[Player] Left room, cleared session');
+
+		// Reload page to show join form
+		window.location.reload();
 	}
 
 	async function loadSongs() {
@@ -248,23 +303,72 @@
 		}
 	}
 
+	function handleBackToLobby() {
+		showFinalScores = false;
+		finalScores = [];
+		// Could also navigate to home page: window.location.href = '/';
+	}
+
+	function handlePlayAgain() {
+		showFinalScores = false;
+		finalScores = [];
+		showConfig = true;
+		loadSongs();
+	}
+
 	onMount(() => {
 		if (!roomId) return;
 
-		// Check if this user is the master of this room
-		const masterKey = `master_${roomId}`;
-		isMaster = localStorage.getItem(masterKey) === 'true';
+		// Try to restore session from localStorage
+		const storageKey = `room_${roomId}_auth`;
+		const savedAuth = localStorage.getItem(storageKey);
 
-		// Check if this user already joined as a player
-		const playerKey = `player_${roomId}`;
-		const savedPlayer = localStorage.getItem(playerKey);
-		if (savedPlayer && !isMaster) {
+		// Check if token provided in URL (master or player token)
+		const urlParams = new URLSearchParams(window.location.search);
+		const tokenFromUrl = urlParams.get('token');
+
+		if (tokenFromUrl) {
+			// New session from URL (room creation or join link)
+			authToken = tokenFromUrl;
+			isMaster = true; // Assume master if coming from URL
+
+			// Save to localStorage for reconnection
+			localStorage.setItem(storageKey, JSON.stringify({
+				token: tokenFromUrl,
+				isMaster: true,
+				timestamp: Date.now()
+			}));
+
+			console.log(`[Auth] Token detected in URL - assuming master role, saved to localStorage`);
+
+			// Clean URL (remove token from address bar for security)
+			const cleanUrl = window.location.pathname;
+			window.history.replaceState({}, '', cleanUrl);
+		} else if (savedAuth) {
+			// Restore session from localStorage
 			try {
-				currentPlayer = JSON.parse(savedPlayer);
-				console.log(`[Player] Restored player info:`, currentPlayer);
-			} catch (err) {
-				console.error('Failed to parse saved player info:', err);
-				localStorage.removeItem(playerKey);
+				const auth = JSON.parse(savedAuth);
+				authToken = auth.token;
+				isMaster = auth.isMaster || false;
+
+				// If player session, restore player info
+				if (!isMaster && auth.playerId && auth.playerName) {
+					currentPlayer = {
+						id: auth.playerId,
+						name: auth.playerName,
+						roomId: roomId,
+						score: 0,
+						isConnected: false,
+						createdAt: new Date(auth.timestamp),
+						updatedAt: new Date(auth.timestamp)
+					} as Player;
+					console.log(`[Auth] Restored player session: ${auth.playerName}`);
+				}
+
+				console.log(`[Auth] Restored session from localStorage - ${isMaster ? 'MASTER' : 'PLAYER'} role`);
+			} catch (e) {
+				console.error('[Auth] Failed to parse saved auth:', e);
+				localStorage.removeItem(storageKey);
 			}
 		}
 
@@ -272,8 +376,12 @@
 
 		loadRoom();
 
-		// Create WebSocket connection
-		roomSocket = createRoomSocket(roomId, { role: isMaster ? 'master' : 'player' });
+		// Create WebSocket connection with auth token if available
+		roomSocket = createRoomSocket(roomId, {
+			role: isMaster ? 'master' : 'player',
+			token: authToken || undefined,
+			playerId: currentPlayer?.id
+		});
 		roomSocket.connect();
 
 		// Sync socket state to local reactive state
@@ -283,6 +391,15 @@
 				socketError = roomSocket.error;
 				socketRoom = roomSocket.room;
 				socketPlayers = roomSocket.players;
+			}
+		});
+
+		// Listen for game:ended event
+		$effect(() => {
+			if (roomSocket?.events.gameEnded) {
+				console.log('[Room] Game ended - showing final scores', roomSocket.events.gameEnded);
+				finalScores = roomSocket.events.gameEnded.finalScores;
+				showFinalScores = true;
 			}
 		});
 	});
@@ -331,45 +448,17 @@
 		{/if}
 
 		{#if room.status === 'lobby' && isMaster}
-			<section class="qr-section">
-				<div class="qr-container">
-					<h2>📱 Scan to Join</h2>
-					<img src={room.qrCode} alt="QR Code to join room" class="qr-code" />
-					<p class="qr-hint">
-						Players can scan this QR code with their phone camera to join the room
-					</p>
-				</div>
-			</section>
+			<QRSection qrCode={room.qrCode} />
 		{/if}
 
 		{#if room.status === 'lobby' && !isMaster}
-			{#if !currentPlayer}
-				<section class="join-section">
-					<h2>Join Room</h2>
-					<form onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
-						<input
-							type="text"
-							placeholder="Enter your name"
-							bind:value={playerName}
-							disabled={joining}
-							required
-						/>
-						<button type="submit" disabled={joining || !playerName.trim()}>
-							{joining ? 'Joining...' : 'Join'}
-						</button>
-					</form>
-				</section>
-			{:else}
-				<section class="player-status">
-					<div class="status-card">
-						<span class="status-icon">✅</span>
-						<div class="status-info">
-							<h3>You are playing as:</h3>
-							<p class="player-name-display">{currentPlayer.name}</p>
-						</div>
-					</div>
-				</section>
-			{/if}
+			<JoinSection
+				{currentPlayer}
+				bind:playerName
+				{joining}
+				onJoin={joinRoom}
+				onLeave={leaveRoom}
+			/>
 		{/if}
 
 		<section class="players-section">
@@ -422,143 +511,22 @@
 					</button>
 				</section>
 			{:else}
-				<section class="config-section">
-					<div class="config-header">
-						<h2>Game Configuration</h2>
-						<button class="close-button" onclick={() => showConfig = false}>✕</button>
-					</div>
-
-					<div class="config-tabs">
-						<h3>Song Selection</h3>
-						{#if songs.length === 0}
-							<p class="info">No songs in library. <a href="/music">Upload some music</a> first!</p>
-						{:else}
-							<!-- Filter by Metadata -->
-							<div class="filter-toggle">
-								<label>
-									<input type="checkbox" bind:checked={useFilters} />
-									Use metadata filters (genre, year)
-								</label>
-							</div>
-
-							{#if useFilters}
-								<div class="filter-section">
-									<h4>Filters</h4>
-
-									<!-- Genre Multi-Select -->
-									{#if availableGenres.length > 0}
-										<div class="filter-group">
-											<label>Genres ({selectedGenres.length} selected):</label>
-											<div class="genre-chips">
-												{#each availableGenres as genre}
-													<button
-														class="chip"
-														class:selected={selectedGenres.includes(genre)}
-														onclick={() => toggleGenre(genre)}
-													>
-														{genre}
-													</button>
-												{/each}
-											</div>
-										</div>
-									{/if}
-
-									<!-- Year Range -->
-									<div class="filter-group">
-										<label>Year Range:</label>
-										<div class="year-inputs">
-											<input
-												type="number"
-												placeholder="From"
-												bind:value={yearMin}
-												min="1900"
-												max="2100"
-											/>
-											<span>to</span>
-											<input
-												type="number"
-												placeholder="To"
-												bind:value={yearMax}
-												min="1900"
-												max="2100"
-											/>
-										</div>
-									</div>
-
-									<!-- Song Count -->
-									<div class="filter-group">
-										<label>Number of songs:</label>
-										<input type="number" bind:value={songCount} min="1" max="100" />
-									</div>
-								</div>
-							{:else}
-								<!-- Manual Selection -->
-								<div class="song-count-controls">
-									<label>
-										Use Random Songs:
-										<input type="number" bind:value={songCount} min="1" max="100" />
-									</label>
-									<span class="or">OR</span>
-									<span>Select specific songs ({selectedSongIds.length} selected)</span>
-								</div>
-
-								<div class="songs-grid-mini">
-									{#each songs as song (song.id)}
-										<button
-											class="song-item"
-											class:selected={selectedSongIds.includes(song.id)}
-											onclick={() => toggleSongSelection(song.id)}
-										>
-											<span class="song-title">{song.title}</span>
-											<span class="song-artist">{song.artist}</span>
-										</button>
-									{/each}
-								</div>
-							{/if}
-						{/if}
-					</div>
-
-					<!-- Audio Playback Location -->
-					<div class="config-tabs">
-						<h3>Audio Playback</h3>
-						<div class="audio-options">
-							<label class="radio-option">
-								<input type="radio" bind:group={audioPlayback} value="master" />
-								<div class="option-content">
-									<strong>Master Only (Default)</strong>
-									<span>Audio plays only on the master device</span>
-								</div>
-							</label>
-							<label class="radio-option">
-								<input type="radio" bind:group={audioPlayback} value="players" />
-								<div class="option-content">
-									<strong>Players Only</strong>
-									<span>Audio plays on all player devices</span>
-								</div>
-							</label>
-							<label class="radio-option">
-								<input type="radio" bind:group={audioPlayback} value="all" />
-								<div class="option-content">
-									<strong>All Devices</strong>
-									<span>Audio plays on both master and players</span>
-								</div>
-							</label>
-						</div>
-					</div>
-
-					<div class="config-actions">
-						<button class="cancel-button" onclick={() => showConfig = false}>
-							Cancel
-						</button>
-						<button
-							class="start-button"
-							onclick={startGame}
-							disabled={starting || (songs.length === 0)}
-						>
-							{starting ? 'Starting...' : `Start Game${selectedSongIds.length > 0 ? ` (${selectedSongIds.length} songs)` : ` (${songCount} random)`}`}
-						</button>
-					</div>
-				</section>
+				<GameConfig
+					{songs}
+					bind:selectedSongIds
+					bind:songCount
+					bind:useFilters
+					bind:selectedGenres
+					bind:yearMin
+					bind:yearMax
+					bind:audioPlayback
+					{availableGenres}
+					{starting}
+					onToggleSong={toggleSongSelection}
+					onToggleGenre={toggleGenre}
+					onStartGame={startGame}
+					onCancel={() => showConfig = false}
+				/>
 			{/if}
 		{:else if room.status === 'lobby' && players.length < 2 && isMaster}
 			<section class="game-controls">
@@ -570,7 +538,16 @@
 			</section>
 		{/if}
 
-		{#if room.status === 'playing'}
+		{#if showFinalScores && finalScores.length > 0}
+			<!-- Final Scores Screen (shown to all players and master) -->
+			<section class="final-scores-section">
+				<FinalScores
+					{finalScores}
+					onBackToLobby={isMaster ? handleBackToLobby : undefined}
+					onPlayAgain={isMaster ? handlePlayAgain : undefined}
+				/>
+			</section>
+		{:else if room.status === 'playing'}
 			<section class="game-section">
 				{#if isMaster}
 					<!-- Master Control Panel -->
@@ -706,30 +683,6 @@
 		border-radius: 0.5rem;
 	}
 
-	.join-section form {
-		display: flex;
-		gap: 1rem;
-	}
-
-	input {
-		flex: 1;
-		padding: 0.75rem;
-		font-size: 1rem;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		transition: border-color 0.2s;
-	}
-
-	input:focus {
-		outline: none;
-		border-color: #3b82f6;
-	}
-
-	input:disabled {
-		background-color: #f3f4f6;
-		cursor: not-allowed;
-	}
-
 	button {
 		padding: 0.75rem 1.5rem;
 		font-size: 1rem;
@@ -851,6 +804,12 @@
 		background-color: #f9fafb;
 	}
 
+	.final-scores-section {
+		background: transparent;
+		border: none;
+		padding: 0;
+	}
+
 	.config-button {
 		width: 100%;
 		padding: 1rem;
@@ -867,379 +826,5 @@
 
 	.config-button:hover {
 		background-color: #4b5563;
-	}
-
-	.config-section {
-		padding: 1.5rem;
-		background-color: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-	}
-
-	.config-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1.5rem;
-	}
-
-	.config-header h2 {
-		margin: 0;
-		font-size: 1.5rem;
-	}
-
-	.close-button {
-		padding: 0.5rem;
-		background: none;
-		border: none;
-		font-size: 1.5rem;
-		cursor: pointer;
-		color: #6b7280;
-	}
-
-	.close-button:hover {
-		color: #374151;
-	}
-
-	.config-tabs h3 {
-		margin: 0 0 1rem 0;
-		font-size: 1.125rem;
-	}
-
-	.song-count-controls {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		margin-bottom: 1rem;
-		padding: 1rem;
-		background-color: #f9fafb;
-		border-radius: 0.375rem;
-		flex-wrap: wrap;
-	}
-
-	.song-count-controls label {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.song-count-controls input[type="number"] {
-		width: 80px;
-		padding: 0.5rem;
-		border: 1px solid #d1d5db;
-		border-radius: 0.25rem;
-	}
-
-	.song-count-controls .or {
-		font-weight: 600;
-		color: #6b7280;
-	}
-
-	.songs-grid-mini {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-		gap: 0.5rem;
-		max-height: 300px;
-		overflow-y: auto;
-		padding: 0.5rem;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.375rem;
-	}
-
-	.song-item {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		padding: 0.75rem;
-		background-color: #f9fafb;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.375rem;
-		cursor: pointer;
-		transition: all 0.2s;
-		text-align: left;
-	}
-
-	.song-item:hover {
-		border-color: #3b82f6;
-		background-color: #eff6ff;
-	}
-
-	.song-item.selected {
-		border-color: #10b981;
-		background-color: #d1fae5;
-	}
-
-	.song-title {
-		font-weight: 600;
-		color: #1f2937;
-		font-size: 0.875rem;
-	}
-
-	.song-artist {
-		color: #6b7280;
-		font-size: 0.75rem;
-	}
-
-	.config-actions {
-		display: flex;
-		gap: 1rem;
-		margin-top: 1.5rem;
-	}
-
-	.config-actions .start-button {
-		flex: 2;
-	}
-
-	.cancel-button {
-		flex: 1;
-		padding: 1rem;
-		font-size: 1rem;
-		font-weight: 600;
-		color: #374151;
-		background-color: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.cancel-button:hover {
-		border-color: #9ca3af;
-		background-color: #f9fafb;
-	}
-
-	.qr-section {
-		margin-bottom: 2rem;
-	}
-
-	.qr-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		padding: 2rem;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		border-radius: 1rem;
-		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-	}
-
-	.qr-container h2 {
-		margin: 0 0 1.5rem 0;
-		color: white;
-		font-size: 1.5rem;
-		text-align: center;
-	}
-
-	.qr-code {
-		width: 300px;
-		height: 300px;
-		padding: 1rem;
-		background: white;
-		border-radius: 0.75rem;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-		image-rendering: pixelated;
-		image-rendering: -moz-crisp-edges;
-		image-rendering: crisp-edges;
-	}
-
-	.qr-hint {
-		margin: 1.5rem 0 0 0;
-		color: white;
-		text-align: center;
-		font-size: 0.875rem;
-		max-width: 400px;
-		opacity: 0.9;
-	}
-
-	.player-status {
-		margin-bottom: 2rem;
-	}
-
-	.status-card {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		padding: 1.5rem;
-		background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-		border-radius: 0.75rem;
-		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-	}
-
-	.status-icon {
-		font-size: 2.5rem;
-		flex-shrink: 0;
-	}
-
-	.status-info {
-		flex: 1;
-	}
-
-	.status-info h3 {
-		margin: 0 0 0.5rem 0;
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: rgba(255, 255, 255, 0.9);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.player-name-display {
-		margin: 0;
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: white;
-	}
-
-	/* Filter UI Styles */
-	.filter-toggle {
-		padding: 1rem;
-		background-color: #f3f4f6;
-		border-radius: 0.375rem;
-		margin-bottom: 1rem;
-	}
-
-	.filter-toggle label {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		cursor: pointer;
-		font-weight: 600;
-	}
-
-	.filter-toggle input[type="checkbox"] {
-		width: auto;
-		cursor: pointer;
-	}
-
-	.filter-section {
-		padding: 1rem;
-		background-color: #f9fafb;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.375rem;
-		margin-bottom: 1rem;
-	}
-
-	.filter-section h4 {
-		margin: 0 0 1rem 0;
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: #6b7280;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.filter-group {
-		margin-bottom: 1rem;
-	}
-
-	.filter-group:last-child {
-		margin-bottom: 0;
-	}
-
-	.filter-group > label {
-		display: block;
-		margin-bottom: 0.5rem;
-		font-weight: 600;
-		color: #374151;
-		font-size: 0.875rem;
-	}
-
-	.genre-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
-
-	.chip {
-		padding: 0.5rem 1rem;
-		background-color: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 1rem;
-		font-size: 0.875rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-		color: #374151;
-	}
-
-	.chip:hover {
-		border-color: #3b82f6;
-		background-color: #eff6ff;
-	}
-
-	.chip.selected {
-		border-color: #10b981;
-		background-color: #d1fae5;
-		color: #065f46;
-	}
-
-	.year-inputs {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.year-inputs input[type="number"] {
-		width: 100px;
-		padding: 0.5rem;
-		border: 1px solid #d1d5db;
-		border-radius: 0.25rem;
-	}
-
-	.year-inputs span {
-		color: #6b7280;
-		font-weight: 500;
-	}
-
-	/* Audio Playback Styles */
-	.audio-options {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.radio-option {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-		padding: 1rem;
-		background-color: #f9fafb;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.radio-option:hover {
-		border-color: #3b82f6;
-		background-color: #eff6ff;
-	}
-
-	.radio-option input[type="radio"] {
-		width: auto;
-		margin-top: 0.25rem;
-		cursor: pointer;
-	}
-
-	.option-content {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.option-content strong {
-		color: #1f2937;
-		font-size: 0.9375rem;
-	}
-
-	.option-content span {
-		color: #6b7280;
-		font-size: 0.8125rem;
-	}
-
-	@media (max-width: 640px) {
-		.qr-code {
-			width: 250px;
-			height: 250px;
-		}
 	}
 </style>

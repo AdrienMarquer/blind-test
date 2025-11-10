@@ -4,8 +4,23 @@
 
 import { eq, like, inArray, sql } from 'drizzle-orm';
 import type { Song, Repository } from '@blind-test/shared';
-import { generateId } from '@blind-test/shared';
+import { generateId, shuffle, SONG_CONFIG } from '@blind-test/shared';
 import { db, schema } from '../db';
+import { logger } from '../utils/logger';
+
+const songLogger = logger.child({ module: 'SongRepository' });
+
+/**
+ * DTO for updating song fields
+ */
+interface SongUpdateDTO {
+  title?: string;
+  artist?: string;
+  album?: string | null;
+  year?: number;
+  genre?: string | null;
+  clipStart?: number;
+}
 
 export class SongRepository implements Repository<Song> {
   /**
@@ -26,6 +41,11 @@ export class SongRepository implements Repository<Song> {
       createdAt: new Date(dbSong.createdAt),
       fileSize: dbSong.fileSize,
       format: dbSong.format,
+      language: dbSong.language || undefined,
+      subgenre: dbSong.subgenre || undefined,
+      spotifyId: dbSong.spotifyId || undefined,
+      youtubeId: dbSong.youtubeId || undefined,
+      source: dbSong.source,
     };
   }
 
@@ -125,7 +145,7 @@ export class SongRepository implements Repository<Song> {
       year: data.year,
       genre: data.genre || null,
       duration: data.duration,
-      clipStart: data.clipStart || 30,
+      clipStart: data.clipStart || SONG_CONFIG.DEFAULT_CLIP_START,
       createdAt: now,
       fileSize: data.fileSize,
       format: data.format,
@@ -133,16 +153,20 @@ export class SongRepository implements Repository<Song> {
 
     await db.insert(schema.songs).values(newSong);
 
-    return this.toSong(newSong as any);
+    // Fetch the created song to ensure proper type conversion
+    const created = await this.findById(id);
+    if (!created) throw new Error('Failed to create song');
+    return created;
   }
 
   async update(id: string, data: Partial<Song>): Promise<Song> {
     const existing = await this.findById(id);
     if (!existing) throw new Error('Song not found');
 
-    const updateData: any = {};
+    // Build typed update DTO with only allowed fields
+    const updateData: SongUpdateDTO = {};
 
-    // Only update allowed fields
+    // Only update allowed fields (explicit whitelisting)
     if (data.title !== undefined) updateData.title = data.title;
     if (data.artist !== undefined) updateData.artist = data.artist;
     if (data.album !== undefined) updateData.album = data.album;
@@ -155,7 +179,10 @@ export class SongRepository implements Repository<Song> {
       .set(updateData)
       .where(eq(schema.songs.id, id));
 
-    return this.findById(id) as Promise<Song>;
+    // Safe because we just updated it
+    const updated = await this.findById(id);
+    if (!updated) throw new Error('Failed to fetch updated song');
+    return updated;
   }
 
   async delete(id: string): Promise<void> {
@@ -182,14 +209,8 @@ export class SongRepository implements Repository<Song> {
     // Get all songs and shuffle in memory (fine for moderate song libraries)
     const allSongs = await this.findAll();
 
-    // Shuffle using Fisher-Yates
-    const shuffled = [...allSongs];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    return shuffled.slice(0, count);
+    // Shuffle using shared utility (Fisher-Yates algorithm)
+    return shuffle([...allSongs]).slice(0, count);
   }
 
   /**
@@ -211,13 +232,13 @@ export class SongRepository implements Repository<Song> {
     artistName?: string;
     songCount?: number;
   }): Promise<Song[]> {
-    console.log('[SongRepository] Finding songs with filters:', filters);
+    songLogger.debug('Finding songs with filters', { filters });
 
     // Start with base query
     let query = db.select().from(schema.songs);
 
-    // Build WHERE conditions
-    const conditions: any[] = [];
+    // Build WHERE conditions using sql template
+    const conditions: ReturnType<typeof sql>[] = [];
 
     // Handle genre (single or multiple with OR logic)
     if (filters.genre) {
@@ -264,19 +285,73 @@ export class SongRepository implements Repository<Song> {
     const results = await query;
     let songs = results.map(s => this.toSong(s));
 
-    console.log(`[SongRepository] Found ${songs.length} songs matching filters`);
+    songLogger.debug('Found songs matching filters', { count: songs.length });
 
     // Shuffle and limit if songCount is specified
     if (filters.songCount && filters.songCount < songs.length) {
-      // Shuffle using Fisher-Yates
-      const shuffled = [...songs];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      songs = shuffled.slice(0, filters.songCount);
-      console.log(`[SongRepository] Randomly selected ${songs.length} songs from ${results.length} matches`);
+      // Shuffle using shared utility (Fisher-Yates algorithm)
+      songs = shuffle([...songs]).slice(0, filters.songCount);
+      songLogger.debug('Randomly selected songs', { selected: songs.length, total: results.length });
     }
+
+    return songs;
+  }
+
+  /**
+   * Find similar songs based on metadata criteria
+   * Used for answer generation in multiple choice mode
+   */
+  async findSimilar(criteria: {
+    genre?: string;
+    yearMin?: number;
+    yearMax?: number;
+    language?: string;
+    excludeSongId?: string;
+    limit?: number;
+  }): Promise<Song[]> {
+    songLogger.debug('Finding similar songs', criteria);
+
+    let query = db.select().from(schema.songs);
+
+    const conditions: any[] = [];
+
+    // Exclude specific song
+    if (criteria.excludeSongId) {
+      conditions.push(sql`${schema.songs.id} != ${criteria.excludeSongId}`);
+    }
+
+    // Match genre
+    if (criteria.genre) {
+      conditions.push(eq(schema.songs.genre, criteria.genre));
+    }
+
+    // Year range
+    if (criteria.yearMin !== undefined) {
+      conditions.push(sql`${schema.songs.year} >= ${criteria.yearMin}`);
+    }
+    if (criteria.yearMax !== undefined) {
+      conditions.push(sql`${schema.songs.year} <= ${criteria.yearMax}`);
+    }
+
+    // Match language
+    if (criteria.language) {
+      conditions.push(eq(schema.songs.language, criteria.language));
+    }
+
+    // Apply all conditions
+    if (conditions.length > 0) {
+      query = query.where(sql`${sql.join(conditions, sql` AND `)}`);
+    }
+
+    // Apply limit
+    if (criteria.limit) {
+      query = query.limit(criteria.limit);
+    }
+
+    const results = await query;
+    const songs = results.map(s => this.toSong(s));
+
+    songLogger.debug('Found similar songs', { count: songs.length });
 
     return songs;
   }

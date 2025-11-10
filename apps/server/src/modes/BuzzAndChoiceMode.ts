@@ -14,6 +14,7 @@
  */
 
 import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
+import { shuffle } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
 import { mediaRegistry } from '../media';
 
@@ -51,33 +52,60 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
     const wrongArtists = mediaHandler.generateWrongChoices(mediaContent, allSongs, 3, 'artist');
 
     // Combine correct answer with wrong answers and shuffle
-    song.titleChoices = this.shuffleArray([mediaContent.title, ...wrongTitles]);
-    song.artistChoices = this.shuffleArray([mediaContent.artist || '', ...wrongArtists]);
+    song.titleChoices = shuffle([mediaContent.title, ...wrongTitles]);
+    song.artistChoices = shuffle([mediaContent.artist || '', ...wrongArtists]);
 
-    console.log(`[BuzzAndChoice] Generated choices for ${mediaType}: "${correctSong.title}"`);
+    this.modeLogger.debug('Generated choices', { mediaType, songTitle: correctSong.title });
   }
 
   /**
    * Handle player buzzing in
    */
-  async handleBuzz(playerId: string, song: RoundSong): Promise<boolean> {
+  async handleBuzz(playerId: string, song: RoundSong, buzzTimestamp?: number): Promise<boolean> {
+    const timestamp = buzzTimestamp || Date.now();
+
     // Check if player can buzz
     if (!this.canBuzz(playerId, song)) {
-      console.log(`[BuzzAndChoice] Player ${playerId} cannot buzz (locked out or song not playing)`);
+      this.modeLogger.debug('Buzz rejected - player cannot buzz', { playerId, songIndex: song.index });
       return false;
     }
 
     // Check if someone else is already answering
     if (song.activePlayerId) {
-      console.log(`[BuzzAndChoice] Player ${playerId} buzz rejected (${song.activePlayerId} is active)`);
+      this.modeLogger.debug('Buzz rejected - another player active', { playerId, activePlayerId: song.activePlayerId });
       return false;
     }
+
+    // Store buzz timestamp for this player (for race condition resolution)
+    if (!song.buzzTimestamps) {
+      song.buzzTimestamps = new Map();
+    }
+
+    // Check if another player buzzed first (race condition check)
+    if (song.buzzTimestamps.size > 0) {
+      // Someone else also buzzed - use timestamps to determine winner
+      const otherBuzzes = Array.from(song.buzzTimestamps.entries());
+      const earliestBuzz = otherBuzzes.sort((a, b) => a[1] - b[1])[0];
+
+      if (earliestBuzz[1] < timestamp) {
+        // Another player buzzed first
+        this.modeLogger.debug('Buzz rejected - another player buzzed first', {
+          playerId,
+          winnerPlayerId: earliestBuzz[0],
+          timeDiff: timestamp - earliestBuzz[1]
+        });
+        return false;
+      }
+    }
+
+    // Record this buzz
+    song.buzzTimestamps.set(playerId, timestamp);
 
     // Accept the buzz
     song.activePlayerId = playerId;
     song.status = 'answering';
 
-    console.log(`[BuzzAndChoice] Player ${playerId} buzzed in!`);
+    this.modeLogger.debug('Player buzzed in', { playerId, songIndex: song.index, timestamp });
     return true;
   }
 
@@ -198,28 +226,33 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
 
   /**
    * Check if song should end
+   *
+   * Override to accept optional activePlayerCount for all-locked-out detection
    */
-  shouldEndSong(song: RoundSong): boolean {
+  shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean {
     // Song ends if finished status
     if (song.status === 'finished') {
       return true;
     }
 
-    // TODO: Check if timer expired (needs timer implementation)
-    // TODO: Check if all players locked out
+    // Check if someone answered both title and artist correctly
+    const titleAnswer = song.answers.find(a => a.type === 'title' && a.isCorrect);
+    const artistAnswer = song.answers.find(a => a.type === 'artist' && a.isCorrect);
+    if (titleAnswer && artistAnswer) {
+      return true;
+    }
+
+    // Check if all active players are locked out (nobody left to buzz)
+    if (activePlayerCount !== undefined && song.lockedOutPlayerIds.length >= activePlayerCount) {
+      this.modeLogger.debug('All players locked out - ending song', {
+        lockedOut: song.lockedOutPlayerIds.length,
+        active: activePlayerCount
+      });
+      return true;
+    }
+
+    // Timer expiry is handled by GameService
 
     return false;
-  }
-
-  /**
-   * Shuffle array (Fisher-Yates algorithm)
-   */
-  private shuffleArray<T>(array: T[]): T[] {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
   }
 }

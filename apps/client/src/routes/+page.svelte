@@ -44,13 +44,16 @@
 			if (response.data) {
 				console.log('Room created:', response.data);
 				const roomId = response.data.id;
+				const masterToken = (response.data as any).masterToken;
 
-				// Mark this user as the master of this room
-				localStorage.setItem(`master_${roomId}`, 'true');
-				console.log(`[Master] User marked as master of room ${roomId}`);
-
-				// Navigate to the room
-				window.location.href = `/room/${roomId}`;
+				// Store master token (in-memory via URL param, no localStorage)
+				if (masterToken) {
+					console.log(`[Master] Navigating with master token for room ${roomId}`);
+					window.location.href = `/room/${roomId}?token=${masterToken}`;
+				} else {
+					console.warn('[Master] No masterToken in response, navigating without auth');
+					window.location.href = `/room/${roomId}`;
+				}
 			} else {
 				error = 'Failed to create room';
 			}

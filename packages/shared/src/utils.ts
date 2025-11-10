@@ -4,6 +4,7 @@
 
 import type { ModeParams, Mode, Round } from './types';
 import { SYSTEM_DEFAULTS } from './types';
+import { ROOM_CONFIG, PLAYER_CONFIG, VALIDATION_PATTERNS } from './constants';
 
 // ============================================================================
 // ID Generation
@@ -24,7 +25,7 @@ export function generateRoomCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < ROOM_CONFIG.CODE_LENGTH; i++) {
     const randomIndex = Math.floor(Math.random() * chars.length);
     code += chars[randomIndex];
   }
@@ -103,32 +104,28 @@ export function generateRoomJoinURL(roomId: string, serverIp: string, port: numb
 
 /**
  * Validate room name
- * - Min length: 1 character
- * - Max length: 50 characters
- * - Allowed: alphanumeric, spaces, hyphens, underscores
+ * Uses ROOM_CONFIG constants for min/max length
+ * Allowed: alphanumeric, spaces, hyphens, underscores
  */
 export function validateRoomName(name: string): boolean {
-  if (!name || name.length < 1 || name.length > 50) {
+  if (!name || name.length < ROOM_CONFIG.NAME_MIN_LENGTH || name.length > ROOM_CONFIG.NAME_MAX_LENGTH) {
     return false;
   }
 
-  const validPattern = /^[a-zA-Z0-9\s\-_]+$/;
-  return validPattern.test(name);
+  return VALIDATION_PATTERNS.ROOM_NAME.test(name);
 }
 
 /**
  * Validate player name
- * - Min length: 1 character
- * - Max length: 20 characters
- * - Allowed: alphanumeric, spaces
+ * Uses PLAYER_CONFIG constants for min/max length
+ * Allowed: alphanumeric, spaces
  */
 export function validatePlayerName(name: string): boolean {
-  if (!name || name.length < 1 || name.length > 20) {
+  if (!name || name.length < PLAYER_CONFIG.NAME_MIN_LENGTH || name.length > PLAYER_CONFIG.NAME_MAX_LENGTH) {
     return false;
   }
 
-  const validPattern = /^[a-zA-Z0-9\s]+$/;
-  return validPattern.test(name);
+  return VALIDATION_PATTERNS.PLAYER_NAME.test(name);
 }
 
 // ============================================================================
@@ -157,4 +154,23 @@ export function calculateTimeRemaining(startedAt: Date, duration: number): numbe
  */
 export function calculateAnswerTime(buzzedAt: Date, answeredAt: Date): number {
   return answeredAt.getTime() - buzzedAt.getTime();
+}
+
+// ============================================================================
+// Array Utilities
+// ============================================================================
+
+/**
+ * Fisher-Yates shuffle algorithm - randomly shuffle an array
+ * This modifies the array in place and returns it for convenience
+ *
+ * @param array - Array to shuffle (will be modified in place)
+ * @returns The same array, shuffled
+ */
+export function shuffle<T>(array: T[]): T[] {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
 }

@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import type { Room } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
+	import { api } from '$lib/api';
 
 	// Props
 	const { room, socket }: { room: Room; socket: RoomSocket } = $props();
@@ -8,12 +10,16 @@
 	// Game state
 	let currentSong = $state(0);
 	let totalSongs = $state(10);
-	let timeRemaining = $state(15);
 	let isPaused = $state(false);
 	let isPlaying = $state(false);
 	let activePlayerName = $state<string>('Waiting for buzz...');
 	let currentTitle = $state('Loading...');
 	let currentArtist = $state('');
+	let statusMessage = $state<{ type: 'success' | 'info' | 'warning'; text: string } | null>(null);
+	let statusTimeout: number | null = null; // NOT a $state - just a regular variable for timer ID
+
+	// Reactive timer values from socket
+	const timeRemaining = $derived(socket.songTimeRemaining);
 
 	// Audio player
 	let audioElement: HTMLAudioElement | null = $state(null);
@@ -48,10 +54,25 @@
 		socket.skipSong();
 	}
 
-	function handleEndGame() {
-		if (confirm('Are you sure you want to end the game?')) {
-			// TODO: Implement end game logic
-			console.log('Ending game...');
+	async function handleEndGame() {
+		if (!confirm('Are you sure you want to end the game? This will calculate final scores.')) {
+			return;
+		}
+
+		try {
+			console.log('[Master] Ending game...', { roomId: room.id });
+
+			const response = await api.api.game[room.id].end.post();
+
+			if (response.data) {
+				console.log('[Master] Game ended successfully', response.data);
+			} else if (response.error) {
+				console.error('[Master] Failed to end game:', response.error);
+				alert(`Failed to end game: ${response.error.value}`);
+			}
+		} catch (err) {
+			console.error('[Master] Error ending game:', err);
+			alert('Failed to end game. Please try again.');
 		}
 	}
 
@@ -65,6 +86,7 @@
 		if (event) {
 			totalSongs = event.songCount;
 			isPlaying = true;
+			socket.events.clear('roundStarted');
 		}
 	});
 
@@ -72,11 +94,21 @@
 	$effect(() => {
 		const event = socket.events.songStarted;
 		if (event) {
+			console.log('[Master] 🆕 NEW SONG STARTED', {
+				songIndex: event.songIndex,
+				songTitle: event.songTitle,
+				songArtist: event.songArtist,
+				duration: event.duration
+			});
+
 			currentSong = event.songIndex;
-			timeRemaining = event.duration;
 			activePlayerName = 'Waiting for buzz...';
-			currentTitle = `Song ${event.songIndex + 1}`;
-			currentArtist = '';
+			// Master sees the actual song title and artist
+			currentTitle = event.songTitle || `Song ${event.songIndex + 1}`;
+			currentArtist = event.songArtist || '';
+
+			// Clear any old status messages
+			statusMessage = null;
 
 			// Play audio if configured for master
 			if (audioElement && (event.audioPlayback === 'master' || event.audioPlayback === 'all')) {
@@ -104,6 +136,7 @@
 			} else {
 				console.log(`[Master] Not playing audio (mode: ${event.audioPlayback})`);
 			}
+			socket.events.clear('songStarted');
 		}
 	});
 
@@ -114,6 +147,30 @@
 			// Find player name from socket.players
 			const player = socket.players.find((p) => p.id === event.playerId);
 			activePlayerName = player?.name || event.playerName || 'Unknown Player';
+			socket.events.clear('playerBuzzed');
+		}
+	});
+
+	// Subscribe to answer:result event (show winner notifications)
+	$effect(() => {
+		const event = socket.events.answerResult;
+		if (event && event.isCorrect) {
+			// Clear any existing timeout
+			if (statusTimeout) {
+				clearTimeout(statusTimeout);
+			}
+
+			const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+			statusMessage = {
+				type: 'success',
+				text: `🎉 ${event.playerName} got the ${answerTypeText} correct! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
+			};
+
+			// Auto-clear after 4 seconds
+			statusTimeout = window.setTimeout(() => {
+				statusMessage = null;
+			}, 4000);
+			socket.events.clear('answerResult');
 		}
 	});
 
@@ -121,9 +178,31 @@
 	$effect(() => {
 		const event = socket.events.songEnded;
 		if (event) {
+			console.log('[Master] 🏁 SONG ENDED - Revealing answer', {
+				correctTitle: event.correctTitle,
+				correctArtist: event.correctArtist
+			});
+
 			currentTitle = event.correctTitle;
 			currentArtist = event.correctArtist;
 			activePlayerName = 'Song ended';
+
+			console.log('[Master] 👀 Answer reveal phase (5 seconds)');
+
+			// Show correct answer banner
+			if (statusTimeout) {
+				clearTimeout(statusTimeout);
+			}
+			statusMessage = {
+				type: 'info',
+				text: `✅ Correct Answer: "${event.correctTitle}" by ${event.correctArtist}`
+			};
+
+			// Clear after 4 seconds before next song starts
+			statusTimeout = window.setTimeout(() => {
+				statusMessage = null;
+			}, 4000);
+			socket.events.clear('songEnded');
 		}
 	});
 
@@ -132,6 +211,7 @@
 		const event = socket.events.gamePaused;
 		if (event) {
 			isPaused = true;
+			socket.events.clear('gamePaused');
 		}
 	});
 
@@ -140,6 +220,7 @@
 		const event = socket.events.gameResumed;
 		if (event) {
 			isPaused = false;
+			socket.events.clear('gameResumed');
 		}
 	});
 
@@ -148,6 +229,23 @@
 		const event = socket.events.roundEnded;
 		if (event) {
 			isPlaying = false;
+			socket.events.clear('roundEnded');
+		}
+	});
+
+	// Cleanup on component unmount
+	onDestroy(() => {
+		// Clear any pending status timeout
+		if (statusTimeout) {
+			clearTimeout(statusTimeout);
+			statusTimeout = null;
+		}
+
+		// Stop and clean up audio element
+		if (audioElement) {
+			audioElement.pause();
+			audioElement.currentTime = 0;
+			audioElement.src = '';
 		}
 	});
 </script>
@@ -159,6 +257,13 @@
 			Song {currentSong + 1} / {totalSongs}
 		</div>
 	</div>
+
+	<!-- Status Message -->
+	{#if statusMessage}
+		<div class="status-banner {statusMessage.type}">
+			{statusMessage.text}
+		</div>
+	{/if}
 
 	<div class="song-info">
 		<div class="timer">
@@ -226,6 +331,41 @@
 		padding: 0.5rem 1rem;
 		border-radius: 2rem;
 		font-weight: 600;
+	}
+
+	.status-banner {
+		padding: 1rem 1.5rem;
+		border-radius: 0.75rem;
+		font-weight: 600;
+		text-align: center;
+		margin-bottom: 1.5rem;
+		animation: slideDown 0.3s ease-out;
+	}
+
+	.status-banner.success {
+		background: rgba(16, 185, 129, 0.2);
+		border: 2px solid rgba(16, 185, 129, 0.5);
+	}
+
+	.status-banner.info {
+		background: rgba(59, 130, 246, 0.2);
+		border: 2px solid rgba(59, 130, 246, 0.5);
+	}
+
+	.status-banner.warning {
+		background: rgba(251, 191, 36, 0.2);
+		border: 2px solid rgba(251, 191, 36, 0.5);
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			transform: translateY(-20px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	.song-info {

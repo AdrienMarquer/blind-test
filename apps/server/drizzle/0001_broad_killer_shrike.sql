@@ -1,1 +1,0 @@
-ALTER TABLE `rounds` ADD `media_type` text NOT NULL;

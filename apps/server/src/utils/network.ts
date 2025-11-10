@@ -4,6 +4,9 @@
 
 import { networkInterfaces } from 'os';
 import QRCode from 'qrcode';
+import { logger } from './logger';
+
+const networkLogger = logger.child({ module: 'Network' });
 
 /**
  * Get the local network IP address (WiFi/LAN)
@@ -49,7 +52,7 @@ export async function generateQRCodeDataURL(url: string): Promise<string> {
 
     return dataUrl;
   } catch (err) {
-    console.error('Failed to generate QR code:', err);
+    networkLogger.error('Failed to generate QR code', err);
     // Return a placeholder on error
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   }

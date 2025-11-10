@@ -5,32 +5,39 @@
 
 import type { ServerWebSocket } from 'bun';
 import { roomRepository, playerRepository } from '../repositories';
-import type { Player, Room } from '@blind-test/shared';
+import type { Player, Room, ClientMessage, ServerMessage } from '@blind-test/shared';
 import { gameService } from '../services/GameService';
+import { AuthService } from '../services/AuthService';
+import { logger } from '../utils/logger';
+
+const wsLogger = logger.child({ module: 'WebSocket' });
 
 // Store active connections per room
 const roomConnections = new Map<string, Set<ServerWebSocket<{ roomId: string; playerId?: string }>>>();
 
-export interface WebSocketMessage {
-  type: string;
-  data?: any;
+/**
+ * Type-safe helper to send ServerMessage to WebSocket
+ */
+function sendMessage(ws: ServerWebSocket<any>, message: ServerMessage) {
+  ws.send(JSON.stringify(message));
 }
 
-export function handleWebSocket(ws: any) {
+export function handleWebSocket(ws: ServerWebSocket<{ roomId: string; playerId?: string }>) {
   // Extract roomId from ws.data which contains the route params
   const roomId = ws.data?.roomId;
 
   if (!roomId) {
-    console.error('No roomId found in WebSocket connection');
+    wsLogger.error('WebSocket connection missing roomId');
     ws.close();
     return;
   }
 
   // Store roomId in ws.data for later use
   if (!ws.data) {
-    ws.data = {};
+    ws.data = { roomId };
+  } else {
+    ws.data.roomId = roomId;
   }
-  ws.data.roomId = roomId;
 
   // Add to room connections
   if (!roomConnections.has(roomId)) {
@@ -38,33 +45,36 @@ export function handleWebSocket(ws: any) {
   }
   roomConnections.get(roomId)!.add(ws);
 
-  console.log(`WebSocket connected to room ${roomId}`);
+  wsLogger.info('Client connected', { roomId });
 
-  ws.send(JSON.stringify({
+  // Send typed ServerMessage
+  sendMessage(ws, {
     type: 'connected',
     data: { roomId }
-  }));
+  });
 }
 
 export function handleMessage(
   ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
   message: string
 ) {
-  // Extract roomId - fall back to params.roomId in case of race condition
-  const roomId = ws.data?.roomId || ws.data?.params?.roomId;
+  // Extract roomId with single source of truth
+  const roomId = ws.data?.roomId;
 
   if (!roomId) {
-    console.error('[WebSocket] No roomId available in handleMessage');
-    ws.send(JSON.stringify({
+    wsLogger.error('Message received without roomId');
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Connection not properly initialized' }
-    }));
+    });
     return;
   }
 
   try {
-    const parsed: WebSocketMessage = JSON.parse(message);
+    // Parse as typed ClientMessage
+    const parsed = JSON.parse(message) as ClientMessage;
 
+    // Handle messages using discriminated union
     switch (parsed.type) {
       case 'state:sync':
         handleStateSync(ws, roomId);
@@ -94,14 +104,16 @@ export function handleMessage(
         handleGameSkip(ws, roomId);
         break;
       default:
-        console.log(`Unknown message type: ${parsed.type}`);
+        // Type exhaustiveness check - TypeScript will error if we miss a case
+        const _exhaustive: never = parsed;
+        wsLogger.warn('Unknown message type received', { type: (parsed as any).type });
     }
   } catch (error) {
-    console.error('Error handling message:', error);
-    ws.send(JSON.stringify({
+    wsLogger.error('Failed to handle message', error, { roomId });
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Invalid message format' }
-    }));
+    });
   }
 }
 
@@ -111,7 +123,7 @@ export function handleClose(ws: ServerWebSocket<{ roomId: string; playerId?: str
   const playerId = ws.data?.playerId;
 
   if (!roomId) {
-    console.log('[WebSocket] Connection closed without roomId');
+    wsLogger.debug('Connection closed without roomId');
     return;
   }
 
@@ -124,7 +136,7 @@ export function handleClose(ws: ServerWebSocket<{ roomId: string; playerId?: str
     }
   }
 
-  console.log(`WebSocket disconnected from room ${roomId}`);
+  wsLogger.info('Client disconnected', { roomId, playerId });
 
   // Handle player disconnection
   if (playerId) {
@@ -139,16 +151,16 @@ async function handleStateSync(ws: ServerWebSocket<{ roomId: string; playerId?: 
     const room = await roomRepository.findById(roomId);
     const players = await playerRepository.findByRoom(roomId);
 
-    ws.send(JSON.stringify({
+    sendMessage(ws, {
       type: 'state:synced',
       data: { room, players }
-    }));
+    });
   } catch (error) {
-    console.error('[State Sync] Error:', error);
-    ws.send(JSON.stringify({
+    wsLogger.error('State sync failed', error, { roomId });
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Failed to sync state' }
-    }));
+    });
   }
 }
 
@@ -160,39 +172,39 @@ async function handlePlayerJoin(
   try {
     const room = await roomRepository.findById(roomId);
     if (!room) {
-      ws.send(JSON.stringify({
+      sendMessage(ws, {
         type: 'error',
         data: { code: 'ROOM_NOT_FOUND', message: 'Room not found' }
-      }));
+      });
       return;
     }
 
     // Check if room is full
     const playerCount = await playerRepository.countConnected(roomId);
     if (playerCount >= room.maxPlayers) {
-      ws.send(JSON.stringify({
+      sendMessage(ws, {
         type: 'error',
         data: { code: 'ROOM_FULL', message: 'Room is full' }
-      }));
+      });
       return;
     }
 
     // Check if game already started
     if (room.status !== 'lobby') {
-      ws.send(JSON.stringify({
+      sendMessage(ws, {
         type: 'error',
         data: { code: 'GAME_STARTED', message: 'Cannot join - game already in progress' }
-      }));
+      });
       return;
     }
 
     // Check for duplicate name
     const existing = await playerRepository.findByRoomAndName(roomId, data.name);
     if (existing) {
-      ws.send(JSON.stringify({
+      sendMessage(ws, {
         type: 'error',
         data: { code: 'DUPLICATE_NAME', message: 'Name already taken in this room' }
-      }));
+      });
       return;
     }
 
@@ -207,10 +219,10 @@ async function handlePlayerJoin(
     ws.data.playerId = player.id;
 
     // Send confirmation to joining player
-    ws.send(JSON.stringify({
+    sendMessage(ws, {
       type: 'player:joined',
       data: { player, room }
-    }));
+    });
 
     // Broadcast to others in the room
     broadcastToRoom(roomId, {
@@ -218,12 +230,12 @@ async function handlePlayerJoin(
       data: { player, room }
     }, ws);
 
-    console.log(`Player ${player.name} joined room ${roomId}`);
+    wsLogger.info('Player joined', { roomId, playerId: player.id, playerName: player.name });
   } catch (error) {
-    ws.send(JSON.stringify({
+    sendMessage(ws, {
       type: 'error',
       data: { message: error instanceof Error ? error.message : 'Failed to join room' }
-    }));
+    });
   }
 }
 
@@ -251,18 +263,26 @@ async function handlePlayerLeave(
       }
     });
 
-    console.log(`Player ${player.name} left room ${roomId}`);
+    wsLogger.info('Player left', { roomId, playerId: player.id, playerName: player.name });
   } catch (error) {
-    console.error('Error handling player leave:', error);
+    wsLogger.error('Failed to handle player leave', error, { roomId, playerId });
   }
 }
 
 async function handlePlayerKick(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
   roomId: string,
   data: { playerId: string }
 ) {
-  // TODO: Add role checking for master-only actions
+  // Verify master authorization
+  if (!await isMaster(ws, roomId)) {
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'Unauthorized: Only the room master can kick players' }
+    });
+    return;
+  }
+
   try {
     const player = await playerRepository.findById(data.playerId);
     if (!player) return;
@@ -287,12 +307,12 @@ async function handlePlayerKick(
       }
     });
 
-    console.log(`Player ${player.name} kicked from room ${roomId}`);
+    wsLogger.info('Player kicked', { roomId, playerId: player.id, playerName: player.name });
   } catch (error) {
-    ws.send(JSON.stringify({
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Failed to kick player' }
-    }));
+    });
   }
 }
 
@@ -302,6 +322,9 @@ async function handlePlayerDisconnect(roomId: string, playerId: string) {
     if (player) {
       // Mark as disconnected
       await playerRepository.update(playerId, { connected: false });
+
+      // Clean up any active game timers for this player
+      await gameService.handlePlayerDisconnect(roomId, playerId);
 
       broadcastToRoom(roomId, {
         type: 'player:disconnected',
@@ -313,32 +336,61 @@ async function handlePlayerDisconnect(roomId: string, playerId: string) {
       });
     }
   } catch (error) {
-    console.error('Error handling disconnect:', error);
+    wsLogger.error('Failed to handle disconnect', error, { roomId, playerId });
   }
 }
 
 // Utility functions
 
+/**
+ * Validate if WebSocket connection has master authorization
+ * Lightweight friendly-server auth - prevents accidental tampering
+ */
+async function isMaster(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  roomId: string
+): Promise<boolean> {
+  const providedToken = ws.data?.token;
+  if (!providedToken) return false;
+
+  const masterToken = await roomRepository.getMasterToken(roomId);
+  if (!masterToken) return false;
+
+  return AuthService.validateMasterToken(providedToken, masterToken);
+}
+
 export function broadcastToRoom(
   roomId: string,
-  message: WebSocketMessage,
+  message: ServerMessage,
   excludeWs?: ServerWebSocket<{ roomId: string; playerId?: string }>
 ) {
   const connections = roomConnections.get(roomId);
-  if (!connections) return;
+  if (!connections) {
+    wsLogger.warn('No connections found for room', { roomId, messageType: message.type });
+    return;
+  }
 
   const messageStr = JSON.stringify(message);
+  let sentCount = 0;
   connections.forEach(ws => {
     if (ws !== excludeWs) {
       ws.send(messageStr);
+      sentCount++;
     }
+  });
+
+  wsLogger.debug('Broadcast message to room', {
+    roomId,
+    messageType: message.type,
+    totalConnections: connections.size,
+    sentTo: sentCount
   });
 }
 
 function sendToPlayer(
   roomId: string,
   playerId: string,
-  message: WebSocketMessage
+  message: ServerMessage
 ) {
   const connections = roomConnections.get(roomId);
   if (!connections) return;
@@ -362,31 +414,31 @@ async function handlePlayerBuzz(
 ) {
   const { playerId } = ws.data;
   if (!playerId) {
-    ws.send(JSON.stringify({
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Not authenticated' }
-    }));
+    });
     return;
   }
 
   try {
-    console.log(`[Buzz] Player ${playerId} buzzed on song ${data.songIndex}`);
+    wsLogger.debug('Player buzzed', { roomId, playerId, songIndex: data.songIndex });
 
     // Process buzz through GameService
     const accepted = await gameService.handleBuzz(roomId, data.songIndex, playerId);
 
     if (!accepted) {
-      ws.send(JSON.stringify({
+      sendMessage(ws, {
         type: 'buzz:rejected',
-        data: { reason: 'Cannot buzz at this time' }
-      }));
+        data: { playerId, reason: 'Cannot buzz at this time' }
+      });
     }
   } catch (error) {
-    console.error('[Buzz] Error:', error);
-    ws.send(JSON.stringify({
+    wsLogger.error('Failed to process buzz', error, { roomId, playerId, songIndex: data.songIndex });
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Failed to process buzz' }
-    }));
+    });
   }
 }
 
@@ -397,25 +449,49 @@ async function handlePlayerAnswer(
 ) {
   const { playerId } = ws.data;
   if (!playerId) {
-    ws.send(JSON.stringify({
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Not authenticated' }
-    }));
+    });
     return;
   }
 
   try {
-    console.log(`[Answer] Player ${playerId} answered ${data.answerType}: ${data.value}`);
+    wsLogger.debug('Player answered', { roomId, playerId, answerType: data.answerType, value: data.value });
 
-    // Create answer object
+    // Get current game state to populate answer fields
+    const round = gameService.getCurrentRound(roomId);
+    if (!round) {
+      sendMessage(ws, {
+        type: 'error',
+        data: { message: 'No active round' }
+      });
+      return;
+    }
+
+    const song = round.songs[data.songIndex];
+    if (!song) {
+      sendMessage(ws, {
+        type: 'error',
+        data: { message: 'Invalid song index' }
+      });
+      return;
+    }
+
+    // Calculate time to answer from buzz timestamp
+    const buzzTimestamp = song.buzzTimestamps?.get(playerId) || Date.now();
+    const timeToAnswer = Date.now() - buzzTimestamp;
+
+    // Create answer object with all required fields
     const answer = {
       id: `answer_${Date.now()}_${playerId}`,
       playerId,
-      songId: '', // Will be filled by GameService
+      roundId: round.id,
+      songId: song.song.id,
       type: data.answerType,
       value: data.value,
       submittedAt: new Date(),
-      timeToAnswer: 0, // TODO: Calculate from buzz time
+      timeToAnswer,
       isCorrect: false, // Will be set by validation
       pointsAwarded: 0, // Will be set by scoring
     };
@@ -423,20 +499,28 @@ async function handlePlayerAnswer(
     // Process answer through GameService
     await gameService.handleAnswer(roomId, playerId, answer);
   } catch (error) {
-    console.error('[Answer] Error:', error);
-    ws.send(JSON.stringify({
+    wsLogger.error('Failed to process answer', error, { roomId, playerId });
+    sendMessage(ws, {
       type: 'error',
       data: { message: 'Failed to process answer' }
-    }));
+    });
   }
 }
 
 async function handleGamePause(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
   roomId: string
 ) {
-  // TODO: Check if player is master
-  console.log(`[Game] Pause requested for room ${roomId}`);
+  // Verify master authorization
+  if (!await isMaster(ws, roomId)) {
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'Unauthorized: Only the room master can pause the game' }
+    });
+    return;
+  }
+
+  wsLogger.info('Game paused', { roomId });
 
   broadcastToRoom(roomId, {
     type: 'game:paused',
@@ -445,11 +529,19 @@ async function handleGamePause(
 }
 
 async function handleGameResume(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
   roomId: string
 ) {
-  // TODO: Check if player is master
-  console.log(`[Game] Resume requested for room ${roomId}`);
+  // Verify master authorization
+  if (!await isMaster(ws, roomId)) {
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'Unauthorized: Only the room master can resume the game' }
+    });
+    return;
+  }
+
+  wsLogger.info('Game resumed', { roomId });
 
   broadcastToRoom(roomId, {
     type: 'game:resumed',
@@ -458,11 +550,19 @@ async function handleGameResume(
 }
 
 async function handleGameSkip(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
   roomId: string
 ) {
-  // TODO: Check if player is master
-  console.log(`[Game] Skip requested for room ${roomId}`);
+  // Verify master authorization
+  if (!await isMaster(ws, roomId)) {
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'Unauthorized: Only the room master can skip the song' }
+    });
+    return;
+  }
+
+  wsLogger.info('Song skipped', { roomId });
 
   broadcastToRoom(roomId, {
     type: 'game:skipped',

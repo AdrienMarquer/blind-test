@@ -3,9 +3,24 @@
  */
 
 import { eq, and } from 'drizzle-orm';
-import type { Player, Repository } from '@blind-test/shared';
+import type { Player, Repository, PlayerStats } from '@blind-test/shared';
 import { generateId } from '@blind-test/shared';
 import { db, schema } from '../db';
+import { AuthService } from '../services/AuthService';
+
+/**
+ * DTO for updating player fields
+ */
+interface PlayerUpdateDTO {
+  name?: string;
+  role?: Player['role'];
+  connected?: boolean;
+  score?: number;
+  roundScore?: number;
+  isActive?: boolean;
+  isLockedOut?: boolean;
+  stats?: PlayerStats;
+}
 
 export class PlayerRepository implements Repository<Player> {
   /**
@@ -23,7 +38,8 @@ export class PlayerRepository implements Repository<Player> {
       roundScore: dbPlayer.roundScore,
       isActive: dbPlayer.isActive,
       isLockedOut: dbPlayer.isLockedOut,
-      stats: dbPlayer.stats as any,
+      // Drizzle returns JSON fields as parsed objects, just need proper typing
+      stats: dbPlayer.stats as PlayerStats,
     };
   }
 
@@ -68,46 +84,60 @@ export class PlayerRepository implements Repository<Player> {
     return this.toPlayer(result[0]);
   }
 
-  async create(data: Partial<Player>): Promise<Player> {
+  async create(data: Partial<Player>): Promise<Player & { token: string }> {
     if (!data.roomId || !data.name) {
       throw new Error('roomId and name are required');
     }
 
     const id = generateId();
+    const token = AuthService.generateToken();
     const now = new Date();
+
+    // Default stats for new players
+    const defaultStats: PlayerStats = {
+      totalAnswers: 0,
+      correctAnswers: 0,
+      wrongAnswers: 0,
+      buzzCount: 0,
+      averageAnswerTime: 0,
+    };
 
     const newPlayer = {
       id,
       roomId: data.roomId,
       name: data.name,
-      role: data.role || 'player',
+      role: (data.role || 'player') as 'master' | 'player',
+      token, // Generate session token
       connected: true,
       joinedAt: now,
       score: 0,
       roundScore: 0,
       isActive: false,
       isLockedOut: false,
-      stats: {
-        totalAnswers: 0,
-        correctAnswers: 0,
-        wrongAnswers: 0,
-        buzzCount: 0,
-        averageAnswerTime: 0,
-      },
+      stats: defaultStats,
     };
 
     await db.insert(schema.players).values(newPlayer);
 
-    return this.toPlayer(newPlayer as any);
+    // Fetch the created player to ensure proper type conversion
+    const created = await this.findById(id);
+    if (!created) throw new Error('Failed to create player');
+
+    // Return player with token for client to store
+    return {
+      ...created,
+      token, // Client needs this once to authenticate future requests
+    };
   }
 
   async update(id: string, data: Partial<Player>): Promise<Player> {
     const existing = await this.findById(id);
     if (!existing) throw new Error('Player not found');
 
-    const updateData: any = {};
+    // Build typed update DTO with only allowed fields
+    const updateData: PlayerUpdateDTO = {};
 
-    // Only update allowed fields
+    // Only update allowed fields (explicit whitelisting)
     if (data.name !== undefined) updateData.name = data.name;
     if (data.role !== undefined) updateData.role = data.role;
     if (data.connected !== undefined) updateData.connected = data.connected;
@@ -122,7 +152,10 @@ export class PlayerRepository implements Repository<Player> {
       .set(updateData)
       .where(eq(schema.players.id, id));
 
-    return this.findById(id) as Promise<Player>;
+    // Safe because we just updated it
+    const updated = await this.findById(id);
+    if (!updated) throw new Error('Failed to fetch updated player');
+    return updated;
   }
 
   async delete(id: string): Promise<void> {
@@ -149,6 +182,19 @@ export class PlayerRepository implements Repository<Player> {
         isLockedOut: false,
       })
       .where(eq(schema.players.roomId, roomId));
+  }
+
+  /**
+   * Get player token for validation (INTERNAL USE ONLY)
+   */
+  async getPlayerToken(playerId: string): Promise<string | null> {
+    const result = await db
+      .select({ token: schema.players.token })
+      .from(schema.players)
+      .where(eq(schema.players.id, playerId))
+      .limit(1);
+
+    return result.length > 0 ? result[0].token : null;
   }
 
   /**

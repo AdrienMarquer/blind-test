@@ -7,6 +7,9 @@
 
 import type { MediaType } from '@blind-test/shared';
 import type { MediaHandler } from './types';
+import { logger } from '../utils/logger';
+
+const registryLogger = logger.child({ module: 'MediaRegistry' });
 
 /**
  * Singleton registry for all media handlers
@@ -32,11 +35,11 @@ export class MediaRegistry {
    */
   register(handler: MediaHandler): void {
     if (this.handlers.has(handler.type)) {
-      console.warn(`[MediaRegistry] Overwriting existing handler for media: ${handler.type}`);
+      registryLogger.warn('Overwriting existing media handler', { mediaType: handler.type });
     }
 
     this.handlers.set(handler.type, handler);
-    console.log(`[MediaRegistry] Registered media: ${handler.type} (${handler.name})`);
+    registryLogger.debug('Registered media', { mediaType: handler.type, name: handler.name });
   }
 
   /**

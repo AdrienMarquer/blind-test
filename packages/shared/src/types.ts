@@ -100,6 +100,7 @@ export interface Round {
     yearMax?: number;        // Maximum year (inclusive)
     artistName?: string;     // Filter by artist name (partial match)
     songCount?: number;      // Number of songs to select (random if more available)
+    songIds?: string[];      // Explicit song IDs to use (takes precedence)
   };
 
   // Configuration (simplified - no game-level config)
@@ -152,7 +153,7 @@ export interface Song {
   filePath: string;
   fileName: string;
 
-  // Metadata (from ID3 tags)
+  // Metadata (from ID3 tags or Spotify)
   title: string;
   artist: string;
   album?: string;
@@ -160,9 +161,19 @@ export interface Song {
   genre?: string;
   duration: number;            // Full track length in seconds
 
+  // Enhanced metadata for answer generation
+  language?: string;           // ISO 639-1 code (e.g., 'en', 'fr', 'es')
+  subgenre?: string;           // More specific genre (e.g., 'french-rap', 'synthwave')
+
+  // Source tracking
+  spotifyId?: string;          // Spotify track ID
+  youtubeId?: string;          // YouTube video ID
+  source: string;              // 'upload' | 'spotify-youtube' | 'manual'
+
   // Playback configuration
   clipStart: number;           // Start time in seconds (default: 30)
-  // Note: Clip duration comes from ModeParams.songDuration, not stored here
+  clipDuration: number;        // Stored clip length in seconds (default: 45)
+  // Note: Actual playback duration during game comes from ModeParams.songDuration
 
   // File info
   createdAt: Date;
@@ -194,6 +205,7 @@ export interface RoundSong {
   endedAt?: Date;
   activePlayerId?: string;     // Current answering player
   lockedOutPlayerIds: string[];
+  buzzTimestamps?: Map<string, number>; // playerId → timestamp (for race condition resolution)
 
   // Answers
   answers: Answer[];
@@ -291,10 +303,21 @@ export type ServerMessage =
   // Game Flow
   | { type: 'game:started'; data: { room: Room } }
   | { type: 'round:started'; data: { roundIndex: number; songCount: number; modeType: ModeType } }
-  | { type: 'round:ended'; data: { roundIndex: number; scores: Record<string, number> } }
+  | { type: 'round:ended'; data: { roundIndex: number; scores: Array<{ playerId: string; score: number }> } }
+  | { type: 'game:ended'; data: { finalScores: FinalScore[] } }
 
   // Song Events
-  | { type: 'song:started'; data: { songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all' } }
+  | { type: 'song:started'; data: {
+      songIndex: number;
+      duration: number;
+      audioUrl: string;
+      clipStart: number;
+      audioPlayback: 'master' | 'players' | 'all';
+      answerChoices?: Array<{ title: string; artist: string; correct: boolean }>;
+      // For master only - players should ignore these fields
+      songTitle?: string;
+      songArtist?: string;
+    } }
   | { type: 'song:ended'; data: { songIndex: number; correctTitle: string; correctArtist: string } }
 
   // Gameplay
@@ -302,6 +325,8 @@ export type ServerMessage =
   | { type: 'buzz:rejected'; data: { playerId: string; reason: string } }
   | { type: 'answer:result'; data: {
       playerId: string;
+      playerName: string;
+      answerType: 'title' | 'artist';
       isCorrect: boolean;
       pointsAwarded: number;
       shouldShowArtistChoices?: boolean;
@@ -312,7 +337,14 @@ export type ServerMessage =
   // Master Controls
   | { type: 'game:paused'; data: { timestamp: number } }
   | { type: 'game:resumed'; data: { timestamp: number } }
-  | { type: 'game:skipped'; data: { timestamp: number } };
+  | { type: 'game:skipped'; data: { timestamp: number } }
+
+  // Timers
+  | { type: 'timer:song'; data: { timeRemaining: number } }
+  | { type: 'timer:answer'; data: { playerId: string; timeRemaining: number } }
+
+  // Score Updates
+  | { type: 'score:updated'; data: { playerId: string; playerName: string; score: number; pointsAwarded: number } };
 
 /**
  * Client → Server Messages

@@ -1,14 +1,23 @@
-# 🎵 Blind Test
+# 🎵 Adriquiz
 
 Un système de blind test local en temps réel où les joueurs s'affrontent pour deviner des chansons. Le serveur maître contrôle la musique via une enceinte Bluetooth, tandis que les joueurs rejoignent depuis leurs téléphones ou tablettes.
 
 ## 🚀 Démarrage rapide
+
+### Prérequis
+
+- **Bun** : Runtime JavaScript/TypeScript ([installer](https://bun.sh))
+- **Docker** : Pour la base de données PostgreSQL ([installer](https://www.docker.com/get-started))
 
 ### Installation
 
 ```bash
 # Installer les dépendances
 bun install
+
+# Démarrer PostgreSQL et appliquer les migrations
+bun run db:start
+bun run db:migrate
 ```
 
 ### Développement
@@ -22,6 +31,22 @@ bun run dev:server
 
 # Client seul (http://localhost:5173)
 bun run dev:client
+```
+
+### Gestion de la base de données
+
+```bash
+# Démarrer PostgreSQL
+bun run db:start
+
+# Arrêter PostgreSQL
+bun run db:stop
+
+# Appliquer les migrations
+bun run db:migrate
+
+# Ouvrir Drizzle Studio (interface web)
+bun run db:studio
 ```
 
 ### Production
@@ -67,8 +92,9 @@ Le script :
 - **Runtime** : Bun
 - **Backend** : Elysia + WebSockets natifs
 - **Frontend** : SvelteKit + Svelte 5
-- **Base de données** : SQLite + Drizzle ORM
+- **Base de données** : PostgreSQL 18 + Drizzle ORM
 - **Type safety** : Eden Treaty (end-to-end)
+- **Containerisation** : Docker (dev + production)
 
 ## 📂 Structure
 
@@ -102,10 +128,27 @@ kill -9 <PID>
 lsof -i :5173
 kill -9 <PID>
 
+# Base de données ne démarre pas ?
+docker ps -a  # Vérifier le statut du container
+
+# Réinitialiser complètement (⚠️ supprime toutes les données)
+bun run db:stop
+docker volume rm blind-test_postgres_dev_data
+bun run db:start
+bun run db:migrate
+
 # Réinstaller les dépendances
 rm -rf node_modules apps/*/node_modules
 bun install
 ```
+
+## 📚 Documentation
+
+- [Architecture](docs/00_ARCHITECTURE.md)
+- [API REST](docs/API.md)
+- [WebSockets](docs/WEBSOCKETS.md)
+- [Base de données](docs/DATABASE.md)
+- [Déploiement Docker](docs/DOCKER_DEPLOYMENT.md)
 
 ---
 

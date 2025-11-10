@@ -14,14 +14,19 @@ import { FastBuzzMode } from './FastBuzzMode';
 import { TextInputMode } from './TextInputMode';
 
 import { modeRegistry } from './ModeRegistry';
+import { logger } from '../utils/logger';
+
+const modeLogger = logger.child({ module: 'ModeSystem' });
 
 // Register all available modes
 modeRegistry.register(new BuzzAndChoiceMode());
 modeRegistry.register(new FastBuzzMode());
 modeRegistry.register(new TextInputMode());
 
-console.log('[Mode System] Initialized with', modeRegistry.getAvailableTypes().length, 'modes');
-console.log('[Mode System] Available:', modeRegistry.getAvailableTypes().join(', '));
+modeLogger.info('Mode system initialized', {
+  count: modeRegistry.getAvailableTypes().length,
+  modes: modeRegistry.getAvailableTypes()
+});
 
 // Export the initialized registry
 export { modeRegistry };

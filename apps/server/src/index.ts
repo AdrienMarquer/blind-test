@@ -5,748 +5,88 @@
 
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { roomRepository, playerRepository, songRepository, gameSessionRepository } from './repositories';
-import { handleWebSocket, handleMessage, handleClose, broadcastToRoom } from './websocket/handler';
-import { validateRoomName, validatePlayerName } from '@blind-test/shared';
-import type { Room, Player } from '@blind-test/shared';
-import { generateId } from '@blind-test/shared';
-import { db, schema } from './db';
+import { staticPlugin } from '@elysiajs/static';
 import { runMigrations } from './db';
-import { extractMetadata, isSupportedAudioFormat, getFileFormat } from './utils/mp3-metadata';
-import { writeFile, unlink, stat } from 'fs/promises';
-import { mkdir } from 'fs/promises';
-import { existsSync, createReadStream } from 'fs';
+import { handleWebSocket, handleMessage, handleClose } from './websocket/handler';
+import { logger } from './utils/logger';
+import { existsSync } from 'fs';
 import path from 'path';
-import { modeRegistry } from './modes';
-import { mediaRegistry } from './media';
-import { gameService } from './services/GameService';
 
-// Run database migrations (db directory created in db/index.ts)
+// Import route modules
+import { roomRoutes } from './routes/rooms';
+import { playerRoutes } from './routes/players';
+import { gameRoutes } from './routes/game';
+import { songRoutes } from './routes/songs';
+import { modeRoutes } from './routes/modes';
+import { mediaRoutes } from './routes/media';
+
+// Run database migrations
 try {
-  runMigrations();
-  console.log('✅ Database ready');
+  await runMigrations();
+  logger.info('Database ready');
 } catch (error) {
-  console.error('❌ Database initialization failed:', error);
+  logger.error('Database initialization failed', error);
   process.exit(1);
+}
+
+// Create child logger for WebSocket
+const wsLogger = logger.child({ module: 'WebSocket' });
+
+// Determine client build path
+const clientBuildPath = path.join(process.cwd(), '../client/build');
+const hasClientBuild = existsSync(clientBuildPath);
+
+if (!hasClientBuild) {
+  logger.warn('Client build not found', {
+    path: clientBuildPath,
+    message: 'Run `bun run build:client` to build the client for production'
+  });
 }
 
 // Initialize Elysia app
 const app = new Elysia()
   .use(cors())
-  .get('/', () => {
+
+  // Health check endpoint (for Docker/monitoring)
+  .get('/health', () => {
     return {
-      message: 'Blind Test API Server',
-      status: 'running',
+      status: 'ok',
+      timestamp: new Date().toISOString(),
       version: '1.0.0',
-      websocket: 'enabled',
     };
   })
 
-  // ========================================================================
-  // Room Endpoints
-  // ========================================================================
-
-  // Get all rooms
-  .get('/api/rooms', async ({ query }) => {
-    console.log('[GET /api/rooms] Fetching rooms');
-
-    let rooms: Room[];
-
-    if (query.status) {
-      rooms = await roomRepository.findByStatus(query.status as Room['status']);
-    } else {
-      rooms = await roomRepository.findAll();
-    }
-
-    return {
-      rooms,
-      total: rooms.length,
-    };
-  }, {
-    query: t.Optional(t.Object({
-      status: t.Optional(t.String()),
-    })),
-  })
-
-  // Create new room
-  .post('/api/rooms', async ({ body, error }) => {
-    // Validate room name
-    if (!validateRoomName(body.name)) {
-      return error(400, {
-        error: 'Invalid room name. Must be 1-50 characters, alphanumeric, spaces, hyphens, underscores only.',
-      });
-    }
-
-    try {
-      const room = await roomRepository.create({
-        name: body.name,
-        maxPlayers: body.maxPlayers || 8,
-        masterIp: 'localhost', // TODO: Extract from request in production
-      });
-
-      console.log(`[POST /api/rooms] Created room: ${room.name} (code: ${room.code})`);
-
-      return room;
-    } catch (err) {
-      console.error('[POST /api/rooms] Error:', err);
-      return error(500, { error: 'Failed to create room' });
-    }
-  }, {
-    body: t.Object({
-      name: t.String({ minLength: 1, maxLength: 50 }),
-      maxPlayers: t.Optional(t.Number({ minimum: 2, maximum: 20 })),
-    }),
-  })
-
-  // Get room by ID
-  .get('/api/rooms/:roomId', async ({ params: { roomId }, error }) => {
-    const room = await roomRepository.findById(roomId);
-
-    if (!room) {
-      console.log(`[GET /api/rooms/${roomId}] Room not found`);
-      return error(404, { error: 'Room not found' });
-    }
-
-    // Populate players
-    const players = await playerRepository.findByRoom(roomId);
-    room.players = players;
-
-    console.log(`[GET /api/rooms/${roomId}] Fetching room: ${room.name}`);
-    return room;
-  })
-
-  // Update room
-  .patch('/api/rooms/:roomId', async ({ params: { roomId }, body, error }) => {
-    const room = await roomRepository.findById(roomId);
-
-    if (!room) {
-      return error(404, { error: 'Room not found' });
-    }
-
-    if (room.status !== 'lobby') {
-      return error(400, { error: 'Cannot update room while game is in progress' });
-    }
-
-    if (body.name && !validateRoomName(body.name)) {
-      return error(400, { error: 'Invalid room name' });
-    }
-
-    try {
-      const updated = await roomRepository.update(roomId, body);
-      console.log(`[PATCH /api/rooms/${roomId}] Updated room: ${updated.name}`);
-      return updated;
-    } catch (err) {
-      console.error(`[PATCH /api/rooms/${roomId}] Error:`, err);
-      return error(500, { error: 'Failed to update room' });
-    }
-  }, {
-    body: t.Object({
-      name: t.Optional(t.String({ minLength: 1, maxLength: 50 })),
-      maxPlayers: t.Optional(t.Number({ minimum: 2, maximum: 20 })),
-    }),
-  })
-
-  // Delete room
-  .delete('/api/rooms/:roomId', async ({ params: { roomId }, error }) => {
-    const room = await roomRepository.findById(roomId);
-
-    if (!room) {
-      return error(404, { error: 'Room not found' });
-    }
-
-    try {
-      // Delete all players first
-      await playerRepository.deleteByRoom(roomId);
-      // Delete room
-      await roomRepository.delete(roomId);
-
-      console.log(`[DELETE /api/rooms/${roomId}] Deleted room: ${room.name}`);
-      return new Response(null, { status: 204 });
-    } catch (err) {
-      console.error(`[DELETE /api/rooms/${roomId}] Error:`, err);
-      return error(500, { error: 'Failed to delete room' });
-    }
-  })
-
-  // ========================================================================
-  // Player Endpoints
-  // ========================================================================
-
-  // Add player to room
-  .post('/api/rooms/:roomId/players', async ({ params: { roomId }, body, error }) => {
-    const room = await roomRepository.findById(roomId);
-
-    if (!room) {
-      return error(404, { error: 'Room not found' });
-    }
-
-    if (room.status !== 'lobby') {
-      return error(400, { error: 'Cannot join - game already in progress' });
-    }
-
-    if (!validatePlayerName(body.name)) {
-      return error(400, { error: 'Invalid player name. Must be 1-20 characters, alphanumeric and spaces only.' });
-    }
-
-    // Check if room is full
-    const playerCount = await playerRepository.countConnected(roomId);
-    if (playerCount >= room.maxPlayers) {
-      return error(400, { error: 'Room is full' });
-    }
-
-    // Check for duplicate name
-    const existing = await playerRepository.findByRoomAndName(roomId, body.name);
-    if (existing) {
-      return error(400, { error: 'Name already taken in this room' });
-    }
-
-    try {
-      const player = await playerRepository.create({
-        roomId,
-        name: body.name,
-        role: 'player',
-      });
-
-      console.log(`[POST /api/rooms/${roomId}/players] Added player: ${player.name}`);
-
-      // Broadcast player join event to all connected WebSocket clients
-      broadcastToRoom(roomId, {
-        type: 'player:joined',
-        data: { player, room }
-      });
-
-      return player;
-    } catch (err) {
-      console.error(`[POST /api/rooms/${roomId}/players] Error:`, err);
-      return error(500, { error: 'Failed to add player' });
-    }
-  }, {
-    body: t.Object({
-      name: t.String({ minLength: 1, maxLength: 20 }),
-    }),
-  })
-
-  // Get player info
-  .get('/api/rooms/:roomId/players/:playerId', async ({ params: { roomId, playerId }, error }) => {
-    const player = await playerRepository.findById(playerId);
-
-    if (!player || player.roomId !== roomId) {
-      return error(404, { error: 'Player not found' });
-    }
-
-    return player;
-  })
-
-  // Remove player from room
-  .delete('/api/rooms/:roomId/players/:playerId', async ({ params: { roomId, playerId }, error }) => {
-    const player = await playerRepository.findById(playerId);
-
-    if (!player || player.roomId !== roomId) {
-      return error(404, { error: 'Player not found' });
-    }
-
-    try {
-      await playerRepository.delete(playerId);
-      console.log(`[DELETE /api/rooms/${roomId}/players/${playerId}] Removed player: ${player.name}`);
-
-      // Broadcast player left event to all connected WebSocket clients
-      const remainingPlayers = await playerRepository.countConnected(roomId);
-      broadcastToRoom(roomId, {
-        type: 'player:left',
-        data: {
-          playerId: player.id,
-          playerName: player.name,
-          remainingPlayers
-        }
-      });
-
-      return new Response(null, { status: 204 });
-    } catch (err) {
-      console.error(`[DELETE /api/rooms/${roomId}/players/${playerId}] Error:`, err);
-      return error(500, { error: 'Failed to remove player' });
-    }
-  })
-
-  // ========================================================================
-  // Game Control Endpoints (Stubs for future phases)
-  // ========================================================================
-
-  // Start game
-  .post('/api/game/:roomId/start', async ({ params: { roomId }, body, error }) => {
-    const room = await roomRepository.findById(roomId);
-
-    if (!room) {
-      return error(404, { error: 'Room not found' });
-    }
-
-    if (room.status !== 'lobby') {
-      return error(409, { error: 'Game already started' });
-    }
-
-    const playerCount = await playerRepository.countConnected(roomId);
-    if (playerCount < 2) {
-      return error(400, { error: 'Need at least 2 players to start' });
-    }
-
-    try {
-      // Create game session
-      const session = await gameSessionRepository.create({
-        roomId,
-      });
-
-      // Prepare round configuration
-      let songFilters: any = null;
-      let songCount = 0;
-
-      // Priority 1: Use songFilters (metadata-based approach)
-      if (body.songFilters) {
-        console.log(`[POST /api/game/${roomId}/start] Using metadata filters:`, body.songFilters);
-        songFilters = body.songFilters;
-
-        // Verify filters will return songs
-        const testSongs = await songRepository.findByFilters(body.songFilters);
-        if (testSongs.length === 0) {
-          await gameSessionRepository.delete(session.id);
-          return error(400, { error: 'No songs match the provided filters' });
-        }
-        songCount = testSongs.length;
-      }
-      // Priority 2: Use explicit songIds
-      else if (body.songIds && body.songIds.length > 0) {
-        console.log(`[POST /api/game/${roomId}/start] Using explicit songIds: ${body.songIds.length} songs`);
-        // Store songIds as a filter
-        songFilters = {
-          songIds: body.songIds,
-        };
-        songCount = body.songIds.length;
-      }
-      // Priority 3: Random selection
-      else {
-        console.log(`[POST /api/game/${roomId}/start] Using random selection: ${body.songCount || 10} songs`);
-        songFilters = {
-          songCount: body.songCount || 10,
-        };
-
-        const randomSongs = await songRepository.findByFilters(songFilters);
-        if (randomSongs.length === 0) {
-          await gameSessionRepository.delete(session.id);
-          return error(400, { error: 'No songs available in the library' });
-        }
-        songCount = randomSongs.length;
-      }
-
-      // Create single round for now (Phase 3 will support multiple rounds)
-      const roundId = generateId();
-      await db.insert(schema.rounds).values({
-        id: roundId,
-        sessionId: session.id,
-        index: 0,
-        modeType: body.modeType || 'buzz_and_choice',
-        mediaType: body.mediaType || 'music', // Default to music for MVP
-        songFilters: songFilters ? JSON.stringify(songFilters) : null,
-        params: body.params ? JSON.stringify(body.params) : null,
-        status: 'pending',
-        startedAt: null,
-        endedAt: null,
-        currentSongIndex: 0,
-      });
-
-      // Update room status
-      const updated = await roomRepository.update(roomId, { status: 'playing' });
-      console.log(`[POST /api/game/${roomId}/start] Game started for room: ${room.name} with ~${songCount} songs`);
-
-      // Start the first round
-      try {
-        await gameService.startRound(roomId, session.id, 0);
-        console.log(`[POST /api/game/${roomId}/start] Round 0 started successfully`);
-      } catch (roundError) {
-        console.error(`[POST /api/game/${roomId}/start] Failed to start round:`, roundError);
-        // Continue anyway - game is created, round start can be retried
-      }
-
-      // Broadcast game start to all connected WebSocket clients
-      broadcastToRoom(roomId, {
-        type: 'game:started',
-        data: {
-          room: updated,
-          session: await gameSessionRepository.findById(session.id),
-        }
-      });
-
-      return {
-        sessionId: session.id,
-        roomId,
-        status: updated.status,
-        songCount,
-        modeType: body.modeType || 'buzz_and_choice',
-      };
-    } catch (err) {
-      console.error(`[POST /api/game/${roomId}/start] Error:`, err);
-      return error(500, { error: 'Failed to start game' });
-    }
-  }, {
-    body: t.Object({
-      // Legacy playlist support
-      playlistId: t.Optional(t.String()),
-      songIds: t.Optional(t.Array(t.String())),
-
-      // Metadata-based filtering (NEW - preferred approach)
-      songFilters: t.Optional(t.Object({
-        genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
-        yearMin: t.Optional(t.Number()),
-        yearMax: t.Optional(t.Number()),
-        artistName: t.Optional(t.String()),
-        songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-      })),
-
-      // Quick filters (alternative to songFilters object)
-      songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-      genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
-      yearMin: t.Optional(t.Number()),
-      yearMax: t.Optional(t.Number()),
-
-      // Game configuration
-      modeType: t.Optional(t.String()),
-      mediaType: t.Optional(t.String()),
-      params: t.Optional(t.Any()),
-    }),
-  })
-
-  // ========================================================================
-  // Music Library Endpoints
-  // ========================================================================
-
-  // Get all songs
-  .get('/api/songs', async () => {
-    console.log('[GET /api/songs] Fetching all songs');
-    const songs = await songRepository.findAll();
-    return {
-      songs,
-      total: songs.length,
-    };
-  })
-
-  // Get song by ID
-  .get('/api/songs/:songId', async ({ params: { songId }, error }) => {
-    const song = await songRepository.findById(songId);
-
-    if (!song) {
-      return error(404, { error: 'Song not found' });
-    }
-
-    return song;
-  })
-
-  // Stream song audio
-  .get('/api/songs/:songId/stream', async ({ params: { songId }, error, set, request }) => {
-    console.log(`[GET /api/songs/${songId}/stream] Streaming audio`);
-
-    const song = await songRepository.findById(songId);
-    if (!song) {
-      return error(404, { error: 'Song not found' });
-    }
-
-    const filePath = path.join(process.cwd(), song.filePath);
-    if (!existsSync(filePath)) {
-      console.error(`[Stream] File not found: ${filePath}`);
-      return error(404, { error: 'Audio file not found' });
-    }
-
-    try {
-      const fileStats = await stat(filePath);
-      const fileSize = fileStats.size;
-
-      // Get range header for seeking support
-      const range = request.headers.get('range');
-
-      if (range) {
-        // Parse range header (e.g., "bytes=0-1023")
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunkSize = (end - start) + 1;
-
-        set.status = 206; // Partial Content
-        set.headers = {
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': chunkSize.toString(),
-          'Content-Type': getContentType(song.format),
-        };
-
-        // Create read stream for the range
-        const stream = createReadStream(filePath, { start, end });
-        return new Response(stream as any);
-      } else {
-        // No range, stream the whole file
-        set.headers = {
-          'Content-Length': fileSize.toString(),
-          'Content-Type': getContentType(song.format),
-          'Accept-Ranges': 'bytes',
-        };
-
-        const stream = createReadStream(filePath);
-        return new Response(stream as any);
-      }
-    } catch (err) {
-      console.error(`[Stream] Error streaming file:`, err);
-      return error(500, { error: 'Failed to stream audio' });
-    }
-  })
-
-  // Search songs
-  .get('/api/songs/search/:query', async ({ params: { query } }) => {
-    console.log(`[GET /api/songs/search/${query}] Searching songs`);
-    const songs = await songRepository.searchByTitle(query);
-    return {
-      songs,
-      total: songs.length,
-    };
-  })
-
-  // Upload new song
-  .post('/api/songs/upload', async ({ body, set }) => {
-    console.log('[POST /api/songs/upload] Uploading song');
-
-    // Validate file
-    if (!body.file) {
-      set.status = 400;
-      return { error: 'No file provided' };
-    }
-
-    const file = body.file as File;
-
-    // Check file type
-    if (!isSupportedAudioFormat(file.name)) {
-      set.status = 400;
-      return { error: 'Unsupported file format. Supported: mp3, m4a, wav, flac' };
-    }
-
-    // Ensure uploads directory exists
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const sanitizedName = file.name.replace(/[^a-z0-9.-]/gi, '_');
-    const filename = `${timestamp}_${sanitizedName}`;
-    const filePath = path.join(uploadsDir, filename);
-
-    try {
-      // Write file to disk
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      await writeFile(filePath, buffer);
-
-      // Get file size
-      const stats = await stat(filePath);
-      const fileSize = stats.size;
-
-      // Extract metadata
-      let metadata;
-      try {
-        metadata = await extractMetadata(filePath);
-      } catch (metadataError) {
-        // Clean up file if metadata extraction fails
-        await unlink(filePath);
-        const errorMsg = metadataError instanceof Error ? metadataError.message : 'Failed to extract metadata';
-        set.status = 400;
-        return { error: errorMsg };
-      }
-
-      // Check if song already exists (by title+artist)
-      const existingSong = await songRepository.findByTitleAndArtist(metadata.title, metadata.artist);
-      if (existingSong) {
-        await unlink(filePath);
-        set.status = 409;
-        return { error: `Song already exists in library: "${metadata.title}" by ${metadata.artist}` };
-      }
-
-      // Create song record
-      const song = await songRepository.create({
-        filePath,
-        fileName: filename,
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        year: metadata.year,
-        genre: metadata.genre,
-        duration: metadata.duration,
-        clipStart: 30, // Default clip start
-        fileSize,
-        format: getFileFormat(file.name),
-      });
-
-      console.log(`[POST /api/songs/upload] Uploaded song: ${song.title} by ${song.artist}`);
-
-      return song;
-    } catch (err) {
-      // Clean up file if it was created
-      try {
-        await unlink(filePath);
-      } catch (unlinkError) {
-        // Ignore if file doesn't exist
-      }
-
-      console.error('[POST /api/songs/upload] Error:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Failed to upload song';
-      set.status = 500;
-      return { error: errorMsg };
-    }
-  }, {
-    body: t.Object({
-      file: t.File({
-        maxSize: 50 * 1024 * 1024, // 50MB max
-      }),
-    }),
-  })
-
-  // Update song metadata
-  .patch('/api/songs/:songId', async ({ params: { songId }, body, error }) => {
-    const song = await songRepository.findById(songId);
-
-    if (!song) {
-      return error(404, { error: 'Song not found' });
-    }
-
-    try {
-      const updated = await songRepository.update(songId, body);
-      console.log(`[PATCH /api/songs/${songId}] Updated song: ${updated.title}`);
-      return updated;
-    } catch (err) {
-      console.error(`[PATCH /api/songs/${songId}] Error:`, err);
-      return error(500, { error: 'Failed to update song' });
-    }
-  }, {
-    body: t.Object({
-      title: t.Optional(t.String()),
-      artist: t.Optional(t.String()),
-      album: t.Optional(t.String()),
-      year: t.Optional(t.Number()),
-      genre: t.Optional(t.String()),
-      clipStart: t.Optional(t.Number({ minimum: 0 })),
-    }),
-  })
-
-  // Delete song
-  .delete('/api/songs/:songId', async ({ params: { songId }, error }) => {
-    const song = await songRepository.findById(songId);
-
-    if (!song) {
-      return error(404, { error: 'Song not found' });
-    }
-
-    try {
-      // Delete file from disk
-      try {
-        await unlink(song.filePath);
-      } catch (fileError) {
-        console.warn(`Could not delete file: ${song.filePath}`, fileError);
-      }
-
-      // Delete from database
-      await songRepository.delete(songId);
-      console.log(`[DELETE /api/songs/${songId}] Deleted song: ${song.title}`);
-
-      return new Response(null, { status: 204 });
-    } catch (err) {
-      console.error(`[DELETE /api/songs/${songId}] Error:`, err);
-      return error(500, { error: 'Failed to delete song' });
-    }
-  })
-
-  // ========================================================================
-  // Mode System Endpoints
-  // ========================================================================
-
-  // Get all available game modes
-  .get('/api/modes', () => {
-    console.log('[GET /api/modes] Fetching available modes');
-
-    const modes = modeRegistry.getMetadata();
-
-    return {
-      modes,
-      count: modes.length,
-    };
-  })
-
-  // Get specific mode details
-  .get('/api/modes/:modeType', ({ params: { modeType }, error }) => {
-    console.log(`[GET /api/modes/${modeType}] Fetching mode details`);
-
-    try {
-      const handler = modeRegistry.get(modeType as any);
-
-      return {
-        type: handler.type,
-        name: handler.name,
-        description: handler.description,
-        defaultParams: handler.defaultParams,
-      };
-    } catch (err) {
-      console.error(`[GET /api/modes/${modeType}] Error:`, err);
-      return error(404, { error: `Mode not found: ${modeType}` });
-    }
-  })
-
-  // ========================================================================
-  // Media System Endpoints
-  // ========================================================================
-
-  // Get all available media types
-  .get('/api/media', () => {
-    console.log('[GET /api/media] Fetching available media types');
-
-    const mediaTypes = mediaRegistry.getMetadata();
-
-    return {
-      mediaTypes,
-      count: mediaTypes.length,
-    };
-  })
-
-  // Get specific media type details
-  .get('/api/media/:mediaType', ({ params: { mediaType }, error }) => {
-    console.log(`[GET /api/media/${mediaType}] Fetching media type details`);
-
-    try {
-      const handler = mediaRegistry.get(mediaType as any);
-
-      return {
-        type: handler.type,
-        name: handler.name,
-        description: handler.description,
-      };
-    } catch (err) {
-      console.error(`[GET /api/media/${mediaType}] Error:`, err);
-      return error(404, { error: `Media type not found: ${mediaType}` });
-    }
-  })
-
-  // ========================================================================
-  // WebSocket Endpoints
-  // ========================================================================
+  // API routes (must come before static files to take precedence)
+  .use(roomRoutes)
+  .use(playerRoutes)
+  .use(gameRoutes)
+  .use(songRoutes)
+  .use(modeRoutes)
+  .use(mediaRoutes)
 
   // WebSocket endpoint for room connections
   .ws('/ws/rooms/:roomId', {
     params: t.Object({
       roomId: t.String()
     }),
+    query: t.Object({
+      token: t.Optional(t.String()),
+      playerId: t.Optional(t.String())
+    }),
     open(ws) {
       // Extract roomId from route params
       const roomId = ws.data?.params?.roomId;
 
       if (!roomId) {
-        console.error('No roomId found in WebSocket connection');
+        wsLogger.error('WebSocket connection missing roomId');
         ws.close();
         return;
       }
 
-      // Store roomId in ws.data for access in message handlers
+      // Store roomId and optional token/playerId in ws.data for access in message handlers
       ws.data.roomId = roomId;
+      ws.data.token = ws.data?.query?.token;
+      ws.data.playerId = ws.data?.query?.playerId;
       handleWebSocket(ws);
     },
     message(ws, message) {
@@ -755,37 +95,45 @@ const app = new Elysia()
     close(ws) {
       handleClose(ws);
     }
+  })
+
+  // Serve static client files (SPA fallback)
+  // This must come AFTER all API routes and WebSocket
+  .use(hasClientBuild
+    ? staticPlugin({
+        assets: clientBuildPath,
+        prefix: '/',
+        // Enable SPA fallback - serve index.html for non-file routes
+        alwaysStatic: false,
+        // This allows the index.html to handle client-side routing
+      })
+    : (app) => app  // No-op if client not built
+  )
+
+  // Fallback for SPA routing - serve index.html for all non-API routes
+  .get('*', ({ set }) => {
+    if (!hasClientBuild) {
+      set.status = 503;
+      return {
+        error: 'Client not built',
+        message: 'Run `bun run build:client` to build the client'
+      };
+    }
+
+    // Serve index.html for client-side routing
+    return Bun.file(path.join(clientBuildPath, 'index.html'));
   });
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Get MIME content type for audio format
- */
-function getContentType(format: string): string {
-  switch (format.toLowerCase()) {
-    case 'mp3':
-      return 'audio/mpeg';
-    case 'm4a':
-      return 'audio/mp4';
-    case 'wav':
-      return 'audio/wav';
-    case 'flac':
-      return 'audio/flac';
-    default:
-      return 'audio/mpeg';
-  }
-}
-
 // Start server
-app.listen(3007);
+app.listen({
+  port: 3007,
+  hostname: '0.0.0.0'
+});
 
-console.log(
-  `🎵 Blind Test Server is running at http://${app.server?.hostname}:${app.server?.port}`
-);
-console.log(`📡 WebSocket server ready on ws://${app.server?.hostname}:${app.server?.port}`);
+logger.info(`Server started`, {
+  http: `http://${app.server?.hostname}:${app.server?.port}`,
+  ws: `ws://${app.server?.hostname}:${app.server?.port}`
+});
 
 // Export app type for Eden Treaty
 export type App = typeof app;

@@ -10,6 +10,7 @@
  */
 
 import type { Round, RoundSong, Answer, Song, ModeType, ModeParams, MediaType } from '@blind-test/shared';
+import { logger } from '../utils/logger';
 
 /**
  * Result of an answer validation
@@ -63,8 +64,9 @@ export interface ModeHandler {
   /**
    * Handle a player buzzing in
    * Returns true if buzz is accepted, false if rejected
+   * @param buzzTimestamp - Client-side timestamp for race condition resolution
    */
-  handleBuzz(playerId: string, song: RoundSong): Promise<boolean>;
+  handleBuzz(playerId: string, song: RoundSong, buzzTimestamp?: number): Promise<boolean>;
 
   /**
    * Handle a player submitting an answer
@@ -103,8 +105,9 @@ export interface ModeHandler {
   /**
    * Check if a song should end
    * (Correct answer found, timer expired, all locked out)
+   * @param activePlayerCount - Optional count of active players for all-locked-out detection
    */
-  shouldEndSong(song: RoundSong): boolean;
+  shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean;
 }
 
 /**
@@ -119,16 +122,20 @@ export abstract class BaseModeHandler implements ModeHandler {
 
   // Default implementations (can be overridden)
 
+  protected get modeLogger() {
+    return logger.child({ module: `Mode:${this.type}` });
+  }
+
   async startRound(round: Round): Promise<void> {
-    console.log(`[${this.type}] Starting round ${round.index}`);
+    this.modeLogger.debug('Starting round', { roundIndex: round.index });
   }
 
   async startSong(song: RoundSong, allSongs: Song[], mediaType: MediaType): Promise<void> {
-    console.log(`[${this.type}] Starting song ${song.index} with media type: ${mediaType}`);
+    this.modeLogger.debug('Starting song', { songIndex: song.index, mediaType });
   }
 
   async endSong(song: RoundSong): Promise<void> {
-    console.log(`[${this.type}] Ending song ${song.index}`);
+    this.modeLogger.debug('Ending song', { songIndex: song.index });
   }
 
   isRoundComplete(round: Round): boolean {
@@ -137,10 +144,10 @@ export abstract class BaseModeHandler implements ModeHandler {
   }
 
   // Abstract methods (must be implemented by subclasses)
-  abstract handleBuzz(playerId: string, song: RoundSong): Promise<boolean>;
+  abstract handleBuzz(playerId: string, song: RoundSong, buzzTimestamp?: number): Promise<boolean>;
   abstract handleAnswer(answer: Answer, song: RoundSong): Promise<AnswerResult>;
   abstract validateAnswer(answer: Answer, song: Song): boolean;
   abstract calculateScore(answer: Answer, song: Song, params: ModeParams): number;
   abstract canBuzz(playerId: string, song: RoundSong): boolean;
-  abstract shouldEndSong(song: RoundSong): boolean;
+  abstract shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean;
 }

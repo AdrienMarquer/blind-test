@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import type { Player } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
@@ -10,10 +11,15 @@
 	let hasBuzzed = $state(false);
 	let showChoices = $state(false);
 	let answerType: 'title' | 'artist' = $state('title');
-	let timeRemaining = $state(15);
-	let answerTimeRemaining = $state(5);
 	let currentSongIndex = $state(0);
 	let isLockedOut = $state(false);
+	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
+	let someoneElseAnswering = $state(false);
+	let activePlayerAnswering = $state<string>(''); // Name of player currently answering
+
+	// Reactive timer values from socket
+	const timeRemaining = $derived(socket.songTimeRemaining);
+	const answerTimeRemaining = $derived(socket.answerTimeRemaining);
 
 	// Choices
 	let titleChoices = $state<string[]>([]);
@@ -21,6 +27,10 @@
 
 	// Player score
 	let score = $state(player.score);
+
+	// Feedback messages
+	let feedbackMessage = $state<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+	let feedbackTimeout: number | null = null; // NOT a $state - just a regular variable for timer ID
 
 	// Audio player (for when audio plays on player devices)
 	let audioElement: HTMLAudioElement | null = $state(null);
@@ -36,6 +46,13 @@
 	}
 
 	function handleAnswer(value: string) {
+		console.log('[Player] Submitting answer', {
+			songIndex: currentSongIndex,
+			answerType,
+			value,
+			playerId: player.id
+		});
+
 		// Send answer to server
 		socket.submitAnswer(currentSongIndex, answerType, value);
 
@@ -51,13 +68,31 @@
 	$effect(() => {
 		const event = socket.events.songStarted;
 		if (event) {
-			// Reset for new song
+			console.log('[Player] 🆕 NEW SONG STARTED - Resetting ALL state', {
+				songIndex: event.songIndex,
+				playerId: player.id,
+				playerName: player.name
+			});
+
+			// COMPLETE state reset for new song
 			hasBuzzed = false;
 			canBuzz = true;
 			showChoices = false;
 			isLockedOut = false;
+			someoneElseAnswering = false;
+			activePlayerAnswering = '';
+
+			// Clear all old choices and state
+			titleChoices = [];
+			artistChoices = [];
+			answerType = 'title';
+			feedbackMessage = null;
+
+			// Update song info
 			currentSongIndex = event.songIndex;
-			timeRemaining = event.duration;
+			maxSongDuration = event.duration;
+
+			console.log('[Player] ✅ State reset complete - Ready to buzz');
 
 			// Play audio if configured for players
 			if (audioElement && (event.audioPlayback === 'players' || event.audioPlayback === 'all')) {
@@ -85,17 +120,28 @@
 			} else {
 				console.log(`[Player] Not playing audio (mode: ${event.audioPlayback})`);
 			}
+			socket.events.clear('songStarted');
 		}
 	});
 
 	// Subscribe to player:buzzed event
 	$effect(() => {
 		const event = socket.events.playerBuzzed;
-		if (event && event.playerId === player.id) {
-			// We buzzed successfully - show title choices
-			titleChoices = event.titleChoices || [];
-			showChoices = true;
-			answerType = 'title';
+		if (event) {
+			if (event.playerId === player.id) {
+				// We buzzed successfully - show title choices
+				titleChoices = event.titleChoices || [];
+				showChoices = true;
+				answerType = 'title';
+				someoneElseAnswering = false;
+			} else {
+				// Someone else buzzed - disable our buzzing and show who is answering
+				const playerName = event.playerName || socket.players.find(p => p.id === event.playerId)?.name || 'Another player';
+				activePlayerAnswering = playerName;
+				someoneElseAnswering = true;
+				canBuzz = false;
+			}
+			socket.events.clear('playerBuzzed');
 		}
 	});
 
@@ -106,35 +152,115 @@
 			// Our buzz was rejected - allow rebuzz
 			hasBuzzed = false;
 			canBuzz = true;
+			socket.events.clear('buzzRejected');
 		}
 	});
 
 	// Subscribe to answer:result event
 	$effect(() => {
 		const event = socket.events.answerResult;
-		if (event && event.playerId === player.id) {
-			if (event.isCorrect) {
-				score += event.pointsAwarded;
+		if (event) {
+			console.log('[Player] answer:result received', {
+				playerId: event.playerId,
+				isForMe: event.playerId === player.id,
+				isCorrect: event.isCorrect,
+				answerType: event.answerType,
+				shouldShowArtistChoices: event.shouldShowArtistChoices,
+				lockOutPlayer: event.lockOutPlayer
+			});
+
+			// Clear any existing feedback timeout
+			if (feedbackTimeout) {
+				clearTimeout(feedbackTimeout);
 			}
 
-			// Check if we should show artist choices or get locked out
-			if (event.shouldShowArtistChoices) {
-				// Will receive choices:artist event next
-			} else if (event.lockOutPlayer) {
-				isLockedOut = true;
-				canBuzz = false;
-				showChoices = false;
+			if (event.playerId === player.id) {
+				// This is MY answer result
+				console.log('[Player] 📝 MY ANSWER RESULT', {
+					answerType: event.answerType,
+					isCorrect: event.isCorrect,
+					shouldShowArtistChoices: event.shouldShowArtistChoices,
+					lockOutPlayer: event.lockOutPlayer,
+					pointsAwarded: event.pointsAwarded
+				});
+
+				if (event.isCorrect) {
+					score += event.pointsAwarded;
+					const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+					feedbackMessage = {
+						type: 'success',
+						text: `✅ Correct ${answerTypeText}! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
+					};
+				} else {
+					const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+					feedbackMessage = {
+						type: 'error',
+						text: `❌ Wrong ${answerTypeText}. ${event.lockOutPlayer ? 'You are locked out.' : ''}`
+					};
+				}
+
+				// Handle next state based on result
+				if (event.shouldShowArtistChoices) {
+					// Correct title - wait for artist choices
+					console.log('[Player] ⏳ Waiting for artist choices...');
+					// Keep current state, choices:artist event will show the choices
+				} else if (event.lockOutPlayer) {
+					// Wrong answer - locked out
+					console.log('[Player] 🚫 LOCKED OUT');
+					isLockedOut = true;
+					canBuzz = false;
+					showChoices = false;
+					hasBuzzed = false;
+				} else {
+					// Correct final answer (artist) - song will end
+					console.log('[Player] 🏆 SONG WON - Waiting for song:ended');
+					showChoices = false;
+					hasBuzzed = false;
+					canBuzz = false; // Will be reset by song:started
+				}
+			} else {
+				// Another player's answer result
+				if (event.isCorrect) {
+					const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+					feedbackMessage = {
+						type: 'info',
+						text: `🏆 ${event.playerName} got the ${answerTypeText} correct!`
+					};
+				}
+
+				// If someone else answered wrong and was locked out, allow others to buzz again
+				if (event.lockOutPlayer && !isLockedOut) {
+					someoneElseAnswering = false;
+					canBuzz = true;
+				}
 			}
+
+			// Auto-clear feedback after 3 seconds
+			feedbackTimeout = window.setTimeout(() => {
+				feedbackMessage = null;
+			}, 3000);
+			socket.events.clear('answerResult');
 		}
 	});
 
 	// Subscribe to choices:artist event
 	$effect(() => {
 		const event = socket.events.artistChoices;
-		if (event && event.playerId === player.id) {
-			artistChoices = event.artistChoices || [];
-			showChoices = true;
-			answerType = 'artist';
+		if (event) {
+			console.log('[Player] choices:artist event received', {
+				playerId: event.playerId,
+				isForMe: event.playerId === player.id,
+				choices: event.artistChoices,
+				currentState: { showChoices, hasBuzzed, answerType }
+			});
+
+			if (event.playerId === player.id) {
+				console.log('[Player] Showing artist choices to me');
+				artistChoices = event.artistChoices || [];
+				showChoices = true;
+				answerType = 'artist';
+			}
+			socket.events.clear('artistChoices');
 		}
 	});
 
@@ -142,10 +268,33 @@
 	$effect(() => {
 		const event = socket.events.songEnded;
 		if (event) {
-			// Song finished - reset state
+			console.log('[Player] 🏁 SONG ENDED - Showing answer', {
+				correctTitle: event.correctTitle,
+				correctArtist: event.correctArtist,
+				playerId: player.id,
+				playerName: player.name
+			});
+
+			// Song finished - disable interaction during answer reveal
 			showChoices = false;
 			hasBuzzed = false;
 			canBuzz = false;
+
+			console.log('[Player] 👀 Entering answer reveal phase (5 seconds)');
+
+			// Show correct answer as info message
+			if (feedbackTimeout) {
+				clearTimeout(feedbackTimeout);
+			}
+			feedbackMessage = {
+				type: 'info',
+				text: `✅ Answer: "${event.correctTitle}" by ${event.correctArtist}`
+			};
+
+			// Clear after 4 seconds (song will start new one after 5s delay on server)
+			feedbackTimeout = window.setTimeout(() => {
+				feedbackMessage = null;
+			}, 4000);
 
 			// Stop audio if playing
 			if (audioElement) {
@@ -153,6 +302,23 @@
 				audioElement.currentTime = 0;
 				audioElement.src = '';
 			}
+			socket.events.clear('songEnded');
+		}
+	});
+
+	// Cleanup on component unmount
+	onDestroy(() => {
+		// Clear any pending feedback timeout
+		if (feedbackTimeout) {
+			clearTimeout(feedbackTimeout);
+			feedbackTimeout = null;
+		}
+
+		// Stop and clean up audio element
+		if (audioElement) {
+			audioElement.pause();
+			audioElement.currentTime = 0;
+			audioElement.src = '';
 		}
 	});
 </script>
@@ -167,13 +333,25 @@
 		<div class="player-name">{player.name}</div>
 	</div>
 
+	<!-- Feedback Message -->
+	{#if feedbackMessage}
+		<div class="feedback-message {feedbackMessage.type}">
+			{feedbackMessage.text}
+		</div>
+	{/if}
+
 	<!-- Game Status -->
 	<div class="game-status">
-		{#if !hasBuzzed && canBuzz}
+		{#if isLockedOut}
+			<p class="status-text">🚫 You're locked out for this song</p>
+		{:else if someoneElseAnswering}
+			<p class="status-text">⏸️ {activePlayerAnswering} is answering...</p>
+		{:else if !hasBuzzed && canBuzz}
 			<p class="status-text">🎵 Listen and buzz when you know the answer!</p>
 			<div class="timer-bar">
-				<div class="timer-fill" style="width: {(timeRemaining / 15) * 100}%"></div>
+				<div class="timer-fill" style="width: {(timeRemaining / maxSongDuration) * 100}%"></div>
 			</div>
+			<div class="timer-text">{timeRemaining}s</div>
 		{:else if hasBuzzed && !showChoices}
 			<p class="status-text">⏳ Waiting for choices...</p>
 		{:else if showChoices}
@@ -184,13 +362,13 @@
 				<span>{answerTimeRemaining}s</span>
 			</div>
 		{:else}
-			<p class="status-text">🔒 Someone else is answering...</p>
+			<p class="status-text">⏸️ Waiting...</p>
 		{/if}
 	</div>
 
 	<!-- Buzz Button -->
-	{#if !hasBuzzed && canBuzz}
-		<button class="buzz-button" onclick={handleBuzz} disabled={!canBuzz}>
+	{#if !hasBuzzed && canBuzz && !someoneElseAnswering && !isLockedOut}
+		<button class="buzz-button" onclick={handleBuzz} disabled={!canBuzz || someoneElseAnswering || isLockedOut}>
 			<span class="buzz-text">BUZZ!</span>
 		</button>
 	{/if}
@@ -214,12 +392,7 @@
 		</div>
 	{/if}
 
-	<!-- Locked Out State -->
-	{#if !canBuzz && !hasBuzzed}
-		<div class="locked-out">
-			<p>🚫 You're locked out for this song</p>
-		</div>
-	{/if}
+	<!-- Locked Out State (moved to status message above, remove this duplicate) -->
 
 	<!-- Audio player (hidden, for player-side audio playback) -->
 	<audio bind:this={audioElement} style="display: none;"></audio>
@@ -266,6 +439,44 @@
 		color: #4b5563;
 	}
 
+	.feedback-message {
+		padding: 1rem 1.5rem;
+		border-radius: 0.75rem;
+		font-weight: 600;
+		text-align: center;
+		margin-bottom: 1.5rem;
+		animation: slideIn 0.3s ease-out;
+	}
+
+	.feedback-message.success {
+		background: #d1fae5;
+		color: #065f46;
+		border: 2px solid #10b981;
+	}
+
+	.feedback-message.error {
+		background: #fee2e2;
+		color: #991b1b;
+		border: 2px solid #ef4444;
+	}
+
+	.feedback-message.info {
+		background: #dbeafe;
+		color: #1e40af;
+		border: 2px solid #3b82f6;
+	}
+
+	@keyframes slideIn {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
 	.game-status {
 		text-align: center;
 		margin-bottom: 2rem;
@@ -290,6 +501,14 @@
 		height: 100%;
 		background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
 		transition: width 1s linear;
+	}
+
+	.timer-text {
+		margin-top: 0.5rem;
+		font-size: 1rem;
+		font-weight: 600;
+		color: #1f2937;
+		text-align: center;
 	}
 
 	.answer-timer {

@@ -3,24 +3,43 @@
  */
 
 import { eq, and, lt } from 'drizzle-orm';
-import type { Room, Repository } from '@blind-test/shared';
-import { generateId, generateRoomCode, generateRoomJoinURL } from '@blind-test/shared';
+import type { Room, Repository, PlayerStats } from '@blind-test/shared';
+import { generateId, generateRoomCode, generateRoomJoinURL, ROOM_CONFIG } from '@blind-test/shared';
 import { db, schema } from '../db';
 import { getLocalNetworkIP, generateQRCodeDataURL } from '../utils/network';
+import { AuthService } from '../services/AuthService';
+import { logger } from '../utils/logger';
+
+const roomLogger = logger.child({ module: 'RoomRepository' });
+
+/**
+ * DTO for updating room fields
+ */
+interface RoomUpdateDTO {
+  name?: string;
+  status?: Room['status'];
+  maxPlayers?: number;
+  masterIp?: string;
+}
 
 export class RoomRepository implements Repository<Room> {
   /**
    * Convert database row to Room with players array
+   * @param dbRoom - Database room record
+   * @param dbPlayers - Optional pre-fetched players (avoids N+1 queries)
    */
-  private async toRoom(dbRoom: typeof schema.rooms.$inferSelect): Promise<Room> {
-    // Fetch players for this room
-    const dbPlayers = await db
+  private async toRoom(
+    dbRoom: typeof schema.rooms.$inferSelect,
+    dbPlayers?: Array<typeof schema.players.$inferSelect>
+  ): Promise<Room> {
+    // Fetch players for this room if not provided
+    const playersData = dbPlayers ?? await db
       .select()
       .from(schema.players)
       .where(eq(schema.players.roomId, dbRoom.id));
 
-    // Convert DB players to shared Player type
-    const players = dbPlayers.map(p => ({
+    // Convert DB players to shared Player type with proper stats typing
+    const players = playersData.map(p => ({
       id: p.id,
       roomId: p.roomId,
       name: p.name,
@@ -31,7 +50,8 @@ export class RoomRepository implements Repository<Room> {
       roundScore: p.roundScore,
       isActive: p.isActive,
       isLockedOut: p.isLockedOut,
-      stats: p.stats as any,
+      // Drizzle returns JSON fields as the parsed object, we just need to type it
+      stats: p.stats as PlayerStats,
     }));
 
     return {
@@ -60,8 +80,27 @@ export class RoomRepository implements Repository<Room> {
   }
 
   async findAll(): Promise<Room[]> {
-    const results = await db.select().from(schema.rooms);
-    return Promise.all(results.map(r => this.toRoom(r)));
+    // Fetch all rooms
+    const rooms = await db.select().from(schema.rooms);
+
+    if (rooms.length === 0) return [];
+
+    // Fetch all players in one query (avoids N+1 problem)
+    const allPlayers = await db.select().from(schema.players);
+
+    // Group players by roomId for efficient lookup
+    const playersByRoom = new Map<string, Array<typeof schema.players.$inferSelect>>();
+    for (const player of allPlayers) {
+      if (!playersByRoom.has(player.roomId)) {
+        playersByRoom.set(player.roomId, []);
+      }
+      playersByRoom.get(player.roomId)!.push(player);
+    }
+
+    // Convert rooms with their pre-fetched players (2 queries total instead of N+1)
+    return Promise.all(
+      rooms.map(room => this.toRoom(room, playersByRoom.get(room.id) || []))
+    );
   }
 
   async findByCode(code: string): Promise<Room | null> {
@@ -84,14 +123,15 @@ export class RoomRepository implements Repository<Room> {
     return Promise.all(results.map(r => this.toRoom(r)));
   }
 
-  async create(data: Partial<Room>): Promise<Room> {
+  async create(data: Partial<Room>): Promise<Room & { masterToken: string }> {
     const id = generateId();
     const code = await this.generateUniqueCode();
+    const masterToken = AuthService.generateToken();
     const now = new Date();
 
     // Get local network IP for QR code
     const localIP = getLocalNetworkIP();
-    const joinURL = generateRoomJoinURL(id, localIP, 5173);
+    const joinURL = generateRoomJoinURL(id, localIP);
     const qrCode = await generateQRCodeDataURL(joinURL);
 
     const newRoom = {
@@ -100,19 +140,22 @@ export class RoomRepository implements Repository<Room> {
       code,
       qrCode,
       masterIp: localIP,
+      masterToken, // Store master token in database
       status: 'lobby' as const,
       createdAt: now,
       updatedAt: now,
-      maxPlayers: data.maxPlayers || 8,
+      maxPlayers: data.maxPlayers || ROOM_CONFIG.DEFAULT_MAX_PLAYERS,
     };
 
     await db.insert(schema.rooms).values(newRoom);
 
-    console.log(`[RoomRepository] Created room with QR code URL: ${joinURL}`);
+    roomLogger.info('Created room with QR code', { roomId: id, joinURL });
 
+    // Return room with masterToken for initial response (client needs it once)
     return {
       ...newRoom,
       players: [],
+      masterToken, // Client gets this once on creation
     };
   }
 
@@ -120,11 +163,12 @@ export class RoomRepository implements Repository<Room> {
     const existing = await this.findById(id);
     if (!existing) throw new Error('Room not found');
 
-    const updateData: any = {
+    // Build typed update DTO with only allowed fields
+    const updateData: RoomUpdateDTO & { updatedAt: Date } = {
       updatedAt: new Date(),
     };
 
-    // Only update allowed fields
+    // Only update allowed fields (explicit whitelisting)
     if (data.name !== undefined) updateData.name = data.name;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.maxPlayers !== undefined) updateData.maxPlayers = data.maxPlayers;
@@ -135,7 +179,10 @@ export class RoomRepository implements Repository<Room> {
       .set(updateData)
       .where(eq(schema.rooms.id, id));
 
-    return this.findById(id) as Promise<Room>;
+    // Safe to cast because we just updated it
+    const updated = await this.findById(id);
+    if (!updated) throw new Error('Failed to fetch updated room');
+    return updated;
   }
 
   async delete(id: string): Promise<void> {
@@ -170,6 +217,20 @@ export class RoomRepository implements Repository<Room> {
         return code;
       }
     } while (true);
+  }
+
+  /**
+   * Get master token for a room (for authorization checks)
+   * INTERNAL USE ONLY - never expose to client
+   */
+  async getMasterToken(roomId: string): Promise<string | null> {
+    const result = await db
+      .select({ masterToken: schema.rooms.masterToken })
+      .from(schema.rooms)
+      .where(eq(schema.rooms.id, roomId))
+      .limit(1);
+
+    return result.length > 0 ? result[0].masterToken : null;
   }
 
   /**

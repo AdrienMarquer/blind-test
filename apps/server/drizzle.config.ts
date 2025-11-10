@@ -1,10 +1,15 @@
 import type { Config } from 'drizzle-kit';
 
-export default {
+// PostgreSQL only configuration
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://adriquiz:adriquiz_dev@localhost:5432/adriquiz';
+
+const config: Config = {
   schema: './src/db/schema.ts',
   out: './drizzle',
-  dialect: 'sqlite',
+  dialect: 'postgresql',
   dbCredentials: {
-    url: './db/blind-test.db',
+    url: DATABASE_URL,
   },
-} satisfies Config;
+};
+
+export default config;
