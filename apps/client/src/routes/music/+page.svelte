@@ -4,6 +4,9 @@
 	import type { Song } from '@blind-test/shared';
 	import { SONG_CONFIG } from '@blind-test/shared';
 	import AudioClipSelector from '$lib/components/AudioClipSelector.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+	import InputField from '$lib/components/ui/InputField.svelte';
 
 	let songs = $state<Song[]>([]);
 	let loading = $state(true);
@@ -12,22 +15,33 @@
 	let searchQuery = $state('');
 	let selectedFile = $state<File | null>(null);
 	let showClipSelector = $state(false);
-	let clipStart = $state(SONG_CONFIG.DEFAULT_CLIP_START);
-	let clipDuration = $state(SONG_CONFIG.DEFAULT_CLIP_DURATION);
+	let clipStart = $state<number>(SONG_CONFIG.DEFAULT_CLIP_START);
+	let clipDuration = $state<number>(SONG_CONFIG.DEFAULT_CLIP_DURATION);
+	const songsApi = api.api.songs as Record<string, any>;
 
-	// Spotify search state
 	let spotifyQuery = $state('');
 	let spotifyResults = $state<any[]>([]);
 	let searchingSpotify = $state(false);
 	let addingFromSpotify = $state(false);
 	let selectedSpotifyId = $state<string | null>(null);
 
-	// Check if a Spotify track already exists in library
+	const filteredSongs = $derived(
+		searchQuery.trim()
+			? songs.filter(
+				(song) =>
+					song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+					song.artist.toLowerCase().includes(searchQuery.toLowerCase())
+			)
+			: songs
+	);
+
+	const totalDuration = $derived(songs.reduce((acc, song) => acc + song.duration, 0));
+
 	function isTrackInLibrary(spotifyId: string, title: string, artist: string): boolean {
-		return songs.some(song =>
-			song.spotifyId === spotifyId ||
-			(song.title.toLowerCase() === title.toLowerCase() &&
-			 song.artist.toLowerCase() === artist.toLowerCase())
+		return songs.some(
+			(song) =>
+				song.spotifyId === spotifyId ||
+				(song.title.toLowerCase() === title.toLowerCase() && song.artist.toLowerCase() === artist.toLowerCase())
 		);
 	}
 
@@ -44,10 +58,10 @@
 			if (response.ok) {
 				spotifyResults = data.results || [];
 			} else {
-				error = data.error || 'Failed to search Spotify';
+				error = data.error || 'Recherche Spotify impossible';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to search Spotify';
+			error = err instanceof Error ? err.message : 'Recherche Spotify impossible';
 			console.error('Spotify search error:', err);
 		} finally {
 			searchingSpotify = false;
@@ -55,7 +69,7 @@
 	}
 
 	async function addFromSpotify(spotifyId: string, title: string) {
-		if (!confirm(`Add "${title}" to library?\n\nThis will download the audio from YouTube.`)) return;
+		if (!confirm(`Ajouter "${title}" à la bibliothèque ?\n\nL’audio sera récupéré automatiquement.`)) return;
 
 		try {
 			addingFromSpotify = true;
@@ -71,16 +85,14 @@
 			const data = await response.json();
 
 			if (response.ok) {
-				console.log('Song added successfully:', data);
 				spotifyResults = [];
 				spotifyQuery = '';
 				await loadSongs();
 			} else {
-				error = data.error || 'Failed to add song';
-				console.error('Add from Spotify error:', data);
+				error = data.error || 'Ajout impossible';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to add song';
+			error = err instanceof Error ? err.message : 'Ajout impossible';
 			console.error('Add from Spotify error:', err);
 		} finally {
 			addingFromSpotify = false;
@@ -92,16 +104,15 @@
 		try {
 			loading = true;
 			error = null;
-			const response = await api.api.songs.get();
+			const response = await songsApi.get();
 
 			if (response.data) {
 				songs = response.data.songs || [];
-				console.log('Loaded songs:', songs);
 			} else {
-				error = 'Failed to load songs';
+				error = 'Impossible de charger les morceaux';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load songs';
+			error = err instanceof Error ? err.message : 'Impossible de charger les morceaux';
 			console.error('Error loading songs:', err);
 		} finally {
 			loading = false;
@@ -112,7 +123,6 @@
 		const input = event.target as HTMLInputElement;
 		if (input.files && input.files[0]) {
 			selectedFile = input.files[0];
-			// Show clip selector modal
 			showClipSelector = true;
 		}
 	}
@@ -121,14 +131,12 @@
 		clipStart = start;
 		clipDuration = duration;
 		showClipSelector = false;
-		// Proceed with upload
 		uploadSong();
 	}
 
 	function handleClipCancel() {
 		showClipSelector = false;
 		selectedFile = null;
-		// Reset file input
 		const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
 		if (fileInput) fileInput.value = '';
 	}
@@ -145,28 +153,24 @@
 			formData.append('clipStart', clipStart.toString());
 			formData.append('clipDuration', clipDuration.toString());
 
-			// Use fetch directly for file upload since Eden Treaty doesn't handle FormData well
 			const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3007'}/api/songs/upload`, {
 				method: 'POST',
-				body: formData,
+				body: formData
 			});
 
 			if (!response.ok) {
 				const errorData = await response.json();
-				throw new Error(errorData.error || 'Upload failed');
+				throw new Error(errorData.error || 'Upload impossible');
 			}
 
-			const song = await response.json();
-			console.log('Song uploaded:', song);
-
+			await response.json();
 			selectedFile = null;
-			// Reset file input
 			const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
 			if (fileInput) fileInput.value = '';
 
 			await loadSongs();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to upload song';
+			error = err instanceof Error ? err.message : 'Upload impossible';
 			console.error('Error uploading song:', err);
 		} finally {
 			uploading = false;
@@ -174,15 +178,14 @@
 	}
 
 	async function deleteSong(songId: string, title: string) {
-		if (!confirm(`Delete "${title}"?`)) return;
+		if (!confirm(`Supprimer "${title}" ?`)) return;
 
 		try {
 			error = null;
-			await api.api.songs[songId].delete();
-			console.log('Song deleted successfully');
+			await songsApi[songId].delete();
 			await loadSongs();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to delete song';
+			error = err instanceof Error ? err.message : 'Suppression impossible';
 			console.error('Error deleting song:', err);
 		}
 	}
@@ -195,507 +198,353 @@
 
 	function formatFileSize(bytes: number): string {
 		const mb = bytes / (1024 * 1024);
-		return `${mb.toFixed(2)} MB`;
+		return `${mb.toFixed(2)} Mo`;
 	}
-
-	const filteredSongs = $derived(
-		searchQuery.trim()
-			? songs.filter(
-					(song) =>
-						song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-						song.artist.toLowerCase().includes(searchQuery.toLowerCase())
-				)
-			: songs
-	);
 
 	onMount(() => {
 		loadSongs();
 	});
 </script>
 
-<main>
-	<div class="header">
-		<div>
-			<h1>🎵 Music Library</h1>
-			<p class="subtitle">Manage your song collection</p>
-		</div>
-		<a href="/" class="back-button">← Back to Rooms</a>
+	<div class="music-hero aq-hero-card">
+	<div>
+		<h1>🎵 Bibliothèque AdriQuiz</h1>
+		<p>Ajoute tes extraits préférés, découpe les meilleurs moments et garde un œil sur ta collection.</p>
 	</div>
-
-	<section class="upload-section">
-		<h2>Upload New Song</h2>
-		<div class="file-input-wrapper">
-			<input
-				type="file"
-				accept=".mp3,.m4a,.wav,.flac"
-				onchange={handleFileSelect}
-				disabled={uploading}
-			/>
-			{#if uploading}
-				<p class="file-name">Uploading...</p>
-			{/if}
+	<div class="hero-highlights">
+		<div>
+			<p class="stat-label">Total morceaux</p>
+			<strong>{songs.length}</strong>
 		</div>
-		<p class="help-text">Supported formats: MP3, M4A, WAV, FLAC (max 50MB)</p>
-	</section>
+		<div>
+			<p class="stat-label">Durée cumulée</p>
+			<strong>{formatDuration(totalDuration)}</strong>
+		</div>
+	</div>
+	<div class="hero-links">
+		<Button variant="ghost" onclick={() => (window.location.href = '/')}>← Retour lobby</Button>
+	</div>
+</div>
 
-	<section class="spotify-section">
-		<h2>🎧 Add from Spotify</h2>
-		<form
-			onsubmit={(e) => {
-				e.preventDefault();
-				searchSpotify();
-			}}
-		>
-			<div class="spotify-search">
-				<input
-					type="text"
-					class="search-input"
-					placeholder="Search Spotify (artist, song, album)..."
-					bind:value={spotifyQuery}
-					disabled={searchingSpotify}
-				/>
-				<button type="submit" disabled={searchingSpotify || !spotifyQuery.trim()}>
-					{searchingSpotify ? 'Searching...' : 'Search'}
-				</button>
+<section class="tools-grid">
+	<Card title="Uploader un extrait" subtitle="Formats MP3, M4A, WAV, FLAC - 50 Mo max" icon="⬆️">
+		<div class="upload-stack">
+			<label class={`file-drop ${uploading ? 'disabled' : ''}`}>
+				<input type="file" accept=".mp3,.m4a,.wav,.flac" onchange={handleFileSelect} disabled={uploading} />
+				<div>
+					<strong>{selectedFile ? selectedFile.name : 'Glisse un fichier ou clique ici'}</strong>
+					<p>{uploading ? 'Upload en cours...' : 'Tu pourras choisir le meilleur extrait juste après.'}</p>
+				</div>
+			</label>
+			<div class="tips">
+				<span>✨ Astuce : coupe entre {SONG_CONFIG.DEFAULT_CLIP_START}s et {SONG_CONFIG.DEFAULT_CLIP_START + SONG_CONFIG.DEFAULT_CLIP_DURATION}s pour un démarrage punchy.</span>
 			</div>
+		</div>
+	</Card>
+
+	<Card title="Ajouter via Spotify" subtitle="Recherche et import auto" icon="🎧">
+		<form class="spotify-form" onsubmit={(e) => { e.preventDefault(); searchSpotify(); }}>
+			<InputField placeholder="Artiste, titre, album..." bind:value={spotifyQuery} />
+			<Button type="submit" variant="secondary" disabled={searchingSpotify || !spotifyQuery.trim()}>
+				{searchingSpotify ? 'Recherche...' : 'Chercher'}
+			</Button>
 		</form>
 
 		{#if spotifyResults.length > 0}
 			<div class="spotify-results">
 				{#each spotifyResults as track (track.spotifyId)}
-					<div class="spotify-track">
+					<div class="spotify-card">
 						{#if track.albumArt}
-							<img src={track.albumArt} alt={track.title} class="album-art" />
+							<img src={track.albumArt} alt={track.title} />
 						{/if}
-						<div class="track-info">
+						<div>
 							<h4>{track.title}</h4>
-							<p class="artist">{track.artist}</p>
-							{#if track.album}
-								<p class="album-name">{track.album}</p>
-							{/if}
-							<div class="track-meta">
-								<span class="year">{track.year}</span>
-								<span class="duration">{formatDuration(track.duration)}</span>
+							<p>{track.artist}</p>
+							<div class="meta">
+								<span>{track.album}</span>
+								<span>{track.year}</span>
+								<span>{formatDuration(track.duration)}</span>
 							</div>
 						</div>
 						{#if isTrackInLibrary(track.spotifyId, track.title, track.artist)}
-							<span class="already-added">✓ In Library</span>
+							<span class="in-library">✓ Ajouté</span>
 						{:else}
-							<button
-								class="add-button"
-								onclick={() => addFromSpotify(track.spotifyId, track.title)}
-								disabled={addingFromSpotify}
-							>
-								{addingFromSpotify && selectedSpotifyId === track.spotifyId ? '⏳ Adding...' : '➕ Add'}
-							</button>
+								<Button
+									variant="primary"
+									size="sm"
+									onclick={() => addFromSpotify(track.spotifyId, track.title)}
+									disabled={addingFromSpotify}
+								>
+								{addingFromSpotify && selectedSpotifyId === track.spotifyId ? 'Ajout...' : 'Importer'}
+							</Button>
 						{/if}
 					</div>
 				{/each}
 			</div>
 		{/if}
-	</section>
+	</Card>
+</section>
 
-	{#if error}
-		<div class="error">{error}</div>
-	{/if}
+{#if error}
+	<div class="aq-feedback error">{error}</div>
+{/if}
 
-	<section class="library-section">
-		<div class="library-header">
-			<h2>Song Library ({songs.length} songs)</h2>
-			<input
-				type="text"
-				class="search-input"
-				placeholder="Search songs..."
-				bind:value={searchQuery}
-			/>
+<Card title={`Bibliothèque (${songs.length})`} subtitle="Filtre instantané" icon="📚">
+	<div class="library-toolbar">
+		<InputField placeholder="Rechercher un titre ou un artiste" bind:value={searchQuery} />
+		<Button variant="outline" onclick={loadSongs} disabled={loading}>
+			{loading ? 'Chargement...' : 'Actualiser'}
+		</Button>
+	</div>
+
+	{#if loading}
+		<div class="skeleton-grid">
+			<div class="skeleton-card"></div>
+			<div class="skeleton-card"></div>
 		</div>
-
-		{#if loading}
-			<p class="loading">Loading songs...</p>
-		{:else if filteredSongs.length === 0}
-			<p class="empty">
-				{searchQuery ? 'No songs found matching your search.' : 'No songs in library. Upload some music to get started!'}
-			</p>
-		{:else}
-			<div class="songs-grid">
-				{#each filteredSongs as song (song.id)}
-					<div class="song-card">
-						<div class="song-info">
+	{:else if filteredSongs.length === 0}
+		<div class="empty-state">
+			<h3>Aucun titre ne correspond</h3>
+			<p>{searchQuery ? 'Essaie avec un autre mot clé.' : 'Ajoute un morceau pour démarrer ta collection.'}</p>
+		</div>
+	{:else}
+		<div class="songs-grid">
+			{#each filteredSongs as song (song.id)}
+				<div class="song-card">
+					<div class="song-main">
+						<div>
 							<h3>{song.title}</h3>
-							<p class="artist">{song.artist}</p>
-							{#if song.album}
-								<p class="album">Album: {song.album}</p>
-							{/if}
-							<div class="metadata">
-								<span class="year">{song.year}</span>
-								{#if song.genre}
-									<span class="genre">{song.genre}</span>
-								{/if}
-								<span class="duration">{formatDuration(song.duration)}</span>
-							</div>
-							<div class="file-info">
-								<span class="format">{song.format.toUpperCase()}</span>
-								<span class="size">{formatFileSize(song.fileSize)}</span>
-							</div>
+							<p>{song.artist}</p>
 						</div>
-						<button class="delete-button" onclick={() => deleteSong(song.id, song.title)}>
+						<button class="ghost-delete" onclick={() => deleteSong(song.id, song.title)} aria-label={`Supprimer ${song.title}`}>
 							🗑️
 						</button>
 					</div>
-				{/each}
-			</div>
-		{/if}
-	</section>
-
-	<!-- Audio Clip Selector Modal -->
-	{#if showClipSelector && selectedFile}
-		<AudioClipSelector
-			file={selectedFile}
-			defaultClipStart={SONG_CONFIG.DEFAULT_CLIP_START}
-			defaultClipDuration={SONG_CONFIG.DEFAULT_CLIP_DURATION}
-			maxDuration={SONG_CONFIG.MAX_CLIP_DURATION}
-			onSelect={handleClipSelect}
-			onCancel={handleClipCancel}
-		/>
+					<div class="song-meta">
+						<span>{song.album}</span>
+						<span>{song.genre}</span>
+						<span>{song.year}</span>
+					</div>
+					<div class="song-extra">
+						<span>{song.format.toUpperCase()}</span>
+						<span>{formatDuration(song.duration)}</span>
+						<span>{formatFileSize(song.fileSize)}</span>
+					</div>
+				</div>
+			{/each}
+		</div>
 	{/if}
-</main>
+</Card>
+
+{#if showClipSelector && selectedFile}
+	<AudioClipSelector
+		file={selectedFile}
+		defaultClipStart={SONG_CONFIG.DEFAULT_CLIP_START}
+		defaultClipDuration={SONG_CONFIG.DEFAULT_CLIP_DURATION}
+		maxDuration={SONG_CONFIG.MAX_CLIP_DURATION}
+		onSelect={handleClipSelect}
+		onCancel={handleClipCancel}
+	/>
+{/if}
 
 <style>
-	main {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: 2rem;
+	.music-hero {
+		margin-bottom: 2rem;
 	}
 
-	.header {
+	.hero-highlights {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 1rem;
+		margin-top: 1.5rem;
+	}
+
+	.hero-highlights .stat-label {
+		font-size: 0.85rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.hero-highlights strong {
+		font-size: 2rem;
+	}
+
+	.hero-links {
+		margin-top: 1.5rem;
+	}
+
+	.tools-grid {
+		display: grid;
+		gap: 1.5rem;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		margin-bottom: 2rem;
+	}
+
+	.upload-stack {
 		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: 2rem;
+		flex-direction: column;
+		gap: 1rem;
 	}
 
-	h1 {
-		font-size: 2.5rem;
-		margin: 0 0 0.5rem 0;
-		color: #1f2937;
-	}
-
-	.subtitle {
-		margin: 0;
-		color: #6b7280;
-		font-size: 1rem;
-	}
-
-	.back-button {
-		display: inline-block;
-		color: #3b82f6;
-		text-decoration: none;
-		font-weight: 600;
-		transition: color 0.2s;
-	}
-
-	.back-button:hover {
-		color: #2563eb;
-	}
-
-	h2 {
-		font-size: 1.5rem;
-		margin-bottom: 1rem;
-		color: #374151;
-	}
-
-	section {
-		margin-bottom: 2rem;
+	.file-drop {
+		border: 2px dashed rgba(255, 255, 255, 0.7);
+		border-radius: 24px;
 		padding: 1.5rem;
-		background-color: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-	}
-
-	.file-input-wrapper {
-		flex: 1;
-		min-width: 250px;
-	}
-
-	input[type='file'] {
-		padding: 0.75rem;
-		font-size: 1rem;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		background-color: white;
-		cursor: pointer;
-		width: 100%;
-	}
-
-	input[type='file']:disabled {
-		background-color: #f3f4f6;
-		cursor: not-allowed;
-	}
-
-	.file-name {
-		margin-top: 0.5rem;
-		color: #6b7280;
-		font-size: 0.875rem;
-	}
-
-	.help-text {
-		width: 100%;
-		color: #6b7280;
-		font-size: 0.875rem;
-		margin-top: 0.5rem;
-	}
-
-	button {
-		padding: 0.75rem 1.5rem;
-		font-size: 1rem;
-		font-weight: 600;
-		color: white;
-		background-color: #3b82f6;
-		border: none;
-		border-radius: 0.5rem;
-		cursor: pointer;
-		transition: background-color 0.2s;
-		white-space: nowrap;
-	}
-
-	button:hover:not(:disabled) {
-		background-color: #2563eb;
-	}
-
-	button:disabled {
-		background-color: #9ca3af;
-		cursor: not-allowed;
-	}
-
-	.error {
-		padding: 1rem;
-		margin-bottom: 1rem;
-		background-color: #fee2e2;
-		color: #991b1b;
-		border-radius: 0.5rem;
-		border-left: 4px solid #dc2626;
-	}
-
-	.loading,
-	.empty {
 		text-align: center;
-		color: #6b7280;
-		padding: 2rem;
-		font-style: italic;
+		background: rgba(255, 255, 255, 0.5);
+		cursor: pointer;
+		transition: border-color 160ms ease, transform 160ms ease;
 	}
 
-	.library-header {
+	.file-drop:hover:not(.disabled) {
+		transform: translateY(-3px);
+		border-color: var(--aq-color-primary);
+	}
+
+	.file-drop input {
+		display: none;
+	}
+
+	.tips {
+		font-size: 0.9rem;
+		color: var(--aq-color-muted);
+	}
+
+	.spotify-form {
 		display: flex;
-		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+
+	.spotify-results {
+		margin-top: 1.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		max-height: 360px;
+		overflow: auto;
+	}
+
+	.spotify-card {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		gap: 1rem;
+		align-items: center;
+		padding: 1rem;
+		border-radius: 18px;
+		background: rgba(18, 43, 59, 0.05);
+	}
+
+	.spotify-card img {
+		width: 64px;
+		height: 64px;
+		object-fit: cover;
+		border-radius: 12px;
+	}
+
+	.spotify-card h4 {
+		margin: 0;
+	}
+
+	.spotify-card p {
+		margin: 0.2rem 0;
+		color: var(--aq-color-muted);
+	}
+
+	.spotify-card .meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+	}
+
+	.in-library {
+		font-weight: 600;
+		color: #0f9d58;
+	}
+
+	.library-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
 		align-items: center;
 		margin-bottom: 1rem;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.search-input {
-		padding: 0.5rem 1rem;
-		font-size: 1rem;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		min-width: 250px;
-		transition: border-color 0.2s;
-	}
-
-	.search-input:focus {
-		outline: none;
-		border-color: #3b82f6;
 	}
 
 	.songs-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 		gap: 1rem;
 	}
 
 	.song-card {
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 24px;
+		padding: 1rem 1.25rem;
+		border: 1px solid rgba(255, 255, 255, 0.4);
 		position: relative;
-		padding: 1.5rem;
-		padding-right: 4rem;
-		background-color: #f9fafb;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		transition: all 0.2s;
 	}
 
-	.song-card:hover {
-		border-color: #3b82f6;
-		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-		transform: translateY(-2px);
-	}
-
-	.song-info h3 {
-		margin: 0 0 0.5rem 0;
-		font-size: 1.125rem;
-		color: #1f2937;
-	}
-
-	.artist {
-		margin: 0 0 0.25rem 0;
-		color: #6b7280;
-		font-weight: 600;
-	}
-
-	.album {
-		margin: 0 0 0.5rem 0;
-		color: #6b7280;
-		font-size: 0.875rem;
-	}
-
-	.metadata {
+	.song-main {
 		display: flex;
+		justify-content: space-between;
 		gap: 1rem;
-		margin-bottom: 0.5rem;
-		flex-wrap: wrap;
+		align-items: flex-start;
 	}
 
-	.metadata span {
-		padding: 0.25rem 0.5rem;
-		background-color: white;
-		border-radius: 0.25rem;
-		font-size: 0.875rem;
-		color: #374151;
+	.song-main h3 {
+		margin: 0;
 	}
 
-	.year {
-		font-weight: 600;
+	.song-main p {
+		margin: 0.2rem 0 0 0;
+		color: var(--aq-color-muted);
 	}
 
-	.file-info {
+	.song-meta,
+	.song-extra {
 		display: flex;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
 		margin-top: 0.5rem;
+		color: var(--aq-color-muted);
+		font-size: 0.9rem;
 	}
 
-	.file-info span {
-		padding: 0.125rem 0.5rem;
-		background-color: #e5e7eb;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
-		color: #6b7280;
-		text-transform: uppercase;
+	.song-extra span {
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.7);
+		color: var(--aq-color-deep);
+		font-weight: 600;
 	}
 
-	.delete-button {
-		position: absolute;
-		top: 1rem;
-		right: 1rem;
-		padding: 0.5rem;
-		background-color: #ef4444;
+	.ghost-delete {
 		border: none;
-		border-radius: 0.375rem;
-		font-size: 1.25rem;
+		background: rgba(239, 76, 131, 0.12);
+		border-radius: 12px;
+		padding: 0.35rem 0.6rem;
 		cursor: pointer;
-		transition: background-color 0.2s;
-		line-height: 1;
 	}
 
-	.delete-button:hover {
-		background-color: #dc2626;
+	.empty-state {
+		text-align: center;
+		padding: 2rem 1rem;
+		background: rgba(255, 255, 255, 0.4);
+		border-radius: 24px;
 	}
 
-	/* Spotify Section */
-	.spotify-search {
-		display: flex;
-		gap: 1rem;
-		align-items: center;
-		flex-wrap: wrap;
-	}
-
-	.spotify-search input {
-		flex: 1;
-		min-width: 300px;
-	}
-
-	.spotify-results {
-		margin-top: 1.5rem;
+	.skeleton-grid {
 		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 		gap: 1rem;
 	}
 
-	.spotify-track {
-		display: flex;
-		gap: 1rem;
-		align-items: center;
-		padding: 1rem;
-		background-color: #f9fafb;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		transition: all 0.2s;
-	}
-
-	.spotify-track:hover {
-		border-color: #1db954;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-	}
-
-	.album-art {
-		width: 80px;
-		height: 80px;
-		border-radius: 0.375rem;
-		object-fit: cover;
-		flex-shrink: 0;
-	}
-
-	.track-info {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.track-info h4 {
-		margin: 0 0 0.25rem 0;
-		font-size: 1.125rem;
-		color: #1f2937;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.track-info .artist {
-		margin: 0 0 0.25rem 0;
-		font-size: 0.875rem;
-	}
-
-	.album-name {
-		margin: 0 0 0.5rem 0;
-		color: #9ca3af;
-		font-size: 0.875rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.track-meta {
-		display: flex;
-		gap: 0.75rem;
-		font-size: 0.75rem;
-		color: #6b7280;
-	}
-
-	.add-button {
-		padding: 0.625rem 1.25rem;
-		background-color: #1db954;
-		white-space: nowrap;
-		flex-shrink: 0;
-	}
-
-	.add-button:hover:not(:disabled) {
-		background-color: #1ed760;
-	}
-
-	.already-added {
-		color: #059669;
-		font-weight: 500;
-		padding: 0.625rem 1.25rem;
-		white-space: nowrap;
-		flex-shrink: 0;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
+	.skeleton-card {
+		height: 140px;
+		border-radius: 24px;
+		background: linear-gradient(90deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.4));
+		background-size: 200% 100%;
+		animation: shimmer 1.4s infinite;
 	}
 </style>

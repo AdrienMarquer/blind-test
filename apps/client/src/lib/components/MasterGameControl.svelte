@@ -1,22 +1,27 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import type { Room } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import { api } from '$lib/api';
 
 	// Props
 	const { room, socket }: { room: Room; socket: RoomSocket } = $props();
+	const gameApi = api.api.game as Record<string, any>;
 
 	// Game state
 	let currentSong = $state(0);
-	let totalSongs = $state(10);
+	let totalSongs = $state(0);
 	let isPaused = $state(false);
 	let isPlaying = $state(false);
-	let activePlayerName = $state<string>('Waiting for buzz...');
-	let currentTitle = $state('Loading...');
+	let activePlayerName = $state<string>('En attente d\'un buzz...');
+	let currentTitle = $state('Chargement...');
 	let currentArtist = $state('');
 	let statusMessage = $state<{ type: 'success' | 'info' | 'warning'; text: string } | null>(null);
 	let statusTimeout: number | null = null; // NOT a $state - just a regular variable for timer ID
+
+	// Manual validation state
+	let pendingValidation = $state<{ playerId: string; playerName: string; songIndex: number } | null>(null);
 
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
@@ -54,26 +59,60 @@
 		socket.skipSong();
 	}
 
+	function formatAnswerLabel(label: 'title' | 'artist', { withArticle = false } = {}) {
+		if (withArticle) {
+			return label === 'title' ? 'le titre' : 'l\'artiste';
+		}
+		return label === 'title' ? 'titre' : 'artiste';
+	}
+
 	async function handleEndGame() {
-		if (!confirm('Are you sure you want to end the game? This will calculate final scores.')) {
+		if (!confirm('Terminer la partie et calculer les scores finaux ?')) {
 			return;
 		}
 
 		try {
 			console.log('[Master] Ending game...', { roomId: room.id });
 
-			const response = await api.api.game[room.id].end.post();
+			const response = await gameApi[room.id].end.post();
 
 			if (response.data) {
 				console.log('[Master] Game ended successfully', response.data);
 			} else if (response.error) {
 				console.error('[Master] Failed to end game:', response.error);
-				alert(`Failed to end game: ${response.error.value}`);
+				alert(`Impossible de terminer la partie : ${response.error.value}`);
 			}
 		} catch (err) {
 			console.error('[Master] Error ending game:', err);
-			alert('Failed to end game. Please try again.');
+			alert('Impossible de terminer la partie. Réessaie.');
 		}
+	}
+
+	/**
+	 * Handle manual validation - master approves or rejects answer
+	 */
+	function handleValidateAnswer(isCorrect: boolean) {
+		if (!pendingValidation) {
+			console.error('[Master] No pending validation');
+			return;
+		}
+
+		console.log('[Master] Validating answer', {
+			playerId: pendingValidation.playerId,
+			playerName: pendingValidation.playerName,
+			songIndex: pendingValidation.songIndex,
+			isCorrect
+		});
+
+		// Submit answer with 'correct' or 'wrong' value
+		socket.submitAnswer(
+			pendingValidation.songIndex,
+			'title', // FastBuzzMode only uses title type
+			isCorrect ? 'correct' : 'wrong'
+		);
+
+		// Clear pending validation
+		pendingValidation = null;
 	}
 
 	// ========================================================================
@@ -84,6 +123,11 @@
 	$effect(() => {
 		const event = socket.events.roundStarted;
 		if (event) {
+			console.log('[Master] Round started, updating song count', {
+				roundIndex: event.roundIndex,
+				songCount: event.songCount,
+				modeType: event.modeType
+			});
 			totalSongs = event.songCount;
 			isPlaying = true;
 			socket.events.clear('roundStarted');
@@ -102,9 +146,9 @@
 			});
 
 			currentSong = event.songIndex;
-			activePlayerName = 'Waiting for buzz...';
+			activePlayerName = 'En attente d\'un buzz...';
 			// Master sees the actual song title and artist
-			currentTitle = event.songTitle || `Song ${event.songIndex + 1}`;
+			currentTitle = event.songTitle || `Morceau ${event.songIndex + 1}`;
 			currentArtist = event.songArtist || '';
 
 			// Clear any old status messages
@@ -145,8 +189,48 @@
 		const event = socket.events.playerBuzzed;
 		if (event) {
 			// Find player name from socket.players
-			const player = socket.players.find((p) => p.id === event.playerId);
-			activePlayerName = player?.name || event.playerName || 'Unknown Player';
+			const player = get(socket.players).find((p) => p.id === event.playerId);
+			activePlayerName = player?.name || event.playerName || 'Joueur inconnu';
+
+			console.log('[Master] Player buzzed!', {
+				playerId: event.playerId,
+				playerName: activePlayerName,
+				songIndex: event.songIndex,
+				manualValidation: event.manualValidation
+			});
+
+			// Check if this is manual validation mode
+			if (event.manualValidation) {
+				console.log('[Master] Manual validation required', {
+					playerId: event.playerId,
+					playerName: activePlayerName,
+					songIndex: event.songIndex
+				});
+
+				// Set pending validation
+				pendingValidation = {
+					playerId: event.playerId,
+					playerName: activePlayerName,
+					songIndex: event.songIndex
+				};
+			} else {
+				// Clear pending validation for automatic modes
+				pendingValidation = null;
+
+				// Show buzz notification for automatic modes
+				if (statusTimeout) {
+					clearTimeout(statusTimeout);
+				}
+				statusMessage = {
+					type: 'info',
+					text: `🎯 ${activePlayerName} a buzzé !`
+				};
+				// Auto-clear after 2 seconds
+				statusTimeout = window.setTimeout(() => {
+					statusMessage = null;
+				}, 2000);
+			}
+
 			socket.events.clear('playerBuzzed');
 		}
 	});
@@ -154,22 +238,27 @@
 	// Subscribe to answer:result event (show winner notifications)
 	$effect(() => {
 		const event = socket.events.answerResult;
-		if (event && event.isCorrect) {
-			// Clear any existing timeout
-			if (statusTimeout) {
-				clearTimeout(statusTimeout);
+		if (event) {
+			// Clear pending validation since answer was processed
+			pendingValidation = null;
+
+			if (event.isCorrect) {
+				// Clear any existing timeout
+				if (statusTimeout) {
+					clearTimeout(statusTimeout);
+				}
+
+				const answerTypeText = formatAnswerLabel(event.answerType, { withArticle: true });
+				statusMessage = {
+					type: 'success',
+					text: `🎉 ${event.playerName} a trouvé ${answerTypeText} ! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
+				};
+
+				// Auto-clear after 4 seconds
+				statusTimeout = window.setTimeout(() => {
+					statusMessage = null;
+				}, 4000);
 			}
-
-			const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
-			statusMessage = {
-				type: 'success',
-				text: `🎉 ${event.playerName} got the ${answerTypeText} correct! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
-			};
-
-			// Auto-clear after 4 seconds
-			statusTimeout = window.setTimeout(() => {
-				statusMessage = null;
-			}, 4000);
 			socket.events.clear('answerResult');
 		}
 	});
@@ -183,9 +272,12 @@
 				correctArtist: event.correctArtist
 			});
 
+			// Clear any pending validation
+			pendingValidation = null;
+
 			currentTitle = event.correctTitle;
 			currentArtist = event.correctArtist;
-			activePlayerName = 'Song ended';
+			activePlayerName = 'Morceau terminé';
 
 			console.log('[Master] 👀 Answer reveal phase (5 seconds)');
 
@@ -195,13 +287,13 @@
 			}
 			statusMessage = {
 				type: 'info',
-				text: `✅ Correct Answer: "${event.correctTitle}" by ${event.correctArtist}`
+				text: `✅ Réponse correcte : « ${event.correctTitle} » par ${event.correctArtist}`
 			};
 
-			// Clear after 4 seconds before next song starts
+			// Clear after 5 seconds when next song starts
 			statusTimeout = window.setTimeout(() => {
 				statusMessage = null;
-			}, 4000);
+			}, 5000);
 			socket.events.clear('songEnded');
 		}
 	});
@@ -252,9 +344,13 @@
 
 <div class="master-control">
 	<div class="control-header">
-		<h2>🎮 Master Controls</h2>
+		<h2>🎮 Contrôles maître</h2>
 		<div class="song-progress">
-			Song {currentSong + 1} / {totalSongs}
+			{#if totalSongs > 0}
+				Morceau {currentSong + 1} / {totalSongs}
+			{:else}
+				En attente...
+			{/if}
 		</div>
 	</div>
 
@@ -265,6 +361,27 @@
 		</div>
 	{/if}
 
+	<!-- Manual Validation UI -->
+	{#if pendingValidation}
+		<div class="validation-panel">
+			<div class="validation-header">
+				<span class="validation-icon">⏸️</span>
+				<div class="validation-text">
+					<strong>{pendingValidation.playerName}</strong> a buzzé !
+					<p class="validation-subtitle">Valide sa réponse :</p>
+				</div>
+			</div>
+			<div class="validation-buttons">
+				<button class="validate-btn correct" onclick={() => handleValidateAnswer(true)}>
+					✅ Correct
+				</button>
+				<button class="validate-btn wrong" onclick={() => handleValidateAnswer(false)}>
+					❌ Faux
+				</button>
+			</div>
+		</div>
+	{/if}
+
 	<div class="song-info">
 		<div class="timer">
 			<div class="timer-circle">
@@ -272,7 +389,7 @@
 			</div>
 		</div>
 		<div class="song-details">
-			<p class="label">Now Playing</p>
+			<p class="label">Lecture en cours</p>
 			<h3 class="song-title">{currentTitle}</h3>
 			<p class="song-artist">{currentArtist || '...'}</p>
 		</div>
@@ -280,23 +397,23 @@
 
 	<div class="controls">
 		<button class="control-btn pause-btn" onclick={handlePause}>
-			{isPaused ? '▶️ Resume' : '⏸️ Pause'}
+			{isPaused ? '▶️ Reprendre' : '⏸️ Pause'}
 		</button>
 		<button class="control-btn skip-btn" onclick={handleSkip}>
-			⏭️ Skip Song
+			⏭️ Passer le morceau
 		</button>
 		<button class="control-btn end-btn" onclick={handleEndGame}>
-			🛑 End Game
+			🛑 Terminer la partie
 		</button>
 	</div>
 
 	<div class="status-indicators">
 		<div class="indicator">
-			<span class="indicator-label">Status:</span>
-			<span class="indicator-value">{isPaused ? 'Paused' : 'Playing'}</span>
+			<span class="indicator-label">Statut :</span>
+			<span class="indicator-value">{isPaused ? 'En pause' : 'En lecture'}</span>
 		</div>
 		<div class="indicator">
-			<span class="indicator-label">Active Player:</span>
+			<span class="indicator-label">Joueur actif :</span>
 			<span class="indicator-value">{activePlayerName}</span>
 		</div>
 	</div>
@@ -307,60 +424,113 @@
 
 <style>
 	.master-control {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		border-radius: 1rem;
-		padding: 2rem;
-		color: white;
-		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		border-radius: 32px;
+		padding: 1.75rem;
+		color: #fff;
+		box-shadow: var(--aq-shadow-card);
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
 	}
 
 	.control-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 2rem;
-	}
-
-	.control-header h2 {
-		margin: 0;
-		font-size: 1.5rem;
 	}
 
 	.song-progress {
+		padding: 0.35rem 0.85rem;
+		border-radius: 999px;
 		background: rgba(255, 255, 255, 0.2);
-		padding: 0.5rem 1rem;
-		border-radius: 2rem;
-		font-weight: 600;
 	}
 
 	.status-banner {
-		padding: 1rem 1.5rem;
-		border-radius: 0.75rem;
+		padding: 0.85rem 1.25rem;
+		border-radius: 18px;
 		font-weight: 600;
-		text-align: center;
-		margin-bottom: 1.5rem;
-		animation: slideDown 0.3s ease-out;
+		background: rgba(255, 255, 255, 0.15);
 	}
 
-	.status-banner.success {
-		background: rgba(16, 185, 129, 0.2);
-		border: 2px solid rgba(16, 185, 129, 0.5);
+	.status-banner.success { background: rgba(248,192,39,0.2); }
+	.status-banner.info { background: rgba(255,255,255,0.2); }
+
+	.song-info {
+		display: flex;
+		gap: 1.25rem;
+		align-items: center;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 20px;
+		padding: 1rem 1.25rem;
 	}
 
-	.status-banner.info {
-		background: rgba(59, 130, 246, 0.2);
-		border: 2px solid rgba(59, 130, 246, 0.5);
+	.timer-circle {
+		width: 90px;
+		height: 90px;
+		border-radius: 50%;
+		border: 4px solid rgba(255, 255, 255, 0.35);
+		display: grid;
+		place-items: center;
 	}
 
-	.status-banner.warning {
-		background: rgba(251, 191, 36, 0.2);
-		border: 2px solid rgba(251, 191, 36, 0.5);
+	.controls {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+		gap: 0.75rem;
 	}
 
-	@keyframes slideDown {
+	.control-btn {
+		border: none;
+		padding: 0.85rem 1rem;
+		border-radius: 16px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.pause-btn { background: rgba(255,255,255,0.2); color:#fff; }
+	.skip-btn { background: rgba(255,255,255,0.2); color:#fff; }
+	.end-btn { background: rgba(18,43,59,0.2); }
+
+	.status-indicators {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.indicator {
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 14px;
+		padding: 0.75rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.indicator-label {
+		font-size: 0.85rem;
+		opacity: 0.8;
+	}
+
+	.indicator-value {
+		font-weight: 600;
+		font-size: 1.05rem;
+	}
+
+	/* Manual Validation Panel */
+	.validation-panel {
+		background: rgba(255, 255, 255, 0.95);
+		border-radius: 20px;
+		padding: 1.5rem;
+		color: var(--aq-color-deep);
+		box-shadow: 0 8px 24px rgba(239, 76, 131, 0.25);
+		animation: slideIn 0.3s ease;
+	}
+
+	@keyframes slideIn {
 		from {
 			opacity: 0;
-			transform: translateY(-20px);
+			transform: translateY(-10px);
 		}
 		to {
 			opacity: 1;
@@ -368,122 +538,66 @@
 		}
 	}
 
-	.song-info {
-		display: flex;
-		gap: 2rem;
-		align-items: center;
-		margin-bottom: 2rem;
-		background: rgba(255, 255, 255, 0.1);
-		padding: 1.5rem;
-		border-radius: 0.75rem;
-	}
-
-	.timer {
-		flex-shrink: 0;
-	}
-
-	.timer-circle {
-		width: 80px;
-		height: 80px;
-		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.2);
+	.validation-header {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		border: 4px solid rgba(255, 255, 255, 0.4);
-	}
-
-	.time {
-		font-size: 1.5rem;
-		font-weight: 700;
-	}
-
-	.song-details {
-		flex: 1;
-	}
-
-	.label {
-		margin: 0 0 0.5rem 0;
-		font-size: 0.875rem;
-		opacity: 0.8;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.song-title {
-		margin: 0 0 0.5rem 0;
-		font-size: 1.5rem;
-	}
-
-	.song-artist {
-		margin: 0;
-		opacity: 0.9;
-	}
-
-	.controls {
-		display: flex;
 		gap: 1rem;
-		margin-bottom: 1.5rem;
+		margin-bottom: 1rem;
 	}
 
-	.control-btn {
-		flex: 1;
-		padding: 1rem;
+	.validation-icon {
+		font-size: 2rem;
+	}
+
+	.validation-text strong {
+		font-size: 1.25rem;
+		color: var(--aq-color-primary);
+	}
+
+	.validation-subtitle {
+		margin: 0.25rem 0 0 0;
+		font-size: 0.95rem;
+		color: var(--aq-color-deep);
+		opacity: 0.8;
+	}
+
+	.validation-buttons {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
+	}
+
+	.validate-btn {
 		border: none;
-		border-radius: 0.5rem;
-		font-size: 1rem;
+		border-radius: 14px;
+		padding: 1rem 1.5rem;
+		font-size: 1.1rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: transform 150ms ease, box-shadow 150ms ease;
 	}
 
-	.pause-btn {
-		background: #fbbf24;
-		color: #78350f;
-	}
-
-	.pause-btn:hover {
-		background: #f59e0b;
+	.validate-btn:hover {
 		transform: translateY(-2px);
 	}
 
-	.skip-btn {
-		background: #3b82f6;
-		color: white;
+	.validate-btn.correct {
+		background: linear-gradient(135deg, #4ade80, #22c55e);
+		color: #fff;
+		box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
 	}
 
-	.skip-btn:hover {
-		background: #2563eb;
-		transform: translateY(-2px);
+	.validate-btn.correct:hover {
+		box-shadow: 0 6px 20px rgba(74, 222, 128, 0.4);
 	}
 
-	.end-btn {
-		background: #ef4444;
-		color: white;
+	.validate-btn.wrong {
+		background: linear-gradient(135deg, #f87171, #ef4444);
+		color: #fff;
+		box-shadow: 0 4px 12px rgba(248, 113, 113, 0.3);
 	}
 
-	.end-btn:hover {
-		background: #dc2626;
-		transform: translateY(-2px);
-	}
-
-	.status-indicators {
-		display: flex;
-		gap: 2rem;
-		padding-top: 1.5rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.2);
-	}
-
-	.indicator {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.indicator-label {
-		opacity: 0.8;
-	}
-
-	.indicator-value {
-		font-weight: 600;
+	.validate-btn.wrong:hover {
+		box-shadow: 0 6px 20px rgba(248, 113, 113, 0.4);
 	}
 </style>

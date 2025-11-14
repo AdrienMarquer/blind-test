@@ -13,6 +13,9 @@
     "build": "bun run build:server && bun run build:client",
     "build:server": "cd apps/server && bun run build",
     "build:client": "cd apps/client && bun run build",
+    "test": "cd apps/server && bun test",
+    "test:watch": "cd apps/server && bun test --watch",
+    "test:coverage": "cd apps/server && bun test --coverage",
     "db:migrate": "cd apps/server && bunx drizzle-kit push",
     "db:studio": "cd apps/server && bunx drizzle-kit studio"
   },

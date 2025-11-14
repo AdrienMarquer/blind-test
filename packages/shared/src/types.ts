@@ -19,7 +19,7 @@ export type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_a
 export type MediaType = 'music' | 'picture' | 'video' | 'text_question';
 
 export type SongStatus = 'pending' | 'playing' | 'answering' | 'finished';
-export type AnswerType = 'title' | 'artist' | 'both';
+export type AnswerType = 'title' | 'artist';
 
 // ============================================================================
 // Core Entities
@@ -194,6 +194,53 @@ export interface Playlist {
   totalDuration: number;       // Cached duration in seconds
 }
 
+/**
+ * Universal answer choice structure - works for ALL media types
+ * Future-proof design for music, images, video, text questions
+ */
+export interface AnswerChoice {
+  id: string;                     // Unique identifier for this choice
+  correct: boolean;               // Is this the correct answer?
+  displayText: string;            // What to show the user (always present)
+
+  // Content fields (optional - depends on media type)
+  // For music: displayText is the title or artist name (simple text)
+  // For images: displayText is the caption, imageUrl contains the image
+  // For video: displayText is the caption, videoUrl contains the video
+  // For text questions: displayText is the answer text
+  imageUrl?: string;              // Image URL (for picture rounds)
+  videoUrl?: string;              // Video URL (for video rounds)
+
+  // Optional enrichment metadata
+  metadata?: {
+    year?: number;
+    genre?: string;
+    album?: string;
+    artist?: string;              // Can be stored here for reference
+    [key: string]: any;           // Extensible
+  };
+}
+
+/**
+ * Question structure for different media types
+ * Supports: music (title/artist split), images, video, text questions
+ */
+export interface MediaQuestion {
+  type: MediaType;                // 'music' | 'picture' | 'video' | 'text_question'
+
+  // For title/artist split questions (music only)
+  phase?: 'title' | 'artist';
+
+  // The choices to present (always 4 choices)
+  choices: AnswerChoice[];
+
+  // Optional question text (for text_question type)
+  questionText?: string;
+
+  // Optional media URL (for picture/video types)
+  mediaUrl?: string;
+}
+
 export interface RoundSong {
   songId: string;
   song: Song;                  // Populated song data (or picture/video data)
@@ -210,9 +257,10 @@ export interface RoundSong {
   // Answers
   answers: Answer[];
 
-  // Generated choices (for multiple choice modes)
-  titleChoices?: string[];     // 4 title options (1 correct, 3 random)
-  artistChoices?: string[];    // 4 artist options (1 correct, 3 random)
+  // Question structure (supports all media types)
+  titleQuestion?: MediaQuestion;   // Title question with choices (music)
+  artistQuestion?: MediaQuestion;  // Artist question with choices (music)
+  question?: MediaQuestion;        // Generic question (images, video, text)
 }
 
 export interface Answer {
@@ -247,6 +295,21 @@ export interface FinalScore {
 
   // Rank
   rank: number;
+}
+
+// Round Configuration (for creating multi-round games)
+export interface RoundConfig {
+  modeType: ModeType;
+  mediaType: MediaType;
+  songFilters?: {
+    genre?: string | string[];
+    yearMin?: number;
+    yearMax?: number;
+    artistName?: string;
+    songCount?: number;
+    songIds?: string[];
+  };
+  params?: ModeParams;
 }
 
 // ============================================================================
@@ -302,8 +365,16 @@ export type ServerMessage =
 
   // Game Flow
   | { type: 'game:started'; data: { room: Room } }
-  | { type: 'round:started'; data: { roundIndex: number; songCount: number; modeType: ModeType } }
-  | { type: 'round:ended'; data: { roundIndex: number; scores: Array<{ playerId: string; score: number }> } }
+  | { type: 'round:started'; data: { room: Room | null; roundIndex: number; songCount: number; modeType: ModeType; mediaType: MediaType } }
+  | { type: 'round:ended'; data: { roundIndex: number; scores: Array<{ playerId: string; playerName: string; score: number; rank: number }> } }
+  | { type: 'round:between'; data: {
+      room: Room;
+      completedRoundIndex: number;
+      nextRoundIndex: number;
+      nextRoundMode: ModeType;
+      nextRoundMedia: MediaType;
+      scores: Array<{ playerId: string; playerName: string; score: number; rank: number }>;
+    } }
   | { type: 'game:ended'; data: { finalScores: FinalScore[] } }
 
   // Song Events
@@ -321,7 +392,7 @@ export type ServerMessage =
   | { type: 'song:ended'; data: { songIndex: number; correctTitle: string; correctArtist: string } }
 
   // Gameplay
-  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; titleChoices?: string[] } }
+  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; songIndex: number; modeType: ModeType; manualValidation?: boolean; titleQuestion?: MediaQuestion } }
   | { type: 'buzz:rejected'; data: { playerId: string; reason: string } }
   | { type: 'answer:result'; data: {
       playerId: string;
@@ -332,7 +403,7 @@ export type ServerMessage =
       shouldShowArtistChoices?: boolean;
       lockOutPlayer?: boolean;
     } }
-  | { type: 'choices:artist'; data: { playerId: string; artistChoices: string[] } }
+  | { type: 'choices:artist'; data: { playerId: string; artistQuestion: MediaQuestion } }
 
   // Master Controls
   | { type: 'game:paused'; data: { timestamp: number } }

@@ -20,6 +20,12 @@ interface SongUpdateDTO {
   year?: number;
   genre?: string | null;
   clipStart?: number;
+  clipDuration?: number;
+  language?: string | null;
+  subgenre?: string | null;
+  spotifyId?: string | null;
+  youtubeId?: string | null;
+  source?: string;
 }
 
 export class SongRepository implements Repository<Song> {
@@ -38,6 +44,7 @@ export class SongRepository implements Repository<Song> {
       genre: dbSong.genre || undefined,
       duration: dbSong.duration,
       clipStart: dbSong.clipStart,
+      clipDuration: dbSong.clipDuration,
       createdAt: new Date(dbSong.createdAt),
       fileSize: dbSong.fileSize,
       format: dbSong.format,
@@ -145,7 +152,13 @@ export class SongRepository implements Repository<Song> {
       year: data.year,
       genre: data.genre || null,
       duration: data.duration,
-      clipStart: data.clipStart || SONG_CONFIG.DEFAULT_CLIP_START,
+      language: data.language || null,
+      subgenre: data.subgenre || null,
+      spotifyId: data.spotifyId || null,
+      youtubeId: data.youtubeId || null,
+      source: data.source || 'upload',
+      clipStart: data.clipStart ?? SONG_CONFIG.DEFAULT_CLIP_START,
+      clipDuration: data.clipDuration ?? SONG_CONFIG.DEFAULT_CLIP_DURATION,
       createdAt: now,
       fileSize: data.fileSize,
       format: data.format,
@@ -173,6 +186,12 @@ export class SongRepository implements Repository<Song> {
     if (data.year !== undefined) updateData.year = data.year;
     if (data.genre !== undefined) updateData.genre = data.genre;
     if (data.clipStart !== undefined) updateData.clipStart = data.clipStart;
+    if (data.clipDuration !== undefined) updateData.clipDuration = data.clipDuration;
+    if (data.language !== undefined) updateData.language = data.language;
+    if (data.subgenre !== undefined) updateData.subgenre = data.subgenre;
+    if (data.spotifyId !== undefined) updateData.spotifyId = data.spotifyId;
+    if (data.youtubeId !== undefined) updateData.youtubeId = data.youtubeId;
+    if (data.source !== undefined) updateData.source = data.source;
 
     await db
       .update(schema.songs)

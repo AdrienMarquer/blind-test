@@ -14,7 +14,12 @@ const config = {
 			// Prerender all pages by default
 			precompress: false,
 			strict: true
-		})
+		}),
+		prerender: {
+			handleMissingId: 'ignore',
+			handleHttpError: 'ignore',
+			handleUnseenRoutes: 'ignore'
+		}
 	}
 };
 

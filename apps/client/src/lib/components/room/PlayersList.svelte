@@ -12,10 +12,10 @@
 </script>
 
 <section class="players-section">
-	<h2>Players ({players.length}/{room.maxPlayers})</h2>
+	<h2>Joueurs ({players.length}/{room.maxPlayers})</h2>
 
 	{#if players.length === 0}
-		<p class="empty">No players yet. Be the first to join!</p>
+		<p class="empty">Aucun joueur pour l’instant. Lance-toi !</p>
 	{:else}
 		<div class="players-list">
 			{#each players as player (player.id)}
@@ -24,17 +24,17 @@
 						<span class="player-name">
 							{player.name}
 							{#if !player.connected}
-								<span class="status-badge">Disconnected</span>
+								<span class="status-badge">Hors ligne</span>
 							{/if}
 						</span>
-						<span class="player-score">Score: {player.score}</span>
+						<span class="player-score">Score : {player.score}</span>
 					</div>
 					{#if room.status === 'lobby' && isMaster}
 						<button
 							class="remove-button"
 							onclick={() => onRemovePlayer(player.id)}
 						>
-							Remove
+							Retirer
 						</button>
 					{/if}
 				</div>

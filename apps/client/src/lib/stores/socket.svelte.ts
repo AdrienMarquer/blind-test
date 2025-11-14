@@ -3,7 +3,8 @@
  * Type-safe event-driven architecture for real-time communication
  */
 
-import type { Room, Player, ServerMessage, ClientMessage } from '@blind-test/shared';
+import type { Room, Player, ServerMessage, ClientMessage, MediaQuestion } from '@blind-test/shared';
+import { writable, type Writable, get } from 'svelte/store';
 
 // Auto-detect server URL based on current host
 const getServerUrl = () => {
@@ -31,20 +32,29 @@ export class GameEvents {
   songEnded = $state<{ songIndex: number; correctTitle: string; correctArtist: string } | null>(null);
 
   // Player events (gameplay)
-  playerBuzzed = $state<{ playerId: string; playerName: string; titleChoices?: string[] } | null>(null);
+  playerBuzzed = $state<{ playerId: string; playerName: string; songIndex: number; modeType: import('@blind-test/shared').ModeType; manualValidation?: boolean; titleQuestion?: MediaQuestion } | null>(null);
   buzzRejected = $state<{ playerId: string; reason: string } | null>(null);
   answerResult = $state<{
     playerId: string;
+    playerName: string;
+    answerType: 'title' | 'artist';
     isCorrect: boolean;
     pointsAwarded: number;
     shouldShowArtistChoices?: boolean;
     lockOutPlayer?: boolean;
   } | null>(null);
-  artistChoices = $state<{ playerId: string; artistChoices: string[] } | null>(null);
+  artistChoices = $state<{ playerId: string; artistQuestion: MediaQuestion } | null>(null);
 
   // Round events
   roundStarted = $state<{ roundIndex: number; songCount: number; modeType: string } | null>(null);
-  roundEnded = $state<{ roundIndex: number; scores: Record<string, number> } | null>(null);
+  roundEnded = $state<{ roundIndex: number; scores: Array<{ playerId: string; playerName: string; score: number; rank: number }> } | null>(null);
+  roundBetween = $state<{
+    completedRoundIndex: number;
+    nextRoundIndex: number;
+    nextRoundMode: string;
+    nextRoundMedia: string;
+    scores: Array<{ playerId: string; playerName: string; score: number; rank: number }>;
+  } | null>(null);
   gameEnded = $state<{ finalScores: import('@blind-test/shared').FinalScore[] } | null>(null);
 
   // Game control events
@@ -69,11 +79,11 @@ export class RoomSocket {
   private socket: WebSocket | null = $state(null);
   private connectionTimeout: number | null = null;
 
-  // Public reactive state
-  connected = $state(false);
-  room = $state<Room | null>(null);
-  players = $state<Player[]>([]);
-  error = $state<string | null>(null);
+  // Public reactive state (Svelte stores for easy subscription)
+  connected: Writable<boolean> = writable(false);
+  room: Writable<Room | null> = writable(null);
+  players: Writable<Player[]> = writable([]);
+  error: Writable<string | null> = writable(null);
 
   // Reactive event stream
   events = new GameEvents();
@@ -123,9 +133,9 @@ export class RoomSocket {
 
     // Set connection timeout (5 seconds)
     this.connectionTimeout = window.setTimeout(() => {
-      if (!this.connected && this.socket) {
+      if (!get(this.connected) && this.socket) {
         console.error('[WebSocket] Connection timeout');
-        this.error = 'Connection timeout - server may be unavailable';
+        this.error.set('Connection timeout - server may be unavailable');
         this.socket.close();
         this.socket = null;
       }
@@ -148,8 +158,8 @@ export class RoomSocket {
         this.connectionTimeout = null;
       }
 
-      this.connected = true;
-      this.error = null;
+      this.connected.set(true);
+      this.error.set(null);
 
       // Request initial state sync
       this.requestStateSync();
@@ -161,11 +171,11 @@ export class RoomSocket {
         this.connectionTimeout = null;
       }
 
-      this.connected = false;
+      this.connected.set(false);
       console.log(`[WebSocket] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
 
       if (event.code !== 1000 && event.code !== 1005) {
-        this.error = event.reason || 'Connection closed unexpectedly';
+        this.error.set(event.reason || 'Connection closed unexpectedly');
       }
     };
 
@@ -175,8 +185,8 @@ export class RoomSocket {
         this.connectionTimeout = null;
       }
 
-      this.connected = false;
-      this.error = 'Connection error - check if server is running';
+      this.connected.set(false);
+      this.error.set('Connection error - check if server is running');
       console.error('[WebSocket] Connection failed');
     };
 
@@ -195,7 +205,10 @@ export class RoomSocket {
    * Single source of truth for message parsing
    */
   private handleMessage(message: ServerMessage) {
-    console.log('[WS]', message.type, message.data);
+    // Log all messages except high-frequency timer updates
+    if (!message.type.startsWith('timer:')) {
+      console.log('[WS]', message.type, message.data);
+    }
 
     switch (message.type) {
       // Connection
@@ -203,55 +216,69 @@ export class RoomSocket {
         break;
 
       case 'state:synced':
-        this.room = message.data.room;
-        this.players = message.data.players || [];
+        this.room.set(message.data.room);
+        this.players.set(message.data.players || []);
         break;
 
       case 'error':
-        this.error = message.data.message;
+        this.error.set(message.data.message);
         console.error(`[WS Error] ${message.data.code || 'ERROR'}:`, message.data.message);
         break;
 
       // Player Events
       case 'player:joined':
-        this.room = message.data.room;
-        if (message.data.player && !this.players.find((p) => p.id === message.data.player.id)) {
-          this.players = [...this.players, message.data.player];
+        this.room.set(message.data.room);
+        if (message.data.player && !get(this.players).find((p) => p.id === message.data.player.id)) {
+          this.players.update((players) => [...players, message.data.player]);
         }
         break;
 
       case 'player:left':
-        this.players = this.players.filter((p) => p.id !== message.data.playerId);
+        this.players.update((players) => players.filter((p) => p.id !== message.data.playerId));
         break;
 
       case 'player:kicked':
-        this.error = `You were kicked: ${message.data.reason}`;
+        this.error.set(`You were kicked: ${message.data.reason}`);
         this.disconnect();
         break;
 
       case 'player:disconnected':
-        this.players = this.players.map((p) =>
-          p.id === message.data.playerId ? { ...p, connected: false } : p
+        this.players.update((players) =>
+          players.map((p) => (p.id === message.data.playerId ? { ...p, connected: false } : p))
         );
         break;
 
       case 'player:reconnected':
-        this.players = this.players.map((p) =>
-          p.id === message.data.playerId ? { ...p, connected: true } : p
+        this.players.update((players) =>
+          players.map((p) => (p.id === message.data.playerId ? { ...p, connected: true } : p))
         );
         break;
 
       // Game Flow
       case 'game:started':
-        this.room = message.data.room;
+        this.room.set(message.data.room);
         break;
 
       case 'round:started':
+        console.log('[WS] Received round:started event', message.data);
+        // Update room status to playing
+        if (message.data.room) {
+          this.room.set(message.data.room);
+        }
         this.events.roundStarted = message.data;
         break;
 
       case 'round:ended':
         this.events.roundEnded = message.data;
+        break;
+
+      case 'round:between':
+        console.log('[WS] Received round:between event', message.data);
+        // Update room status to between_rounds
+        if (message.data.room) {
+          this.room.set(message.data.room);
+        }
+        this.events.roundBetween = message.data;
         break;
 
       case 'game:ended':
@@ -315,11 +342,17 @@ export class RoomSocket {
 
       // Score Updates
       case 'score:updated':
+        console.log('[WS] Score updated', {
+          playerId: message.data.playerId,
+          playerName: message.data.playerName,
+          newScore: message.data.score,
+          pointsAwarded: message.data.pointsAwarded
+        });
         // Update player score in local players array
-        this.players = this.players.map(p =>
-          p.id === message.data.playerId
-            ? { ...p, score: message.data.score }
-            : p
+        this.players.update((players) =>
+          players.map((p) =>
+            p.id === message.data.playerId ? { ...p, score: message.data.score } : p
+          )
         );
         break;
     }
@@ -405,7 +438,7 @@ export class RoomSocket {
     if (this.socket) {
       this.socket.close();
       this.socket = null;
-      this.connected = false;
+      this.connected.set(false);
     }
   }
 

@@ -14,14 +14,21 @@
  */
 
 import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
-import { shuffle } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
-import { mediaRegistry } from '../media';
+import { answerGenerationService, AnswerGenerationService } from '../services/AnswerGenerationService';
 
 export class BuzzAndChoiceMode extends BaseModeHandler {
   type = 'buzz_and_choice' as const;
   name = 'Buzz + Multiple Choice';
   description = 'Race to buzz in, then identify title and artist from multiple choice options';
+
+  private answerService: AnswerGenerationService;
+
+  constructor(answerService?: AnswerGenerationService) {
+    super();
+    // Allow dependency injection for testing, default to singleton
+    this.answerService = answerService || answerGenerationService;
+  }
 
   defaultParams: ModeParams = {
     songDuration: 15,
@@ -35,27 +42,39 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
   };
 
   /**
-   * Initialize song with multiple choice options
+   * Initialize song with multiple choice questions
    */
   async startSong(song: RoundSong, allSongs: Song[], mediaType: MediaType): Promise<void> {
     await super.startSong(song, allSongs, mediaType);
 
-    // Get the appropriate media handler
-    const mediaHandler = mediaRegistry.get(mediaType);
-
-    // Load media content
     const correctSong = song.song;
-    const mediaContent = await mediaHandler.loadContent(correctSong);
 
-    // Generate 3 wrong choices for title and artist
-    const wrongTitles = mediaHandler.generateWrongChoices(mediaContent, allSongs, 3, 'title');
-    const wrongArtists = mediaHandler.generateWrongChoices(mediaContent, allSongs, 3, 'artist');
+    this.modeLogger.debug('Generating MediaQuestions for song', {
+      songId: correctSong.id,
+      songTitle: correctSong.title,
+      songArtist: correctSong.artist
+    });
 
-    // Combine correct answer with wrong answers and shuffle
-    song.titleChoices = shuffle([mediaContent.title, ...wrongTitles]);
-    song.artistChoices = shuffle([mediaContent.artist || '', ...wrongArtists]);
+    try {
+      // Generate title and artist questions upfront
+      song.titleQuestion = await this.answerService.generateTitleQuestion(correctSong, mediaType);
+      song.artistQuestion = await this.answerService.generateArtistQuestion(correctSong, mediaType);
 
-    this.modeLogger.debug('Generated choices', { mediaType, songTitle: correctSong.title });
+      this.modeLogger.info('Generated MediaQuestions for buzz mode', {
+        mediaType,
+        songTitle: correctSong.title,
+        songArtist: correctSong.artist || 'Unknown Artist',
+        titleChoicesCount: song.titleQuestion.choices.length,
+        artistChoicesCount: song.artistQuestion.choices.length
+      });
+    } catch (error) {
+      this.modeLogger.error('CRITICAL: Failed to generate MediaQuestions', {
+        error,
+        songId: correctSong.id,
+        songTitle: correctSong.title
+      });
+      throw error; // Let it fail - emergency fallbacks are in the service layer
+    }
   }
 
   /**
@@ -253,6 +272,46 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
 
     // Timer expiry is handled by GameService
 
+    return false;
+  }
+
+  /**
+   * Get buzz payload for WebSocket broadcast
+   * This mode requires titleQuestion to be available
+   */
+  getBuzzPayload(song: RoundSong): Record<string, any> | null {
+    // Validate that titleQuestion exists (should have been generated in startSong)
+    if (!song.titleQuestion || !song.titleQuestion.choices || song.titleQuestion.choices.length === 0) {
+      this.modeLogger.error('Cannot create buzz payload - no title question available', {
+        songId: song.song.id,
+        songTitle: song.song.title,
+        hasTitleQuestion: !!song.titleQuestion
+      });
+      return null; // Reject the buzz
+    }
+
+    if (song.titleQuestion.choices.length !== 4) {
+      this.modeLogger.warn('Title question has incorrect number of choices', {
+        songId: song.song.id,
+        choicesCount: song.titleQuestion.choices.length
+      });
+    }
+
+    this.modeLogger.debug('Creating buzz payload with title question', {
+      songId: song.song.id,
+      titleChoicesCount: song.titleQuestion.choices.length
+    });
+
+    return {
+      titleQuestion: song.titleQuestion
+    };
+  }
+
+  /**
+   * Buzz and choice mode does NOT pause the timer on buzz
+   * Players get automatic answer timer instead
+   */
+  shouldPauseOnBuzz(): boolean {
     return false;
   }
 }

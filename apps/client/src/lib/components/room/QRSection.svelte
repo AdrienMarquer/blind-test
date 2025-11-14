@@ -13,10 +13,10 @@
 
 <section class="qr-section">
 	<div class="qr-container">
-		<h2>📱 Scan to Join</h2>
-		<img src={qrCode} alt="QR Code to join room" class="qr-code" />
+		<h2>📱 Scanne pour rejoindre</h2>
+		<img src={qrCode} alt="QR code pour rejoindre la salle" class="qr-code" />
 		<p class="qr-hint">
-			Players can scan this QR code with their phone camera to join the room
+			Les joueurs peuvent scanner ce QR code avec leur téléphone pour rejoindre la salle
 		</p>
 	</div>
 </section>

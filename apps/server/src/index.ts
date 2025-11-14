@@ -36,13 +36,6 @@ const wsLogger = logger.child({ module: 'WebSocket' });
 const clientBuildPath = path.join(process.cwd(), '../client/build');
 const hasClientBuild = existsSync(clientBuildPath);
 
-if (!hasClientBuild) {
-  logger.warn('Client build not found', {
-    path: clientBuildPath,
-    message: 'Run `bun run build:client` to build the client for production'
-  });
-}
-
 // Initialize Elysia app
 const app = new Elysia()
   .use(cors())

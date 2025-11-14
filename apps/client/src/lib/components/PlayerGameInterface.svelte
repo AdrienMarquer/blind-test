@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import type { Player } from '@blind-test/shared';
+	import { get } from 'svelte/store';
+	import type { Player, AnswerChoice } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
+	import BuzzAndChoiceUI from './game/BuzzAndChoiceUI.svelte';
+	import FastBuzzUI from './game/FastBuzzUI.svelte';
+	import TextInputUI from './game/TextInputUI.svelte';
 
 	// Props
 	const { player, socket }: { player: Player; socket: RoomSocket } = $props();
@@ -16,14 +20,21 @@
 	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
 	let someoneElseAnswering = $state(false);
 	let activePlayerAnswering = $state<string>(''); // Name of player currently answering
+	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'>('buzz_and_choice');
 
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
 	const answerTimeRemaining = $derived(socket.answerTimeRemaining);
 
-	// Choices
-	let titleChoices = $state<string[]>([]);
-	let artistChoices = $state<string[]>([]);
+	function formatAnswerLabel(label: 'title' | 'artist', { withArticle = false } = {}) {
+		if (withArticle) {
+			return label === 'title' ? 'le titre' : "l'artiste";
+		}
+		return label === 'title' ? 'titre' : 'artiste';
+	}
+
+	// Choices - now using AnswerChoice objects
+	let currentChoices = $state<AnswerChoice[]>([]);
 
 	// Player score
 	let score = $state(player.score);
@@ -64,6 +75,35 @@
 	// Reactive Event Subscriptions using $effect()
 	// ========================================================================
 
+	// Subscribe to round:started event
+	$effect(() => {
+		const event = socket.events.roundStarted;
+		if (event) {
+			console.log('[Player] 🎮 NEW ROUND STARTED - Updating mode', {
+				roundIndex: event.roundIndex,
+				modeType: event.modeType,
+				songCount: event.songCount,
+				playerId: player.id
+			});
+
+			// Update mode type for the new round
+			currentModeType = event.modeType as 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
+
+			// Clear any residual state from previous round
+			hasBuzzed = false;
+			canBuzz = false; // Will be enabled when song starts
+			showChoices = false;
+			isLockedOut = false;
+			someoneElseAnswering = false;
+			activePlayerAnswering = '';
+			currentChoices = [];
+			feedbackMessage = null;
+
+			console.log('[Player] ✅ Round started - Mode updated to:', currentModeType);
+			socket.events.clear('roundStarted');
+		}
+	});
+
 	// Subscribe to song:started event
 	$effect(() => {
 		const event = socket.events.songStarted;
@@ -83,8 +123,7 @@
 			activePlayerAnswering = '';
 
 			// Clear all old choices and state
-			titleChoices = [];
-			artistChoices = [];
+			currentChoices = [];
 			answerType = 'title';
 			feedbackMessage = null;
 
@@ -128,15 +167,43 @@
 	$effect(() => {
 		const event = socket.events.playerBuzzed;
 		if (event) {
+			console.log('[Player] player:buzzed received', {
+				playerId: event.playerId,
+				isForMe: event.playerId === player.id,
+				modeType: event.modeType,
+				hasTitleQuestion: !!event.titleQuestion,
+				titleChoicesCount: event.titleQuestion?.choices?.length
+			});
+
+			// Update current mode type
+			currentModeType = event.modeType;
+
 			if (event.playerId === player.id) {
-				// We buzzed successfully - show title choices
-				titleChoices = event.titleChoices || [];
-				showChoices = true;
-				answerType = 'title';
+				// We buzzed successfully - handle based on mode type
 				someoneElseAnswering = false;
+
+				if (event.modeType === 'buzz_and_choice' || event.modeType === 'timed_answer') {
+					// Show multiple choice questions
+					currentChoices = event.titleQuestion?.choices || [];
+					showChoices = true;
+					answerType = 'title';
+
+					console.log('[Player] Showing title choices (mode: ' + event.modeType + ')', {
+						count: currentChoices.length,
+						choices: currentChoices.map(c => c.displayText)
+					});
+				} else if (event.modeType === 'fast_buzz') {
+					// Fast buzz mode - no choices, waiting for master validation
+					showChoices = false;
+					console.log('[Player] Fast buzz mode - waiting for master validation');
+				} else if (event.modeType === 'text_input') {
+					// Text input mode - would show text input field (future implementation)
+					showChoices = false;
+					console.log('[Player] Text input mode - would show text input');
+				}
 			} else {
 				// Someone else buzzed - disable our buzzing and show who is answering
-				const playerName = event.playerName || socket.players.find(p => p.id === event.playerId)?.name || 'Another player';
+				const playerName = event.playerName || get(socket.players).find(p => p.id === event.playerId)?.name || 'un autre joueur';
 				activePlayerAnswering = playerName;
 				someoneElseAnswering = true;
 				canBuzz = false;
@@ -186,16 +253,16 @@
 
 				if (event.isCorrect) {
 					score += event.pointsAwarded;
-					const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+					const answerTypeText = formatAnswerLabel(event.answerType);
 					feedbackMessage = {
 						type: 'success',
-						text: `✅ Correct ${answerTypeText}! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
+						text: `✅ Bonne réponse (${answerTypeText}) ! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
 					};
 				} else {
-					const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+					const answerTypeText = formatAnswerLabel(event.answerType);
 					feedbackMessage = {
 						type: 'error',
-						text: `❌ Wrong ${answerTypeText}. ${event.lockOutPlayer ? 'You are locked out.' : ''}`
+						text: `❌ Mauvaise réponse (${answerTypeText}). ${event.lockOutPlayer ? 'Tu es bloqué.' : ''}`
 					};
 				}
 
@@ -221,10 +288,10 @@
 			} else {
 				// Another player's answer result
 				if (event.isCorrect) {
-					const answerTypeText = event.answerType === 'title' ? 'title' : 'artist';
+					const answerTypeText = formatAnswerLabel(event.answerType, { withArticle: true });
 					feedbackMessage = {
 						type: 'info',
-						text: `🏆 ${event.playerName} got the ${answerTypeText} correct!`
+						text: `🏆 ${event.playerName} a trouvé ${answerTypeText} !`
 					};
 				}
 
@@ -250,13 +317,13 @@
 			console.log('[Player] choices:artist event received', {
 				playerId: event.playerId,
 				isForMe: event.playerId === player.id,
-				choices: event.artistChoices,
+				choices: event.artistQuestion?.choices.map(c => c.displayText),
 				currentState: { showChoices, hasBuzzed, answerType }
 			});
 
 			if (event.playerId === player.id) {
 				console.log('[Player] Showing artist choices to me');
-				artistChoices = event.artistChoices || [];
+				currentChoices = event.artistQuestion?.choices || [];
 				showChoices = true;
 				answerType = 'artist';
 			}
@@ -288,7 +355,7 @@
 			}
 			feedbackMessage = {
 				type: 'info',
-				text: `✅ Answer: "${event.correctTitle}" by ${event.correctArtist}`
+				text: `✅ Réponse : « ${event.correctTitle} » par ${event.correctArtist}`
 			};
 
 			// Clear after 4 seconds (song will start new one after 5s delay on server)
@@ -327,10 +394,9 @@
 	<!-- Score Display -->
 	<div class="score-display">
 		<div class="score-card">
-			<span class="score-label">Your Score</span>
+			<span class="score-label">Ton score</span>
 			<span class="score-value">{score}</span>
 		</div>
-		<div class="player-name">{player.name}</div>
 	</div>
 
 	<!-- Feedback Message -->
@@ -343,56 +409,49 @@
 	<!-- Game Status -->
 	<div class="game-status">
 		{#if isLockedOut}
-			<p class="status-text">🚫 You're locked out for this song</p>
+			<p class="status-text">🚫 Tu es bloqué pour ce morceau</p>
 		{:else if someoneElseAnswering}
-			<p class="status-text">⏸️ {activePlayerAnswering} is answering...</p>
+			<p class="status-text">⏸️ {activePlayerAnswering} répond...</p>
 		{:else if !hasBuzzed && canBuzz}
-			<p class="status-text">🎵 Listen and buzz when you know the answer!</p>
+			<p class="status-text">🎵 Écoute et buzze dès que tu as la réponse !</p>
 			<div class="timer-bar">
 				<div class="timer-fill" style="width: {(timeRemaining / maxSongDuration) * 100}%"></div>
 			</div>
 			<div class="timer-text">{timeRemaining}s</div>
-		{:else if hasBuzzed && !showChoices}
-			<p class="status-text">⏳ Waiting for choices...</p>
-		{:else if showChoices}
-			<p class="status-text">
-				{answerType === 'title' ? '🎵 Select the title' : '🎤 Select the artist'}
-			</p>
-			<div class="answer-timer">
-				<span>{answerTimeRemaining}s</span>
-			</div>
-		{:else}
-			<p class="status-text">⏸️ Waiting...</p>
+		{:else if !showChoices && !hasBuzzed}
+			<p class="status-text">⏸️ En attente...</p>
 		{/if}
 	</div>
 
-	<!-- Buzz Button -->
-	{#if !hasBuzzed && canBuzz && !someoneElseAnswering && !isLockedOut}
+	<!-- Buzz Button (for modes that support buzzing) -->
+	{#if currentModeType !== 'text_input' && !hasBuzzed && canBuzz && !someoneElseAnswering && !isLockedOut}
 		<button class="buzz-button" onclick={handleBuzz} disabled={!canBuzz || someoneElseAnswering || isLockedOut}>
-			<span class="buzz-text">BUZZ!</span>
+			<span class="buzz-text">BUZZ&nbsp;!</span>
 		</button>
 	{/if}
 
-	<!-- Multiple Choice -->
-	{#if showChoices}
-		<div class="choices">
-			{#if answerType === 'title'}
-				{#each titleChoices as choice}
-					<button class="choice-button" onclick={() => handleAnswer(choice)}>
-						{choice}
-					</button>
-				{/each}
-			{:else}
-				{#each artistChoices as choice}
-					<button class="choice-button" onclick={() => handleAnswer(choice)}>
-						{choice}
-					</button>
-				{/each}
-			{/if}
-		</div>
+	<!-- Mode-Specific UI Components -->
+	{#if showChoices && (currentModeType === 'buzz_and_choice' || currentModeType === 'timed_answer')}
+		<BuzzAndChoiceUI
+			{currentChoices}
+			{answerType}
+			answerTimeRemaining={answerTimeRemaining}
+			onAnswer={handleAnswer}
+		/>
+	{:else if hasBuzzed && currentModeType === 'fast_buzz'}
+		<FastBuzzUI
+			{hasBuzzed}
+			answerTimeRemaining={answerTimeRemaining}
+		/>
+	{:else if currentModeType === 'text_input'}
+		<TextInputUI
+			onSubmit={(title, artist) => {
+				if (title) handleAnswer(title);
+				if (artist) handleAnswer(artist);
+			}}
+			answerTimeRemaining={answerTimeRemaining}
+		/>
 	{/if}
-
-	<!-- Locked Out State (moved to status message above, remove this duplicate) -->
 
 	<!-- Audio player (hidden, for player-side audio playback) -->
 	<audio bind:this={audioElement} style="display: none;"></audio>
@@ -400,213 +459,65 @@
 
 <style>
 	.player-interface {
-		max-width: 600px;
+		max-width: 640px;
 		margin: 0 auto;
-		padding: 2rem;
-	}
-
-	.score-display {
-		text-align: center;
-		margin-bottom: 2rem;
+		padding: 1.5rem;
+		border-radius: 32px;
+		background: rgba(255, 255, 255, 0.95);
+		box-shadow: var(--aq-shadow-soft);
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
 
 	.score-card {
-		display: inline-flex;
-		flex-direction: column;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		color: white;
-		padding: 1.5rem 3rem;
-		border-radius: 1rem;
-		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-		margin-bottom: 1rem;
-	}
-
-	.score-label {
-		font-size: 0.875rem;
-		opacity: 0.9;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.score-value {
-		font-size: 3rem;
-		font-weight: 700;
-		margin-top: 0.5rem;
-	}
-
-	.player-name {
-		font-weight: 600;
-		color: #4b5563;
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		border-radius: 24px;
+		color: #fff;
+		padding: 1.5rem;
+		text-align: center;
 	}
 
 	.feedback-message {
-		padding: 1rem 1.5rem;
-		border-radius: 0.75rem;
+		padding: 0.85rem 1rem;
+		border-radius: 16px;
 		font-weight: 600;
 		text-align: center;
-		margin-bottom: 1.5rem;
-		animation: slideIn 0.3s ease-out;
 	}
 
-	.feedback-message.success {
-		background: #d1fae5;
-		color: #065f46;
-		border: 2px solid #10b981;
-	}
-
-	.feedback-message.error {
-		background: #fee2e2;
-		color: #991b1b;
-		border: 2px solid #ef4444;
-	}
-
-	.feedback-message.info {
-		background: #dbeafe;
-		color: #1e40af;
-		border: 2px solid #3b82f6;
-	}
-
-	@keyframes slideIn {
-		from {
-			opacity: 0;
-			transform: translateY(-10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
+	.feedback-message.success { background: rgba(248,192,39,0.2); color: var(--aq-color-secondary); }
+	.feedback-message.error { background: rgba(239,76,131,0.15); color: var(--aq-color-primary); }
+	.feedback-message.info { background: rgba(18,43,59,0.08); color: var(--aq-color-deep); }
 
 	.game-status {
 		text-align: center;
-		margin-bottom: 2rem;
-	}
-
-	.status-text {
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: #1f2937;
-		margin-bottom: 1rem;
 	}
 
 	.timer-bar {
 		width: 100%;
-		height: 8px;
-		background: #e5e7eb;
-		border-radius: 4px;
+		height: 10px;
+		border-radius: 999px;
+		background: rgba(18,43,59,0.1);
 		overflow: hidden;
 	}
 
 	.timer-fill {
 		height: 100%;
-		background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
-		transition: width 1s linear;
-	}
-
-	.timer-text {
-		margin-top: 0.5rem;
-		font-size: 1rem;
-		font-weight: 600;
-		color: #1f2937;
-		text-align: center;
-	}
-
-	.answer-timer {
-		display: inline-block;
-		width: 60px;
-		height: 60px;
-		border-radius: 50%;
-		background: #fbbf24;
-		color: #78350f;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 1.5rem;
-		font-weight: 700;
+		background: linear-gradient(90deg, var(--aq-color-primary), var(--aq-color-secondary));
 	}
 
 	.buzz-button {
-		width: 100%;
-		height: 200px;
-		border: none;
+		width: 220px;
+		height: 220px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-		color: white;
-		font-size: 3rem;
+		border: none;
+		background: radial-gradient(circle, var(--aq-color-primary), var(--aq-color-accent));
+		color: #fff;
+		font-size: 2rem;
 		font-weight: 700;
-		cursor: pointer;
-		box-shadow: 0 20px 50px rgba(239, 68, 68, 0.4);
-		transition: all 0.2s;
 		margin: 0 auto;
-		display: block;
-		aspect-ratio: 1;
-		max-width: 300px;
-	}
-
-	.buzz-button:hover:not(:disabled) {
-		transform: scale(1.05);
-		box-shadow: 0 25px 60px rgba(239, 68, 68, 0.5);
-	}
-
-	.buzz-button:active:not(:disabled) {
-		transform: scale(0.95);
-	}
-
-	.buzz-button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.buzz-text {
-		animation: pulse 1.5s ease-in-out infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.1);
-		}
-	}
-
-	.choices {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1rem;
-		margin-top: 2rem;
-	}
-
-	.choice-button {
-		padding: 1.5rem;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.75rem;
-		background: white;
-		font-size: 1rem;
-		font-weight: 600;
+		box-shadow: 0 20px 40px rgba(239, 76, 131, 0.35);
 		cursor: pointer;
-		transition: all 0.2s;
-		color: #1f2937;
 	}
 
-	.choice-button:hover {
-		border-color: #3b82f6;
-		background: #eff6ff;
-		transform: translateY(-2px);
-		box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-	}
-
-	.locked-out {
-		text-align: center;
-		padding: 2rem;
-		background: #fee2e2;
-		border-radius: 0.75rem;
-		color: #991b1b;
-		font-weight: 600;
-	}
-
-	.locked-out p {
-		margin: 0;
-	}
 </style>

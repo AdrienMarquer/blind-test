@@ -108,6 +108,25 @@ export interface ModeHandler {
    * @param activePlayerCount - Optional count of active players for all-locked-out detection
    */
   shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean;
+
+  /**
+   * Get the payload to include in the player:buzzed WebSocket event
+   * Each mode can customize what data clients receive when a player buzzes
+   * Returns null if the buzz should be rejected (e.g., missing required data)
+   * @param song - The current song
+   * @returns Payload object to merge into the buzz event, or null to reject
+   */
+  getBuzzPayload(song: RoundSong): Record<string, any> | null;
+
+  /**
+   * Determine if the song timer should pause when a player buzzes
+   * This allows modes to control their own timer behavior:
+   * - Manual validation modes (FastBuzz): return true to pause timer
+   * - Automatic validation modes (BuzzAndChoice, TextInput): return false to keep timer running
+   *
+   * @returns true if song timer should pause on buzz, false otherwise
+   */
+  shouldPauseOnBuzz(): boolean;
 }
 
 /**
@@ -143,6 +162,15 @@ export abstract class BaseModeHandler implements ModeHandler {
     return round.songs.every(s => s.status === 'finished');
   }
 
+  /**
+   * NOTE: Parameter resolution for game flow (songDuration, answerTimer, manualValidation)
+   * is handled by GameService using ParameterResolver, which properly implements the
+   * inheritance chain: round.params → mode.defaultParams → SYSTEM_DEFAULTS
+   *
+   * Mode handlers should use this.defaultParams for their internal logic.
+   * Round-level parameter overrides are applied by GameService before calling mode methods.
+   */
+
   // Abstract methods (must be implemented by subclasses)
   abstract handleBuzz(playerId: string, song: RoundSong, buzzTimestamp?: number): Promise<boolean>;
   abstract handleAnswer(answer: Answer, song: RoundSong): Promise<AnswerResult>;
@@ -150,4 +178,6 @@ export abstract class BaseModeHandler implements ModeHandler {
   abstract calculateScore(answer: Answer, song: Song, params: ModeParams): number;
   abstract canBuzz(playerId: string, song: RoundSong): boolean;
   abstract shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean;
+  abstract getBuzzPayload(song: RoundSong): Record<string, any> | null;
+  abstract shouldPauseOnBuzz(): boolean;
 }

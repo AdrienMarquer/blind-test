@@ -22,19 +22,20 @@
 	}: Props = $props();
 </script>
 
+
 {#if !currentPlayer}
 	<section class="join-section">
-		<h2>Join Room</h2>
+		<h2>Rejoindre la salle</h2>
 		<form onsubmit={(e) => { e.preventDefault(); onJoin(); }}>
 			<input
 				type="text"
-				placeholder="Enter your name"
+				placeholder="Entre ton pseudo"
 				bind:value={playerName}
 				disabled={joining}
 				required
 			/>
 			<button type="submit" disabled={joining || !playerName.trim()}>
-				{joining ? 'Joining...' : 'Join'}
+				{joining ? 'Connexion...' : 'Rejoindre'}
 			</button>
 		</form>
 	</section>
@@ -43,11 +44,11 @@
 		<div class="status-card">
 			<span class="status-icon">✅</span>
 			<div class="status-info">
-				<h3>You are playing as:</h3>
+				<h3>Tu joues en tant que :</h3>
 				<p class="player-name-display">{currentPlayer.name}</p>
 			</div>
 			{#if onLeave}
-				<button class="leave-button" onclick={onLeave}>Leave Room</button>
+				<button class="leave-button" onclick={onLeave}>Quitter la salle</button>
 			{/if}
 		</div>
 	</section>

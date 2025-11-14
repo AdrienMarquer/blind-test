@@ -172,7 +172,7 @@
 
 <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="clip-selector-title" tabindex="-1" onclick={onCancel} onkeydown={(e) => e.key === 'Escape' && onCancel()}>
 	<div class="modal-content" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-		<h2 id="clip-selector-title">Select Audio Clip</h2>
+		<h2 id="clip-selector-title">Sélectionne un extrait audio</h2>
 		<p class="filename">{file.name}</p>
 
 		<!-- Audio element (hidden) -->
@@ -196,7 +196,7 @@
 		<!-- Playback controls -->
 		<div class="controls">
 			<button onclick={togglePlayPause} class="play-button">
-				{isPlaying ? '⏸️ Pause' : '▶️ Play Clip'}
+				{isPlaying ? '⏸️ Pause' : '▶️ Lire l’extrait'}
 			</button>
 			<div class="time-display">
 				{formatTime(currentTime)} / {formatTime(duration)}
@@ -207,7 +207,7 @@
 		<div class="clip-config">
 			<div class="config-row">
 				<label>
-					Clip Start: <strong>{formatTime(clipStart)}</strong>
+					Début de l’extrait : <strong>{formatTime(clipStart)}</strong>
 					<input
 						type="range"
 						min="0"
@@ -220,7 +220,7 @@
 
 			<div class="config-row">
 				<label>
-					Clip Duration: <strong>{clipDuration}s</strong>
+					Durée de l’extrait : <strong>{clipDuration}s</strong>
 					<input
 						type="range"
 						min="15"
@@ -234,8 +234,8 @@
 
 		<!-- Action buttons -->
 		<div class="actions">
-			<button onclick={onCancel} class="cancel-button">Cancel</button>
-			<button onclick={handleConfirm} class="confirm-button">Confirm Selection</button>
+			<button onclick={onCancel} class="cancel-button">Annuler</button>
+			<button onclick={handleConfirm} class="confirm-button">Valider l’extrait</button>
 		</div>
 	</div>
 </div>

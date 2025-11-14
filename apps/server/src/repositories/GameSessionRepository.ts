@@ -26,7 +26,6 @@ export class GameSessionRepository implements Repository<GameSession> {
       index: dbRound.index,
       modeType: dbRound.modeType as any,
       mediaType: dbRound.mediaType as any,
-      playlistId: dbRound.playlistId || undefined,
       songFilters: (dbRound.songFilters as any) || undefined, // Drizzle auto-parses JSON mode fields
       params: (dbRound.params as any) || {}, // Drizzle auto-parses JSON mode fields
       status: dbRound.status as any,

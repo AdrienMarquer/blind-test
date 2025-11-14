@@ -8,31 +8,19 @@
  * - WebSocket (real-time communication)
  */
 
-import type { GameSession, Round, RoundSong, Song, Player, MediaType, Answer } from '@blind-test/shared';
-import { generateId, SYSTEM_DEFAULTS } from '@blind-test/shared';
+import type { GameSession, Round, RoundSong, Song, Answer } from '@blind-test/shared';
+import { SYSTEM_DEFAULTS } from '@blind-test/shared';
 import { gameSessionRepository, songRepository, playerRepository, roomRepository } from '../repositories';
 import { modeRegistry } from '../modes';
-import { mediaRegistry } from '../media';
 import { broadcastToRoom } from '../websocket/handler';
 import { gameStateManager } from './GameStateManager';
+import { getSongDuration, getAnswerTimer, getAudioPlayback } from '../utils/params';
+import { timerManager } from './TimerManager';
 import { logger } from '../utils/logger';
-import { answerGenerationService } from './AnswerGenerationService';
 
 const gameLogger = logger.child({ module: 'GameService' });
 
 export class GameService {
-  // Timer tracking: roomId → { timerId, endTime, broadcastInterval }
-  private songTimers = new Map<string, {
-    timerId: NodeJS.Timeout;
-    endTime: number;
-    broadcastInterval?: NodeJS.Timeout;
-  }>();
-  private answerTimers = new Map<string, {
-    timerId: NodeJS.Timeout;
-    endTime: number;
-    playerId: string;
-    broadcastInterval?: NodeJS.Timeout;
-  }>();
 
   /**
    * Start a round - transition from lobby to playing
@@ -73,10 +61,14 @@ export class GameService {
     // Start first song
     await this.startSong(roomId, round, 0);
 
-    // Broadcast round started
+    // Get updated room to send with round:started event
+    const updatedRoom = await roomRepository.findById(roomId);
+
+    // Broadcast round started with updated room
     broadcastToRoom(roomId, {
       type: 'round:started',
       data: {
+        room: updatedRoom,
         roundIndex: round.index,
         modeType: round.modeType,
         mediaType: round.mediaType,
@@ -148,6 +140,7 @@ export class GameService {
     const allSongs = round.songs.map(rs => rs.song);
 
     // Initialize song (generate choices, etc.)
+    // Note: BuzzAndChoiceMode handles its own answer generation internally
     await modeHandler.startSong(song, allSongs, round.mediaType);
 
     // Update song status
@@ -161,21 +154,9 @@ export class GameService {
     // Construct audio streaming URL
     const audioUrl = `http://localhost:3007/api/songs/${song.song.id}/stream`;
 
-    // Generate answer choices for multiple choice modes
-    let answerChoices;
-    if (round.modeType === 'buzz_and_choice' || round.modeType === 'timed_answer') {
-      try {
-        answerChoices = await answerGenerationService.generateAnswerChoices(song.song);
-        gameLogger.debug('Generated answer choices', { count: answerChoices.length });
-      } catch (error) {
-        gameLogger.error('Failed to generate answer choices', error);
-        // Continue without choices if generation fails
-      }
-    }
-
-    // Start song duration timer
-    const songDuration = round.params.songDuration || SYSTEM_DEFAULTS.songDuration;
-    this.startSongTimer(roomId, round, songIndex, songDuration);
+    // Start song duration timer - resolve parameters using inheritance chain
+    const songDuration = getSongDuration(round, modeHandler);
+    timerManager.startSongTimer(roomId, round, songIndex, songDuration, this.handleSongTimerExpired.bind(this));
 
     // Broadcast song started (includes song info for master)
     broadcastToRoom(roomId, {
@@ -185,8 +166,7 @@ export class GameService {
         duration: songDuration,
         audioUrl,
         clipStart: song.song.clipStart,
-        audioPlayback: round.params.audioPlayback || SYSTEM_DEFAULTS.audioPlayback,
-        answerChoices,
+        audioPlayback: getAudioPlayback(round, modeHandler),
         // Song info for master display (players should ignore these)
         songTitle: song.song.title,
         songArtist: song.song.artist,
@@ -195,164 +175,79 @@ export class GameService {
   }
 
   /**
-   * Start timer for song duration
+   * Callback when song timer expires
    */
-  private startSongTimer(roomId: string, round: Round, songIndex: number, durationSeconds: number): void {
-    // Clear any existing timer
-    this.clearSongTimer(roomId);
+  private async handleSongTimerExpired(roomId: string, round: Round, songIndex: number): Promise<void> {
+    gameLogger.info('Song timer expired', { roomId, songIndex });
 
-    const endTime = Date.now() + (durationSeconds * 1000);
+    // Check if song is still active
+    const currentRound = gameStateManager.getCurrentRound(roomId);
+    if (currentRound && currentRound.currentSongIndex === songIndex) {
+      const song = currentRound.songs[songIndex];
+      if (song && song.status !== 'finished') {
+        // Check if song should end (may need activePlayerCount for locked-out check)
+        const modeHandler = modeRegistry.get(currentRound.modeType);
+        const activePlayerCount = await playerRepository.countConnected(roomId);
 
-    const timerId = setTimeout(async () => {
-      gameLogger.info('Song timer expired', { roomId, songIndex });
-
-      // Check if song is still active
-      const currentRound = gameStateManager.getCurrentRound(roomId);
-      if (currentRound && currentRound.currentSongIndex === songIndex) {
-        const song = currentRound.songs[songIndex];
-        if (song && song.status !== 'finished') {
-          // Check if song should end (may need activePlayerCount for locked-out check)
-          const modeHandler = modeRegistry.get(currentRound.modeType);
-          const activePlayerCount = await playerRepository.countConnected(roomId);
-
-          if (modeHandler.shouldEndSong(song, activePlayerCount)) {
-            // Timer expired - auto-end song
-            await this.endSong(roomId, currentRound, songIndex);
-          } else {
-            // Song should continue (shouldn't happen with timer expiry, but safety check)
-            gameLogger.warn('Song timer expired but shouldEndSong returned false', {
-              roomId,
-              songIndex,
-              songStatus: song.status
-            });
-            await this.endSong(roomId, currentRound, songIndex);
-          }
+        if (modeHandler.shouldEndSong(song, activePlayerCount)) {
+          // Timer expired - auto-end song
+          await this.endSong(roomId, currentRound, songIndex);
+        } else {
+          // Song should continue (shouldn't happen with timer expiry, but safety check)
+          gameLogger.warn('Song timer expired but shouldEndSong returned false', {
+            roomId,
+            songIndex,
+            songStatus: song.status
+          });
+          await this.endSong(roomId, currentRound, songIndex);
         }
       }
-
-      // Clean up timer
-      this.songTimers.delete(roomId);
-    }, durationSeconds * 1000);
-
-    // Broadcast countdown every second
-    const broadcastInterval = setInterval(() => {
-      const timeRemaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-      broadcastToRoom(roomId, {
-        type: 'timer:song',
-        data: { timeRemaining },
-      });
-
-      // Stop broadcasting when timer reaches 0
-      if (timeRemaining <= 0) {
-        const timer = this.songTimers.get(roomId);
-        if (timer?.broadcastInterval) {
-          clearInterval(timer.broadcastInterval);
-        }
-      }
-    }, 1000);
-
-    this.songTimers.set(roomId, { timerId, endTime, broadcastInterval });
-    gameLogger.debug('Song timer started', { roomId, songIndex, durationSeconds });
-  }
-
-  /**
-   * Clear song timer for a room
-   */
-  private clearSongTimer(roomId: string): void {
-    const timer = this.songTimers.get(roomId);
-    if (timer) {
-      clearTimeout(timer.timerId);
-      if (timer.broadcastInterval) {
-        clearInterval(timer.broadcastInterval);
-      }
-      this.songTimers.delete(roomId);
-      gameLogger.debug('Song timer cleared', { roomId });
     }
   }
 
   /**
-   * Start timer for answer submission
+   * Callback when answer timer expires
    */
-  private startAnswerTimer(roomId: string, round: Round, songIndex: number, playerId: string, timerSeconds: number): void {
-    // Clear any existing answer timer
-    this.clearAnswerTimer(roomId);
+  private async handleAnswerTimerExpired(roomId: string, round: Round, songIndex: number, playerId: string): Promise<void> {
+    gameLogger.info('Answer timer expired', { roomId, songIndex, playerId });
 
-    const endTime = Date.now() + (timerSeconds * 1000);
+    // Check if player is still answering
+    const currentRound = gameStateManager.getCurrentRound(roomId);
+    if (currentRound && currentRound.currentSongIndex === songIndex) {
+      const song = currentRound.songs[songIndex];
+      if (song && song.activePlayerId === playerId) {
+        // Timer expired - lock out player and reset for others to buzz
+        song.lockedOutPlayerIds.push(playerId);
+        song.activePlayerId = undefined;
+        song.status = 'playing';
 
-    const timerId = setTimeout(async () => {
-      gameLogger.info('Answer timer expired', { roomId, songIndex, playerId });
+        gameStateManager.updateRound(roomId, currentRound);
 
-      // Check if player is still answering
-      const currentRound = gameStateManager.getCurrentRound(roomId);
-      if (currentRound && currentRound.currentSongIndex === songIndex) {
-        const song = currentRound.songs[songIndex];
-        if (song && song.activePlayerId === playerId) {
-          // Timer expired - lock out player and reset for others to buzz
-          song.lockedOutPlayerIds.push(playerId);
-          song.activePlayerId = undefined;
-          song.status = 'playing';
+        // Get player name for timeout notification
+        const player = await playerRepository.findById(playerId);
+        const playerName = player?.name || 'Unknown Player';
 
-          gameStateManager.updateRound(roomId, currentRound);
+        // Notify timeout
+        broadcastToRoom(roomId, {
+          type: 'answer:result',
+          data: {
+            playerId,
+            playerName,
+            answerType: 'title' as const,
+            isCorrect: false,
+            pointsAwarded: 0,
+            shouldShowArtistChoices: false,
+            lockOutPlayer: true,
+          },
+        });
 
-          // Notify timeout
-          broadcastToRoom(roomId, {
-            type: 'answer:result',
-            data: {
-              playerId,
-              answerType: 'title',
-              isCorrect: false,
-              pointsAwarded: 0,
-              shouldShowArtistChoices: false,
-              lockOutPlayer: true,
-            },
-          });
-
-          // Check if we should end song (all players locked out)
-          const activePlayerCount = await playerRepository.countConnected(roomId);
-          const modeHandler = modeRegistry.get(currentRound.modeType);
-          if (modeHandler.shouldEndSong(song, activePlayerCount)) {
-            await this.endSong(roomId, currentRound, songIndex);
-          }
+        // Check if we should end song (all players locked out)
+        const activePlayerCount = await playerRepository.countConnected(roomId);
+        const modeHandler = modeRegistry.get(currentRound.modeType);
+        if (modeHandler.shouldEndSong(song, activePlayerCount)) {
+          await this.endSong(roomId, currentRound, songIndex);
         }
       }
-
-      // Clean up timer
-      this.answerTimers.delete(roomId);
-    }, timerSeconds * 1000);
-
-    // Broadcast countdown every second
-    const broadcastInterval = setInterval(() => {
-      const timeRemaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-      broadcastToRoom(roomId, {
-        type: 'timer:answer',
-        data: { playerId, timeRemaining },
-      });
-
-      // Stop broadcasting when timer reaches 0
-      if (timeRemaining <= 0) {
-        const timer = this.answerTimers.get(roomId);
-        if (timer?.broadcastInterval) {
-          clearInterval(timer.broadcastInterval);
-        }
-      }
-    }, 1000);
-
-    this.answerTimers.set(roomId, { timerId, endTime, playerId, broadcastInterval });
-    gameLogger.debug('Answer timer started', { roomId, playerId, timerSeconds });
-  }
-
-  /**
-   * Clear answer timer for a room
-   */
-  private clearAnswerTimer(roomId: string): void {
-    const timer = this.answerTimers.get(roomId);
-    if (timer) {
-      clearTimeout(timer.timerId);
-      if (timer.broadcastInterval) {
-        clearInterval(timer.broadcastInterval);
-      }
-      this.answerTimers.delete(roomId);
-      gameLogger.debug('Answer timer cleared', { roomId });
     }
   }
 
@@ -388,20 +283,62 @@ export class GameService {
     const accepted = await modeHandler.handleBuzz(playerId, song, timestamp);
 
     if (accepted) {
-      // Start answer timer
-      const answerTime = round.params.answerTimer || SYSTEM_DEFAULTS.answerTimer;
-      this.startAnswerTimer(roomId, round, songIndex, playerId, answerTime);
+      // Let the mode handler decide whether to pause the timer or start an answer timer
+      if (modeHandler.shouldPauseOnBuzz()) {
+        // Manual validation mode - pause the song timer
+        timerManager.pauseSongTimer(roomId);
+        gameLogger.debug('Song timer paused for manual validation', { roomId, playerId });
+      } else {
+        // Automatic validation mode - start answer timer
+        const answerTime = getAnswerTimer(round, modeHandler);
+        timerManager.startAnswerTimer(roomId, round, songIndex, playerId, answerTime, this.handleAnswerTimerExpired.bind(this));
+        gameLogger.debug('Answer timer started (automatic validation)', { roomId, playerId, answerTime });
+      }
 
       // Update state
       gameStateManager.updateRound(roomId, round);
 
-      // Broadcast buzz to all clients
+      // Get player name for broadcast
+      const player = await playerRepository.findById(playerId);
+      const playerName = player?.name || 'Unknown Player';
+
+      // Get mode-specific buzz payload from the mode handler
+      const modePayload = modeHandler.getBuzzPayload(song);
+
+      if (!modePayload) {
+        gameLogger.error('Mode handler rejected buzz - payload could not be created', {
+          roomId,
+          playerId,
+          songIndex,
+          modeType: round.modeType,
+          songId: song.song.id,
+          songTitle: song.song.title
+        });
+        // Mode handler explicitly rejected this buzz
+        return false;
+      }
+
+      gameLogger.info('Broadcasting buzz event', {
+        roomId,
+        playerId,
+        playerName,
+        songIndex,
+        modeType: round.modeType,
+        hasTitleQuestion: !!(modePayload.titleQuestion),
+        correctSongTitle: song.song.title,
+        correctSongArtist: song.song.artist || 'Unknown Artist'
+      });
+
+      // Broadcast buzz to all clients with mode-specific payload
       broadcastToRoom(roomId, {
         type: 'player:buzzed',
         data: {
           playerId,
+          playerName,
           songIndex,
-          titleChoices: song.titleChoices,
+          modeType: round.modeType,
+          manualValidation: modeHandler.shouldPauseOnBuzz(), // Mode determines validation strategy
+          ...modePayload, // Mode-specific data (e.g., titleQuestion)
         },
       });
     }
@@ -429,7 +366,7 @@ export class GameService {
     const modeHandler = modeRegistry.get(round.modeType);
 
     // Clear answer timer (player answered in time)
-    this.clearAnswerTimer(roomId);
+    timerManager.clearAnswerTimer(roomId);
 
     // Validate and score the answer
     const result = await modeHandler.handleAnswer(answer, song);
@@ -512,31 +449,38 @@ export class GameService {
       },
     });
 
-    // Check if we should show artist choices
+    // Check if we should show artist question
     if (result.shouldShowArtistChoices) {
-      if (!song.artistChoices || song.artistChoices.length === 0) {
-        gameLogger.error('Artist choices not available but shouldShowArtistChoices is true', {
+      if (!song.artistQuestion || !song.artistQuestion.choices || song.artistQuestion.choices.length === 0) {
+        gameLogger.error('CRITICAL: Artist question not available but shouldShowArtistChoices is true', {
           roomId,
           playerId,
           songId: song.song.id,
           songTitle: song.song.title
         });
-        // Generate emergency artist choices if they're missing
-        song.artistChoices = [song.song.artist, 'Unknown Artist 1', 'Unknown Artist 2', 'Unknown Artist 3'];
+        throw new Error('Artist question should have been generated in startSong');
       }
 
-      gameLogger.debug('Sending artist choices', {
+      if (song.artistQuestion.choices.length !== 4) {
+        gameLogger.warn('Artist question choices count is not 4, game may be corrupted', {
+          roomId,
+          artistChoicesCount: song.artistQuestion.choices.length
+        });
+      }
+
+      gameLogger.info('Sending artist question after correct title', {
         roomId,
         playerId,
         playerName,
-        choicesCount: song.artistChoices.length
+        choicesCount: song.artistQuestion.choices.length,
+        correctArtist: song.song.artist || 'Unknown Artist'
       });
 
       broadcastToRoom(roomId, {
         type: 'choices:artist',
         data: {
           playerId,
-          artistChoices: song.artistChoices,
+          artistQuestion: song.artistQuestion,
         },
       });
     }
@@ -553,8 +497,26 @@ export class GameService {
       titleCorrect: song.answers.some(a => a.type === 'title' && a.isCorrect),
       artistCorrect: song.answers.some(a => a.type === 'artist' && a.isCorrect),
       lockedOutCount: song.lockedOutPlayerIds.length,
-      activePlayerCount
+      activePlayerCount,
+      shouldPauseOnBuzz: modeHandler.shouldPauseOnBuzz()
     });
+
+    // Handle pause/resume timer state for manual validation modes
+    if (modeHandler.shouldPauseOnBuzz()) {
+      if (shouldEnd) {
+        // Correct answer - clear timer and set to 0
+        timerManager.clearSongTimer(roomId);
+        broadcastToRoom(roomId, {
+          type: 'timer:song',
+          data: { timeRemaining: 0 }
+        });
+        gameLogger.debug('Song timer cleared after correct answer', { roomId });
+      } else {
+        // Wrong answer - resume timer for other players
+        timerManager.resumeSongTimer(roomId);
+        gameLogger.debug('Song timer resumed after wrong answer', { roomId });
+      }
+    }
 
     if (shouldEnd) {
       await this.endSong(roomId, round, round.currentSongIndex);
@@ -568,8 +530,7 @@ export class GameService {
     gameLogger.info('Ending song', { roomId, roundIndex: round.index, songIndex });
 
     // Clear any active timers
-    this.clearSongTimer(roomId);
-    this.clearAnswerTimer(roomId);
+    timerManager.clearAllTimers(roomId);
 
     const song = round.songs[songIndex];
     const modeHandler = modeRegistry.get(round.modeType);
@@ -603,12 +564,34 @@ export class GameService {
     // Schedule next song after 5 seconds (non-blocking)
     // Don't await - return immediately to avoid blocking WebSocket handler
     setTimeout(async () => {
+      // Fetch fresh round to check completion status with updated song statuses
+      const currentRound = gameStateManager.getCurrentRound(roomId);
+      if (!currentRound) {
+        gameLogger.error('No current round found in timeout callback', { roomId, songIndex });
+        return;
+      }
+
+      gameLogger.info('Checking round completion after song ended', {
+        roomId,
+        roundIndex: currentRound.index,
+        songIndex,
+        totalSongs: currentRound.songs.length,
+        finishedSongs: currentRound.songs.filter(s => s.status === 'finished').length,
+        songStatuses: currentRound.songs.map((s, i) => ({ index: i, status: s.status }))
+      });
+
       // Check if round is complete
-      if (modeHandler.isRoundComplete(round)) {
-        await this.endRound(roomId, round);
+      if (modeHandler.isRoundComplete(currentRound)) {
+        gameLogger.info('Round is complete, ending round', { roomId, roundIndex: currentRound.index });
+        await this.endRound(roomId, currentRound);
       } else {
         // Start next song
-        await this.startSong(roomId, round, songIndex + 1);
+        gameLogger.info('Round not complete, starting next song', {
+          roomId,
+          roundIndex: currentRound.index,
+          nextSongIndex: songIndex + 1
+        });
+        await this.startSong(roomId, currentRound, songIndex + 1);
       }
     }, 5000);
 
@@ -622,14 +605,13 @@ export class GameService {
     gameLogger.info('Ending round', { roomId, roundIndex: round.index });
 
     // Clear any remaining timers
-    this.clearSongTimer(roomId);
-    this.clearAnswerTimer(roomId);
+    timerManager.clearAllTimers(roomId);
 
     round.status = 'finished';
     round.endedAt = new Date();
 
-    // Calculate and rank final scores
-    const finalScores = await this.calculateFinalScores(roomId, round);
+    // Calculate and rank scores for this round
+    const roundScores = await this.calculateRoundScores(roomId, round);
 
     // Update state
     gameStateManager.updateRound(roomId, round);
@@ -639,49 +621,205 @@ export class GameService {
       type: 'round:ended',
       data: {
         roundIndex: round.index,
-        scores: finalScores.map(fs => ({
+        scores: roundScores.map(fs => ({
           playerId: fs.playerId,
+          playerName: fs.playerName,
           score: fs.totalScore,
+          rank: fs.rank,
         })),
       },
     });
 
-    // Broadcast game ended with full rankings
-    gameLogger.info('Broadcasting game:ended to all clients', {
-      roomId,
-      scoreCount: finalScores.length,
-      players: finalScores.map(fs => ({ name: fs.playerName, score: fs.totalScore }))
-    });
+    // Check if there are more rounds
+    const session = await gameSessionRepository.findById(round.sessionId);
+    if (!session) {
+      gameLogger.error('Session not found for round', { roundId: round.id, sessionId: round.sessionId });
+      return;
+    }
 
-    broadcastToRoom(roomId, {
-      type: 'game:ended',
-      data: {
-        finalScores,
-      },
-    });
+    const hasMoreRounds = round.index < session.rounds.length - 1;
 
-    // Remove from state manager
-    gameStateManager.removeSession(roomId);
+    if (hasMoreRounds) {
+      // More rounds to play - transition to between_rounds state
+      gameLogger.info('More rounds remaining, transitioning to between_rounds', {
+        roomId,
+        currentRound: round.index,
+        totalRounds: session.rounds.length
+      });
+
+      // Update room status to between_rounds
+      await roomRepository.update(roomId, { status: 'between_rounds' });
+
+      // Fetch updated room to send to clients
+      const updatedRoom = await roomRepository.findById(roomId);
+      if (!updatedRoom) {
+        gameLogger.error('Room not found after status update', { roomId });
+        return;
+      }
+
+      // Broadcast between rounds state with updated room
+      broadcastToRoom(roomId, {
+        type: 'round:between',
+        data: {
+          room: updatedRoom,
+          completedRoundIndex: round.index,
+          nextRoundIndex: round.index + 1,
+          nextRoundMode: session.rounds[round.index + 1]?.modeType,
+          nextRoundMedia: session.rounds[round.index + 1]?.mediaType,
+          scores: roundScores.map(fs => ({
+            playerId: fs.playerId,
+            playerName: fs.playerName,
+            score: fs.totalScore,
+            rank: fs.rank,
+          })),
+        },
+      });
+
+      // Clean up current round from state manager
+      gameStateManager.updateRound(roomId, round);
+    } else {
+      // No more rounds - game is complete
+      gameLogger.info('All rounds complete, ending game', { roomId });
+
+      // Calculate final scores across all rounds
+      const finalScores = await this.calculateFinalScores(roomId, session);
+
+      // Broadcast game ended with full rankings
+      gameLogger.info('Broadcasting game:ended to all clients', {
+        roomId,
+        scoreCount: finalScores.length,
+        players: finalScores.map(fs => ({ name: fs.playerName, score: fs.totalScore }))
+      });
+
+      broadcastToRoom(roomId, {
+        type: 'game:ended',
+        data: {
+          finalScores,
+        },
+      });
+
+      // Update room status to finished
+      await roomRepository.update(roomId, { status: 'finished' });
+
+      // Remove from state manager
+      gameStateManager.removeSession(roomId);
+    }
   }
 
   /**
-   * Calculate final scores with ranking
+   * Finish current round and prepare for next round (called by master)
    */
-  private async calculateFinalScores(roomId: string, round: Round): Promise<import('@blind-test/shared').FinalScore[]> {
+  async finishCurrentRound(roomId: string): Promise<void> {
+    gameLogger.info('Finishing current round', { roomId });
+
+    const round = gameStateManager.getCurrentRound(roomId);
+    if (!round) {
+      throw new Error(`No active round for room ${roomId}`);
+    }
+
+    await this.endRound(roomId, round);
+  }
+
+  /**
+   * Start next round (called by master from between_rounds state)
+   */
+  async startNextRound(roomId: string): Promise<void> {
+    gameLogger.info('Starting next round', { roomId });
+
+    // Verify room is in between_rounds state
+    const room = await roomRepository.findById(roomId);
+    gameLogger.info('Room state check', {
+      roomId,
+      roomFound: !!room,
+      roomStatus: room?.status
+    });
+
+    if (!room || room.status !== 'between_rounds') {
+      gameLogger.error('Room not in between_rounds state', {
+        roomId,
+        roomFound: !!room,
+        actualStatus: room?.status,
+        expectedStatus: 'between_rounds'
+      });
+      throw new Error(`Room ${roomId} is not in between_rounds state (current: ${room?.status || 'not found'})`);
+    }
+
+    // Get current session
+    const session = gameStateManager.getActiveSession(roomId);
+    gameLogger.info('Session check', {
+      roomId,
+      sessionFound: !!session,
+      sessionId: session?.id,
+      roundsCount: session?.rounds.length
+    });
+
+    if (!session) {
+      gameLogger.error('No active session found', { roomId });
+      throw new Error(`No active session for room ${roomId}`);
+    }
+
+    // Find the next pending round
+    const nextRound = session.rounds.find(r => r.status === 'pending');
+    gameLogger.info('Next round search', {
+      roomId,
+      nextRoundFound: !!nextRound,
+      nextRoundIndex: nextRound?.index,
+      allRoundStatuses: session.rounds.map((r, i) => ({ index: i, status: r.status }))
+    });
+
+    if (!nextRound) {
+      gameLogger.error('No pending rounds found', {
+        roomId,
+        roundStatuses: session.rounds.map((r, i) => ({ index: i, status: r.status }))
+      });
+      throw new Error(`No pending rounds found for room ${roomId}`);
+    }
+
+    gameLogger.info('Updating room status to playing', { roomId });
+    // Update room status back to playing
+    await roomRepository.update(roomId, { status: 'playing' });
+
+    gameLogger.info('Resetting player scores', { roomId });
+    // Reset player round scores
+    const players = await playerRepository.findByRoom(roomId);
+    for (const player of players) {
+      if (player.role === 'player') {
+        await playerRepository.update(player.id, { roundScore: 0, isLockedOut: false });
+      }
+    }
+
+    gameLogger.info('Starting round', {
+      roomId,
+      sessionId: session.id,
+      roundIndex: nextRound.index
+    });
+    // Start the round
+    await this.startRound(roomId, session.id, nextRound.index);
+
+    gameLogger.info('Next round started successfully', {
+      roomId,
+      roundIndex: nextRound.index
+    });
+  }
+
+  /**
+   * Calculate scores for a single round
+   */
+  private async calculateRoundScores(roomId: string, round: Round): Promise<import('@blind-test/shared').FinalScore[]> {
     const players = await playerRepository.findByRoom(roomId);
 
     // Calculate scores for each player
-    const finalScores = players
+    const roundScores = players
       .filter(p => p.role === 'player') // Exclude master
       .map(player => {
-        // Get player's answers from all songs
+        // Get player's answers from this round
         const playerAnswers = round.songs.flatMap(song =>
           song.answers.filter(a => a.playerId === player.id)
         );
 
         const correctAnswers = playerAnswers.filter(a => a.isCorrect).length;
         const wrongAnswers = playerAnswers.filter(a => !a.isCorrect).length;
-        const totalScore = playerAnswers.reduce((sum, a) => sum + a.pointsAwarded, 0);
+        const roundScore = playerAnswers.reduce((sum, a) => sum + a.pointsAwarded, 0);
 
         // Calculate average answer time (for tiebreakers)
         const avgAnswerTime = playerAnswers.length > 0
@@ -691,8 +829,77 @@ export class GameService {
         return {
           playerId: player.id,
           playerName: player.name,
+          totalScore: roundScore,
+          roundScores: [roundScore],
+          correctAnswers,
+          wrongAnswers,
+          averageAnswerTime: avgAnswerTime,
+          rank: 0, // Will be set after sorting
+        };
+      });
+
+    // Sort by score (descending), then by average answer time (ascending - faster is better)
+    roundScores.sort((a, b) => {
+      if (b.totalScore !== a.totalScore) {
+        return b.totalScore - a.totalScore;
+      }
+      // Tiebreaker: faster average answer time wins
+      return a.averageAnswerTime - b.averageAnswerTime;
+    });
+
+    // Assign ranks
+    roundScores.forEach((score, index) => {
+      score.rank = index + 1;
+    });
+
+    gameLogger.debug('Round scores calculated', {
+      roomId,
+      roundIndex: round.index,
+      scores: roundScores.map(s => ({ name: s.playerName, score: s.totalScore, rank: s.rank }))
+    });
+
+    return roundScores;
+  }
+
+  /**
+   * Calculate final scores across all rounds with ranking
+   */
+  private async calculateFinalScores(roomId: string, session: GameSession): Promise<import('@blind-test/shared').FinalScore[]> {
+    const players = await playerRepository.findByRoom(roomId);
+
+    // Calculate scores for each player across all rounds
+    const finalScores = players
+      .filter(p => p.role === 'player') // Exclude master
+      .map(player => {
+        // Calculate score for each round
+        const roundScores = session.rounds.map(round => {
+          const roundAnswers = round.songs.flatMap(song =>
+            song.answers.filter(a => a.playerId === player.id)
+          );
+          return roundAnswers.reduce((sum, a) => sum + a.pointsAwarded, 0);
+        });
+
+        // Get player's answers from ALL rounds
+        const allPlayerAnswers = session.rounds.flatMap(round =>
+          round.songs.flatMap(song =>
+            song.answers.filter(a => a.playerId === player.id)
+          )
+        );
+
+        const correctAnswers = allPlayerAnswers.filter(a => a.isCorrect).length;
+        const wrongAnswers = allPlayerAnswers.filter(a => !a.isCorrect).length;
+        const totalScore = allPlayerAnswers.reduce((sum, a) => sum + a.pointsAwarded, 0);
+
+        // Calculate average answer time (for tiebreakers)
+        const avgAnswerTime = allPlayerAnswers.length > 0
+          ? allPlayerAnswers.reduce((sum, a) => sum + a.timeToAnswer, 0) / allPlayerAnswers.length
+          : 0;
+
+        return {
+          playerId: player.id,
+          playerName: player.name,
           totalScore,
-          roundScores: [totalScore], // Single round for now
+          roundScores,
           correctAnswers,
           wrongAnswers,
           averageAnswerTime: avgAnswerTime,
@@ -714,9 +921,9 @@ export class GameService {
       score.rank = index + 1;
     });
 
-    gameLogger.info('Final scores calculated', {
+    gameLogger.info('Final scores calculated across all rounds', {
       roomId,
-      roundIndex: round.index,
+      roundCount: session.rounds.length,
       scores: finalScores.map(s => ({ name: s.playerName, score: s.totalScore, rank: s.rank }))
     });
 
@@ -730,8 +937,7 @@ export class GameService {
     gameLogger.info('Manually ending game', { roomId });
 
     // Clear all timers first
-    this.clearSongTimer(roomId);
-    this.clearAnswerTimer(roomId);
+    timerManager.clearAllTimers(roomId);
 
     // Get current round
     const round = gameStateManager.getCurrentRound(roomId);
@@ -775,10 +981,10 @@ export class GameService {
     gameLogger.info('Handling player disconnect', { roomId, playerId });
 
     // Check if this player has an active answer timer
-    const answerTimer = this.answerTimers.get(roomId);
-    if (answerTimer && answerTimer.playerId === playerId) {
+    const activePlayerId = timerManager.getAnswerTimerPlayerId(roomId);
+    if (activePlayerId === playerId) {
       // Player disconnected while answering - clear their timer and lock them out
-      this.clearAnswerTimer(roomId);
+      timerManager.clearAnswerTimer(roomId);
 
       const round = gameStateManager.getCurrentRound(roomId);
       if (round && round.currentSongIndex !== undefined) {

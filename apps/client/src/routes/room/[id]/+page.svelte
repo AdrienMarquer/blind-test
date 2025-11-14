@@ -6,13 +6,15 @@
 	import type { Room, Player } from '@blind-test/shared';
 	import MasterGameControl from '$lib/components/MasterGameControl.svelte';
 	import PlayerGameInterface from '$lib/components/PlayerGameInterface.svelte';
-	import RoomHeader from '$lib/components/room/RoomHeader.svelte';
-	import PlayersList from '$lib/components/room/PlayersList.svelte';
 	import GameConfig from '$lib/components/room/GameConfig.svelte';
-	import JoinSection from '$lib/components/room/JoinSection.svelte';
-	import QRSection from '$lib/components/room/QRSection.svelte';
 	import FinalScores from '$lib/components/room/FinalScores.svelte';
-	import type { FinalScore } from '@blind-test/shared';
+	import BetweenRounds from '$lib/components/game/BetweenRounds.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+	import InputField from '$lib/components/ui/InputField.svelte';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
+	import type { FinalScore, RoundConfig } from '@blind-test/shared';
+	import { readable, type Readable } from 'svelte/store';
 
 	const roomId = $derived($page.params.id);
 
@@ -29,52 +31,149 @@
 
 	// Game configuration
 	let songs = $state<any[]>([]);
-	let selectedSongIds = $state<string[]>([]);
-	let songCount = $state(10);
-	let showConfig = $state(false);
-
-	// Filter configuration
-	let useFilters = $state(false);
-	let selectedGenres = $state<string[]>([]);
-	let yearMin = $state<number | undefined>(undefined);
-	let yearMax = $state<number | undefined>(undefined);
+	let rounds = $state<RoundConfig[]>([]);
 	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
+	let showConfig = $state(false);
 
 	// Available genres (populated from songs)
 	let availableGenres = $derived.by(() => {
-		const genres = new Set<string>();
-		songs.forEach(song => {
-			if (song.genre) {
-				genres.add(song.genre);
+		const uniqueGenres: string[] = [];
+		songs.forEach((song) => {
+			const genre = song.genre?.trim();
+			if (genre && !uniqueGenres.includes(genre)) {
+				uniqueGenres.push(genre);
 			}
 		});
-		return Array.from(genres).sort();
+		return uniqueGenres.sort();
 	});
-
-	// Local state for tracking socket state (needed for proper reactivity)
-	let connected = $state(false);
-	let socketError = $state<string | null>(null);
-	let socketRoom = $state<Room | null>(null);
-	let socketPlayers = $state<Player[]>([]);
 
 	// Game ended state
 	let showFinalScores = $state(false);
 	let finalScores = $state<FinalScore[]>([]);
 
-	// Reactive access to socket state (prefer WebSocket data, fallback to HTTP)
-	const room = $derived(socketRoom || initialRoom);
-	const players = $derived(socketPlayers);
+	// Between rounds state
+	let betweenRoundsData = $state<{
+		room: Room;
+		completedRoundIndex: number;
+		nextRoundIndex: number;
+		nextRoundMode: string;
+		nextRoundMedia: string;
+		scores: Array<{ playerId: string; playerName: string; score: number; rank: number }>;
+	} | null>(null);
+
+	// Reactive state for WebSocket connection
+	let connected = $state(false);
+	let socketError = $state<string | null>(null);
+	let wsRoom = $state<Room | null>(null);
+	let players = $state<Player[]>([]);
+
+	// Derived room state (prefer WebSocket room if available, otherwise use initialRoom)
+	const room = $derived(wsRoom ?? initialRoom);
+
+	// Subscribe to store changes and update reactive state
+	$effect(() => {
+		if (!roomSocket) {
+			connected = false;
+			socketError = null;
+			wsRoom = null;
+			players = [];
+			return;
+		}
+
+		// Subscribe to stores and update $state
+		const unsubConnected = roomSocket.connected.subscribe(val => { connected = val; });
+		const unsubError = roomSocket.error.subscribe(val => { socketError = val; });
+		const unsubRoom = roomSocket.room.subscribe(val => { wsRoom = val; });
+		const unsubPlayers = roomSocket.players.subscribe(val => { players = val; });
+
+		return () => {
+			unsubConnected();
+			unsubError();
+			unsubRoom();
+			unsubPlayers();
+		};
+	});
+
+	// Auto-scroll master to game controls when game starts
+	$effect(() => {
+		if (isMaster && room?.status === 'playing') {
+			// Small delay to ensure DOM has rendered
+			setTimeout(() => {
+				const gameStage = document.querySelector('.game-stage');
+				if (gameStage) {
+					gameStage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				}
+			}, 100);
+		}
+	});
+
+	const roomsApi = api.api.rooms as Record<string, any>;
+	const songsApi = api.api.songs as Record<string, any>;
+	const gameApi = api.api.game as Record<string, any>;
+
+	type StatusTone = 'primary' | 'success' | 'warning' | 'neutral';
+	const statusMeta: Record<Room['status'], { label: string; tone: StatusTone; icon: string; blurb: string }> = {
+		lobby: { label: 'Lobby ouvert', tone: 'primary', icon: '🕹️', blurb: 'Invite tes joueurs et prépare ta playlist.' },
+		playing: { label: 'Partie en cours', tone: 'success', icon: '🎶', blurb: 'Buzz, bonne humeur et sons mythiques.' },
+		between_rounds: { label: 'Transition', tone: 'warning', icon: '⏱️', blurb: 'Une respiration avant la prochaine manche.' },
+		finished: { label: 'Partie terminée', tone: 'neutral', icon: '🏁', blurb: 'Consulte les scores et relance un défi.' }
+	};
+
+	const sortedPlayers = $derived(
+		players
+			.slice()
+			.sort((a, b) => {
+				if (a.connected === b.connected) {
+					if (a.score === b.score) {
+						return a.name.localeCompare(b.name);
+					}
+					return b.score - a.score;
+				}
+				return Number(b.connected) - Number(a.connected);
+			})
+	);
+
+	let codeCopied = $state(false);
+	let inviteCopied = $state(false);
+	let codeCopyTimeout: number | null = null;
+	let inviteCopyTimeout: number | null = null;
+
+	async function copyCode() {
+		if (!room) return;
+		try {
+			await navigator.clipboard?.writeText(room.code);
+			codeCopied = true;
+			if (codeCopyTimeout) clearTimeout(codeCopyTimeout);
+			codeCopyTimeout = window.setTimeout(() => (codeCopied = false), 2000);
+		} catch (err) {
+			console.warn('Clipboard unavailable', err);
+		}
+	}
+
+	async function copyInviteLink() {
+		if (!room) return;
+		try {
+			const origin = typeof window !== 'undefined' ? window.location.origin : '';
+			const shareUrl = `${origin}/room/${room.id}`;
+			await navigator.clipboard?.writeText(shareUrl);
+			inviteCopied = true;
+			if (inviteCopyTimeout) clearTimeout(inviteCopyTimeout);
+			inviteCopyTimeout = window.setTimeout(() => (inviteCopied = false), 2000);
+		} catch (err) {
+			console.warn('Clipboard unavailable', err);
+		}
+	}
 
 	async function loadRoom() {
 		if (!roomId) {
-			error = 'Invalid room ID';
+			error = 'Identifiant de salle invalide';
 			loading = false;
 			return;
 		}
 
 		try {
 			error = null;
-			const response = await api.api.rooms[roomId].get();
+			const response = await roomsApi[roomId].get();
 
 			if (response.data) {
 				initialRoom = response.data;
@@ -94,10 +193,10 @@
 
 				// WebSocket will update this with real-time changes
 			} else if (response.error) {
-				error = 'Room not found';
+				error = 'Salle introuvable';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load room';
+			error = err instanceof Error ? err.message : 'Impossible de charger la salle';
 			console.error('Error loading room:', err);
 		} finally {
 			loading = false;
@@ -111,7 +210,7 @@
 			joining = true;
 			error = null;
 
-			const response = await api.api.rooms[roomId].players.post({
+			const response = await roomsApi[roomId].players.post({
 				name: playerName.trim()
 			});
 
@@ -148,10 +247,10 @@
 
 				// Player join will be broadcast via WebSocket
 			} else {
-				error = 'Failed to join room';
+				error = 'Impossible de rejoindre la salle';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to join room';
+			error = err instanceof Error ? err.message : 'Impossible de rejoindre la salle';
 			console.error('Error joining room:', err);
 		} finally {
 			joining = false;
@@ -159,21 +258,21 @@
 	}
 
 	async function removePlayer(playerId: string) {
-		if (!room || !confirm('Remove this player?')) return;
+		if (!room || !confirm('Retirer ce joueur ?')) return;
 
 		try {
 			error = null;
-			await api.api.rooms[room.id].players[playerId].delete();
+			await roomsApi[room.id].players[playerId].delete();
 			console.log('Player removed successfully');
 			// Player removal will be broadcast via WebSocket
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to remove player';
+			error = err instanceof Error ? err.message : 'Impossible de retirer le joueur';
 			console.error('Error removing player:', err);
 		}
 	}
 
 	function leaveRoom() {
-		if (!confirm('Leave this room? You can rejoin later.')) return;
+		if (!confirm('Quitter cette salle ? Tu pourras revenir plus tard.')) return;
 
 		// Clear localStorage
 		const storageKey = `room_${roomId}_auth`;
@@ -197,20 +296,12 @@
 
 	async function loadSongs() {
 		try {
-			const response = await api.api.songs.get();
+			const response = await songsApi.get();
 			if (response.data) {
 				songs = response.data.songs || [];
 			}
 		} catch (err) {
 			console.error('Error loading songs:', err);
-		}
-	}
-
-	function toggleSongSelection(songId: string) {
-		if (selectedSongIds.includes(songId)) {
-			selectedSongIds = selectedSongIds.filter(id => id !== songId);
-		} else {
-			selectedSongIds = [...selectedSongIds, songId];
 		}
 	}
 
@@ -221,85 +312,76 @@
 			starting = true;
 			error = null;
 
-			const body: any = {};
+			// Build request body with rounds
+			const body: any = {
+				rounds: rounds.map(r => ({
+					...r,
+					params: {
+						...r.params,
+						...(audioPlayback !== 'master' && { audioPlayback })
+					}
+				}))
+			};
 
-			// Priority 1: Use filters
-			if (useFilters && (selectedGenres.length > 0 || yearMin !== undefined || yearMax !== undefined)) {
-				body.songFilters = {
-					...(selectedGenres.length > 0 && { genre: selectedGenres }),
-					...(yearMin !== undefined && { yearMin }),
-					...(yearMax !== undefined && { yearMax }),
-					...(songCount && { songCount }),
-				};
-			}
-			// Priority 2: Use selected songs
-			else if (selectedSongIds.length > 0) {
-				body.songIds = selectedSongIds;
-			}
-			// Priority 3: Random count
-			else {
-				body.songCount = songCount;
-			}
+			console.log('Starting game with rounds:', body);
 
-			// Audio playback configuration
-			if (audioPlayback !== 'master') {
-				body.params = {
-					audioPlayback,
-				};
-			}
-
-			const response = await api.api.game[room.id].start.post(body);
+			const response = await gameApi[room.id].start.post(body);
 
 			if (response.data) {
 				console.log('Game started:', response.data);
 				showConfig = false;
 				// Game start will be broadcast via WebSocket
 			} else {
-				error = 'Failed to start game';
+				error = 'Impossible de lancer la partie';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to start game';
+			error = err instanceof Error ? err.message : 'Impossible de lancer la partie';
 			console.error('Error starting game:', err);
 		} finally {
 			starting = false;
 		}
 	}
 
-	function toggleGenre(genre: string) {
-		if (selectedGenres.includes(genre)) {
-			selectedGenres = selectedGenres.filter(g => g !== genre);
-		} else {
-			selectedGenres = [...selectedGenres, genre];
+	async function startNextRound() {
+		if (!room) {
+			console.error('[startNextRound] No room available');
+			return;
 		}
-	}
 
-	function getStatusColor(status: Room['status']): string {
-		switch (status) {
-			case 'lobby':
-				return '#3b82f6'; // blue
-			case 'playing':
-				return '#10b981'; // green
-			case 'between_rounds':
-				return '#f59e0b'; // amber
-			case 'finished':
-				return '#6b7280'; // gray
-			default:
-				return '#6b7280';
-		}
-	}
+		console.log('[startNextRound] Starting next round...', {
+			roomId: room.id,
+			currentStatus: room.status,
+			betweenRoundsData
+		});
 
-	function getStatusLabel(status: Room['status']): string {
-		switch (status) {
-			case 'lobby':
-				return 'Waiting';
-			case 'playing':
-				return 'Playing';
-			case 'between_rounds':
-				return 'Between Rounds';
-			case 'finished':
-				return 'Finished';
-			default:
-				return status;
+		try {
+			error = null;
+			const response = await gameApi[room.id]['next-round'].post({});
+
+			console.log('[startNextRound] Response received:', {
+				hasData: !!response.data,
+				hasError: !!response.error,
+				data: response.data,
+				error: response.error
+			});
+
+			if (response.data) {
+				console.log('[startNextRound] Next round started successfully:', response.data);
+				betweenRoundsData = null;
+				// Round start will be broadcast via WebSocket
+			} else if (response.error) {
+				const errorMsg = typeof response.error === 'object' && 'value' in response.error
+					? JSON.stringify(response.error.value)
+					: String(response.error);
+				error = `Erreur: ${errorMsg}`;
+				console.error('[startNextRound] API error:', response.error);
+			} else {
+				error = 'Impossible de lancer la manche suivante';
+				console.error('[startNextRound] Unknown error - no data and no error');
+			}
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Impossible de lancer la manche suivante';
+			console.error('[startNextRound] Exception caught:', err);
 		}
 	}
 
@@ -356,11 +438,21 @@
 					currentPlayer = {
 						id: auth.playerId,
 						name: auth.playerName,
-						roomId: roomId,
+						roomId,
+						role: 'player',
+						connected: false,
+						joinedAt: new Date(auth.timestamp),
 						score: 0,
-						isConnected: false,
-						createdAt: new Date(auth.timestamp),
-						updatedAt: new Date(auth.timestamp)
+						roundScore: 0,
+						isActive: false,
+						isLockedOut: false,
+						stats: {
+							totalAnswers: 0,
+							correctAnswers: 0,
+							wrongAnswers: 0,
+							buzzCount: 0,
+							averageAnswerTime: 0
+						}
 					} as Player;
 					console.log(`[Auth] Restored player session: ${auth.playerName}`);
 				}
@@ -384,16 +476,6 @@
 		});
 		roomSocket.connect();
 
-		// Sync socket state to local reactive state
-		$effect(() => {
-			if (roomSocket) {
-				connected = roomSocket.connected;
-				socketError = roomSocket.error;
-				socketRoom = roomSocket.room;
-				socketPlayers = roomSocket.players;
-			}
-		});
-
 		// Listen for game:ended event
 		$effect(() => {
 			if (roomSocket?.events.gameEnded) {
@@ -402,164 +484,225 @@
 				showFinalScores = true;
 			}
 		});
+
+		// Listen for round:between event
+		$effect(() => {
+			if (roomSocket?.events.roundBetween) {
+				console.log('[Room] Between rounds - showing transition', roomSocket.events.roundBetween);
+				betweenRoundsData = roomSocket.events.roundBetween;
+				roomSocket.events.clear('roundBetween');
+			}
+		});
+
+		// Listen for round:started event - clear between rounds data
+		$effect(() => {
+			if (roomSocket?.events.roundStarted) {
+				console.log('[Room] New round started - clearing between rounds data', {
+					roundIndex: roomSocket.events.roundStarted.roundIndex,
+					modeType: roomSocket.events.roundStarted.modeType
+				});
+				betweenRoundsData = null;
+				roomSocket.events.clear('roundStarted');
+			}
+		});
 	});
 
 	onDestroy(() => {
 		// Cleanup WebSocket connection
 		roomSocket?.destroy();
+		if (codeCopyTimeout) clearTimeout(codeCopyTimeout);
+		if (inviteCopyTimeout) clearTimeout(inviteCopyTimeout);
 	});
 </script>
 
-<main>
-	<div class="header">
-		<a href="/" class="back-button">← Back to Rooms</a>
-		{#if connected}
-			<span class="connection-status connected">● Connected</span>
-		{:else if socketError}
-			<span class="connection-status error">● {socketError}</span>
-		{:else}
-			<span class="connection-status disconnected">● Connecting...</span>
-		{/if}
-	</div>
+<main class="room-page">
+	<!-- Hide navigation when in game mode or between rounds -->
+	{#if !((room?.status === 'playing' || room?.status === 'between_rounds') && currentPlayer && !isMaster)}
+		<div class="room-nav">
+			<button type="button" class="nav-link" onclick={() => (window.location.href = '/')}>&larr; Toutes les salles</button>
+			{#if connected}
+				<span class="connection-status ok">● Connecté</span>
+			{:else if socketError}
+				<span class="connection-status error">● {socketError}</span>
+			{:else}
+				<span class="connection-status pending">● Connexion...</span>
+			{/if}
+		</div>
+	{/if}
 
 	{#if loading}
-		<div class="loading">Loading room...</div>
+		<div class="loading-card">Chargement de la salle...</div>
 	{:else if (error || socketError) && !room}
-		<div class="error">{error || socketError}</div>
-		<a href="/" class="button">Go Back</a>
+		<div class="error-card">{error || socketError}</div>
+		<Button variant="primary" onclick={() => (window.location.href = '/')}>&larr; Retour à l'accueil</Button>
 	{:else if room}
-		<div class="room-header">
-			<div>
-				<h1>{room.name}</h1>
-				<div class="header-info">
-					<p class="room-code">Join Code: <strong>{room.code}</strong></p>
-					<span class="role-badge" class:master={isMaster}>
-						{isMaster ? '👑 Master' : '🎮 Player'}
-					</span>
+		<!-- Hide header and panels when player is in game mode or between rounds -->
+		{#if !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
+			<section class="room-header">
+				<div class="header-top">
+					<div>
+						<h1>{room.name}</h1>
+						<p class="room-code">Code: <strong>{room.code}</strong></p>
+					</div>
+					<StatusBadge tone={statusMeta[room.status].tone} icon={statusMeta[room.status].icon}>
+						{statusMeta[room.status].label}
+					</StatusBadge>
 				</div>
-			</div>
-			<span class="status" style="background-color: {getStatusColor(room.status)}">
-				{getStatusLabel(room.status)}
-			</span>
-		</div>
-
-		{#if error || socketError}
-			<div class="error">{error || socketError}</div>
-		{/if}
-
-		{#if room.status === 'lobby' && isMaster}
-			<QRSection qrCode={room.qrCode} />
-		{/if}
-
-		{#if room.status === 'lobby' && !isMaster}
-			<JoinSection
-				{currentPlayer}
-				bind:playerName
-				{joining}
-				onJoin={joinRoom}
-				onLeave={leaveRoom}
-			/>
-		{/if}
-
-		<section class="players-section">
-			<h2>Players ({players.length}/{room.maxPlayers})</h2>
-
-			{#if players.length === 0}
-				<p class="empty">No players yet. Be the first to join!</p>
-			{:else}
-				<div class="players-list">
-					{#each players as player (player.id)}
-						<div class="player-card" class:disconnected={!player.connected}>
-							<div class="player-info">
-								<span class="player-name">
-									{player.name}
-									{#if !player.connected}
-										<span class="status-badge">Disconnected</span>
-									{/if}
-								</span>
-								<span class="player-score">Score: {player.score}</span>
-							</div>
-							{#if room.status === 'lobby' && isMaster}
-								<button
-									class="remove-button"
-									onclick={() => removePlayer(player.id)}
-								>
-									Remove
-								</button>
-							{/if}
-						</div>
-					{/each}
+				<div class="header-meta">
+					<span>👥 {players.length}/{room.maxPlayers} joueurs</span>
+					<span>🎭 {isMaster ? 'Maître du jeu' : currentPlayer ? `Joueur: ${currentPlayer.name}` : 'Spectateur'}</span>
 				</div>
+			</section>
+
+			{#if error || socketError}
+				<div class="aq-feedback error">{error || socketError}</div>
 			{/if}
-		</section>
+		{/if}
 
-		{#if room.status === 'lobby' && players.length >= 2 && isMaster}
-			{#if !showConfig}
-				<section class="game-controls">
-					<button
-						class="config-button"
-						onclick={() => { showConfig = true; loadSongs(); }}
-					>
-						⚙️ Configure Game
-					</button>
-					<button
-						class="start-button"
-						onclick={startGame}
-						disabled={starting}
-					>
-						{starting ? 'Starting...' : 'Quick Start (Random Songs)'}
-					</button>
-				</section>
-			{:else}
+		<!-- Hide room panels when player is in game mode or between rounds -->
+		{#if !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
+			<div class="room-panels">
+			<Card title={`Joueurs (${players.length}/${room.maxPlayers})`} subtitle={room.status === 'lobby' ? 'Invite encore plus de monde !' : 'Scores mis à jour en direct'} icon="👥">
+				{#if players.length === 0}
+					<p class="empty">Aucun joueur pour l'instant. Partage le code !</p>
+				{:else}
+					<div class="player-grid">
+						{#each sortedPlayers as player (player.id)}
+							<div class="player-chip" class:offline={!player.connected}>
+								<div class="chip-avatar">{player.name.slice(0, 2).toUpperCase()}</div>
+								<div class="chip-info">
+									<strong>{player.name}</strong>
+									<span>{player.connected ? 'Connecté' : 'Hors ligne'}</span>
+								</div>
+								<span class="chip-score">{player.score} pts</span>
+								{#if room.status === 'lobby' && isMaster}
+									<button type="button" class="chip-remove" onclick={() => removePlayer(player.id)} title="Retirer le joueur">✕</button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</Card>
+
+			<div class="side-stack">
+				{#if room.status === 'lobby' && isMaster}
+					<Card title="Inviter les joueurs" subtitle="Partage le code ou scanne le QR" icon="📣">
+						<div class="share-card">
+							<div class="code-banner">
+								<div>
+									<span>Code</span>
+									<strong>{room.code}</strong>
+								</div>
+							<Button variant="secondary" size="sm" onclick={copyCode}>
+									{codeCopied ? 'Copié' : 'Copier'}
+								</Button>
+							</div>
+							{#if room.qrCode}
+								<img src={room.qrCode} alt={`QR pour ${room.name}`} />
+							{/if}
+							<Button variant="outline" size="sm" onclick={copyInviteLink}>
+								{inviteCopied ? 'Lien copié' : 'Copier le lien d’invitation'}
+							</Button>
+						</div>
+					</Card>
+
+					{#if !showConfig}
+						<Card title="Préparer ta partie" subtitle="Rounds, playlists, timer" icon="⚙️">
+							<p class="card-text">Configure les manches et personnalise ton blind test avant de lancer la partie.</p>
+							<Button variant="primary" fullWidth onclick={() => {
+								showConfig = true;
+								loadSongs();
+							}}>
+								⚡ Configurer & démarrer
+							</Button>
+						</Card>
+					{/if}
+				{:else if room.status === 'lobby' && !isMaster}
+					{#if currentPlayer}
+						<Card title="Tu es prêt !" subtitle="Le maître démarre quand tout le monde est là" icon="✅">
+							<p class="card-text">Tu joues en tant que <strong>{currentPlayer.name}</strong>. Reste connecté !</p>
+							<Button variant="outline" fullWidth onclick={leaveRoom}>Quitter la salle</Button>
+						</Card>
+					{:else}
+						<Card title="Rejoins la salle" subtitle="Choisis un pseudo fun" icon="🙋">
+							<form class="join-form" onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
+								<InputField label="Pseudo" placeholder="DJ Poppins" bind:value={playerName} required />
+								<Button type="submit" variant="primary" fullWidth disabled={!playerName.trim()} loading={joining}>
+									{joining ? 'Connexion...' : 'Rejoindre la partie'}
+								</Button>
+							</form>
+						</Card>
+					{/if}
+				{:else}
+					<Card title="Infos match" subtitle="Tout le monde suit la même musique" icon="🎧">
+						<ul class="info-list">
+							<li>Scores synchronisés en direct</li>
+							<li>Buzz dès que tu reconnais l’extrait</li>
+							<li>Pause fun entre chaque manche</li>
+						</ul>
+					</Card>
+				{/if}
+			</div>
+		</div>
+		{/if}
+
+		{#if showConfig}
+			<div class="config-wrapper">
 				<GameConfig
 					{songs}
-					bind:selectedSongIds
-					bind:songCount
-					bind:useFilters
-					bind:selectedGenres
-					bind:yearMin
-					bind:yearMax
+					bind:rounds
 					bind:audioPlayback
 					{availableGenres}
 					{starting}
-					onToggleSong={toggleSongSelection}
-					onToggleGenre={toggleGenre}
+					onUpdateRounds={(newRounds) => (rounds = newRounds)}
 					onStartGame={startGame}
-					onCancel={() => showConfig = false}
+					onCancel={() => (showConfig = false)}
 				/>
-			{/if}
-		{:else if room.status === 'lobby' && players.length < 2 && isMaster}
-			<section class="game-controls">
-				<p class="info">Need at least 2 players to start the game</p>
-			</section>
-		{:else if room.status === 'lobby' && !isMaster}
-			<section class="game-controls">
-				<p class="info">Waiting for the master to start the game...</p>
+			</div>
+		{/if}
+
+		{#if room.status === 'between_rounds' && betweenRoundsData}
+			<section class="game-stage fullscreen-between">
+				<BetweenRounds
+					completedRoundIndex={betweenRoundsData.completedRoundIndex}
+					nextRoundIndex={betweenRoundsData.nextRoundIndex}
+					nextRoundMode={betweenRoundsData.nextRoundMode}
+					nextRoundMedia={betweenRoundsData.nextRoundMedia}
+					scores={betweenRoundsData.scores}
+					{isMaster}
+					onStartNextRound={startNextRound}
+				/>
 			</section>
 		{/if}
 
 		{#if showFinalScores && finalScores.length > 0}
-			<!-- Final Scores Screen (shown to all players and master) -->
-			<section class="final-scores-section">
+			<div class="final-wrapper">
 				<FinalScores
 					{finalScores}
 					onBackToLobby={isMaster ? handleBackToLobby : undefined}
 					onPlayAgain={isMaster ? handlePlayAgain : undefined}
 				/>
-			</section>
+			</div>
 		{:else if room.status === 'playing'}
-			<section class="game-section">
-				{#if isMaster}
-					<!-- Master Control Panel -->
-					<MasterGameControl {room} socket={roomSocket} />
-				{:else if currentPlayer}
-					<!-- Player Game Interface -->
-					<PlayerGameInterface player={currentPlayer} socket={roomSocket} />
+			<!-- Player Name Badge (Fixed Top Right for Players) -->
+			{#if currentPlayer && !isMaster}
+				<div class="player-name-badge">
+					<span class="badge-icon">👤</span>
+					<span class="badge-name">{currentPlayer.name}</span>
+				</div>
+			{/if}
+
+			<section class="game-stage" class:fullscreen={currentPlayer && !isMaster}>
+				{#if roomSocket}
+					{#if isMaster}
+						<MasterGameControl {room} socket={roomSocket} />
+					{:else if currentPlayer}
+						<PlayerGameInterface player={currentPlayer} socket={roomSocket} />
+					{:else}
+						<div class="spectator-note">Rejoins depuis ton mobile pour buzzer en live.</div>
+					{/if}
 				{:else}
-					<div class="spectator">
-						<h2>👁️ Spectator Mode</h2>
-						<p>You are watching the game</p>
-					</div>
+					<div class="spectator-note">Connexion au serveur de jeu...</div>
 				{/if}
 			</section>
 		{/if}
@@ -567,264 +710,353 @@
 </main>
 
 <style>
-	main {
-		max-width: 800px;
-		margin: 0 auto;
-		padding: 2rem;
+	.room-page {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
 	}
 
-	.header {
+	.room-nav {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 2rem;
+		gap: 1rem;
 	}
 
-	.back-button {
-		display: inline-block;
-		color: #3b82f6;
-		text-decoration: none;
+	.nav-link {
+		background: transparent;
+		border: none;
+		color: white;
 		font-weight: 600;
-		transition: color 0.2s;
-	}
-
-	.back-button:hover {
-		color: #2563eb;
+		cursor: pointer;
+		font-size: 0.95rem;
+		padding: 0.35rem 0.75rem;
+		border-radius: var(--aq-radius-md);
+		background: rgba(255, 255, 255, 0.15);
 	}
 
 	.connection-status {
-		font-size: 0.875rem;
 		font-weight: 600;
 	}
 
-	.connection-status.connected {
-		color: #10b981;
+	.connection-status.ok {
+		color: #3dd598;
 	}
 
-	.connection-status.disconnected {
-		color: #f59e0b;
+	.connection-status.pending {
+		color: #f8c027;
 	}
 
 	.connection-status.error {
-		color: #ef4444;
+		color: #ef4c83;
+	}
+
+	.loading-card,
+	.error-card {
+		padding: 1.25rem;
+		border-radius: var(--aq-radius-lg);
+		background: rgba(255, 255, 255, 0.9);
+		box-shadow: var(--aq-shadow-soft);
+	}
+
+	.error-card {
+		border-left: 4px solid var(--aq-color-primary);
+		color: var(--aq-color-primary);
 	}
 
 	.room-header {
+		background: rgba(255, 255, 255, 0.95);
+		border-radius: 16px;
+		padding: 1.25rem 1.5rem;
+		margin-bottom: 1.5rem;
+		box-shadow: var(--aq-shadow-soft);
+		border: 1px solid var(--aq-color-border);
+	}
+
+	.header-top {
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
-		margin-bottom: 2rem;
 		gap: 1rem;
+		margin-bottom: 0.75rem;
 	}
 
-	h1 {
-		font-size: 2rem;
-		margin: 0 0 0.5rem 0;
-		color: #1f2937;
-	}
-
-	.header-info {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
+	.room-header h1 {
+		font-size: clamp(1.5rem, 3vw, 2rem);
+		margin: 0 0 0.25rem 0;
+		color: var(--aq-color-deep);
 	}
 
 	.room-code {
 		margin: 0;
-		color: #6b7280;
-		font-size: 0.875rem;
+		font-size: 0.95rem;
+		color: var(--aq-color-muted);
 	}
 
 	.room-code strong {
-		font-family: monospace;
-		font-size: 1.125rem;
-		color: #1f2937;
-		background-color: #f3f4f6;
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
+		color: var(--aq-color-primary);
+		font-weight: 700;
 	}
 
-	.role-badge {
-		display: inline-block;
-		padding: 0.375rem 0.75rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		border-radius: 0.5rem;
-		background-color: #e5e7eb;
-		color: #374151;
+	.header-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1.5rem;
+		font-size: 0.9rem;
+		color: var(--aq-color-muted);
 	}
 
-	.role-badge.master {
-		background-color: #fef3c7;
-		color: #92400e;
-	}
-
-	h2 {
-		font-size: 1.25rem;
-		margin-bottom: 1rem;
-		color: #374151;
-	}
-
-	.status {
-		padding: 0.5rem 1rem;
-		color: white;
-		font-size: 0.875rem;
-		font-weight: 600;
-		border-radius: 1rem;
-		text-transform: uppercase;
-		white-space: nowrap;
-	}
-
-	section {
-		margin-bottom: 2rem;
-		padding: 1.5rem;
-		background-color: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-	}
-
-	button {
-		padding: 0.75rem 1.5rem;
-		font-size: 1rem;
-		font-weight: 600;
-		color: white;
-		background-color: #3b82f6;
+	.code-pill {
 		border: none;
-		border-radius: 0.5rem;
+		border-radius: 999px;
+		padding: 0.35rem 1rem;
+		background: rgba(255, 255, 255, 0.2);
+		color: #fff;
+		font-weight: 600;
 		cursor: pointer;
-		transition: background-color 0.2s;
 	}
 
-	button:hover:not(:disabled) {
-		background-color: #2563eb;
+	.code-pill.copied {
+		background: rgba(248, 192, 39, 0.3);
+		color: var(--aq-color-deep);
 	}
 
-	button:disabled {
-		background-color: #9ca3af;
-		cursor: not-allowed;
+	.hero-stats {
+		display: grid;
+		gap: 1rem;
+		align-self: stretch;
 	}
 
-	.error {
-		padding: 1rem;
-		margin-bottom: 1rem;
-		background-color: #fee2e2;
-		color: #991b1b;
-		border-radius: 0.5rem;
-		border-left: 4px solid #dc2626;
+	.hero-stats .stat-label {
+		font-size: 0.8rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.8);
 	}
 
-	.loading,
-	.empty {
-		text-align: center;
-		color: #6b7280;
-		padding: 2rem;
-		font-style: italic;
+	.hero-stats strong {
+		font-size: 1.5rem;
 	}
 
-	.players-list {
+	.room-panels {
+		display: grid;
+		gap: 1.5rem;
+		grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+	}
+
+	@media (max-width: 1000px) {
+		.room-panels {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.player-grid {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.85rem;
 	}
 
-	.player-card {
+	.player-chip {
+		display: grid;
+		grid-template-columns: auto 1fr auto auto;
+		gap: 0.75rem;
+		align-items: center;
+		padding: 0.85rem;
+		border-radius: var(--aq-radius-lg);
+		background: rgba(18, 43, 59, 0.05);
+		border: 1px solid rgba(18, 43, 59, 0.08);
+		position: relative;
+	}
+
+	.player-chip.offline {
+		opacity: 0.6;
+	}
+
+	.chip-avatar {
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.2), rgba(244, 122, 32, 0.2));
+		display: grid;
+		place-items: center;
+		font-weight: 700;
+		color: var(--aq-color-deep);
+	}
+
+	.chip-info span {
+		font-size: 0.85rem;
+		color: var(--aq-color-muted);
+	}
+
+	.chip-score {
+		font-weight: 700;
+		color: var(--aq-color-deep);
+	}
+
+	.chip-remove {
+		border: none;
+		background: rgba(239, 76, 131, 0.15);
+		color: var(--aq-color-primary);
+		border-radius: 50%;
+		width: 32px;
+		height: 32px;
+		display: grid;
+		place-items: center;
+		cursor: pointer;
+		font-size: 1rem;
+		font-weight: 700;
+		transition: all 0.2s ease;
+	}
+
+	.chip-remove:hover {
+		background: rgba(239, 76, 131, 0.25);
+		transform: scale(1.1);
+	}
+
+	.chip-remove:active {
+		transform: scale(0.95);
+	}
+
+	.side-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.share-card {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		text-align: center;
+	}
+
+	.share-card img {
+		max-width: 220px;
+		margin: 0 auto;
+		border-radius: var(--aq-radius-md);
+		border: 4px solid rgba(18, 43, 59, 0.08);
+	}
+
+	.code-banner {
 		display: flex;
 		justify-content: space-between;
+		gap: 1rem;
 		align-items: center;
-		padding: 1rem;
-		background-color: #f9fafb;
-		border-radius: 0.5rem;
-		border: 1px solid #e5e7eb;
-		transition: opacity 0.2s;
+		padding: 0.75rem 1rem;
+		border-radius: var(--aq-radius-md);
+		background: rgba(18, 43, 59, 0.05);
 	}
 
-	.player-card.disconnected {
-		opacity: 0.6;
-		border-color: #f59e0b;
+	.code-banner span {
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--aq-color-muted);
 	}
 
-	.player-info {
+	.card-text {
+		margin: 0 0 1rem 0;
+		color: var(--aq-color-muted);
+	}
+
+	.join-form {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 1rem;
 	}
 
-	.player-name {
-		font-weight: 600;
-		color: #1f2937;
+	.info-list {
+		margin: 0;
+		padding-left: 1.25rem;
+		color: var(--aq-color-muted);
+	}
+
+	.empty {
+		text-align: center;
+		padding: 1rem;
+		color: var(--aq-color-muted);
+	}
+
+	.config-wrapper {
+		margin-top: 2rem;
+	}
+
+	.between-wrapper,
+	.final-wrapper,
+	.game-stage {
+		margin-top: 1.5rem;
+	}
+
+	.game-stage {
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 32px;
+		padding: 1.5rem;
+		box-shadow: var(--aq-shadow-soft);
+	}
+
+	/* Full-screen mode for players during gameplay */
+	.game-stage.fullscreen,
+	.game-stage.fullscreen-between {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		margin: 0;
+		border-radius: 0;
+		width: 100vw;
+		height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		background: linear-gradient(135deg, #ef4c83 0%, #f8c027 100%);
+		padding: 1rem;
+	}
+
+	.game-stage :global(.master-control),
+	.game-stage :global(.player-interface) {
+		width: 100%;
+	}
+
+	/* Player Name Badge - Fixed top right of screen */
+	.player-name-badge {
+		position: fixed;
+		top: 1.5rem;
+		right: 1.5rem;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.status-badge {
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: #f59e0b;
-		background-color: #fef3c7;
-		padding: 0.125rem 0.5rem;
-		border-radius: 0.25rem;
-	}
-
-	.player-score {
-		font-size: 0.875rem;
-		color: #6b7280;
-	}
-
-	.remove-button {
-		padding: 0.5rem 1rem;
-		font-size: 0.875rem;
-		background-color: #ef4444;
-	}
-
-	.remove-button:hover:not(:disabled) {
-		background-color: #dc2626;
-	}
-
-	.game-controls {
-		text-align: center;
-	}
-
-	.start-button {
-		padding: 1rem 2rem;
-		font-size: 1.125rem;
-		background-color: #10b981;
-	}
-
-	.start-button:hover:not(:disabled) {
-		background-color: #059669;
-	}
-
-	.info {
-		color: #6b7280;
-		font-style: italic;
-	}
-
-	.game-section {
-		background-color: #f9fafb;
-	}
-
-	.final-scores-section {
-		background: transparent;
-		border: none;
-		padding: 0;
-	}
-
-	.config-button {
-		width: 100%;
-		padding: 1rem;
-		margin-bottom: 0.5rem;
-		font-size: 1rem;
-		font-weight: 600;
+		background: rgba(239, 76, 131, 0.95);
+		backdrop-filter: blur(10px);
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-radius: 999px;
+		padding: 0.6rem 1.25rem;
+		font-weight: 700;
 		color: white;
-		background-color: #6b7280;
-		border: none;
-		border-radius: 0.5rem;
-		cursor: pointer;
-		transition: background-color 0.2s;
+		box-shadow: 0 8px 24px rgba(239, 76, 131, 0.4);
+		z-index: 1001;
+		font-size: 1rem;
 	}
 
-	.config-button:hover {
-		background-color: #4b5563;
+	.player-name-badge .badge-icon {
+		font-size: 1.2rem;
+		line-height: 1;
+	}
+
+	.player-name-badge .badge-name {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 150px;
+	}
+
+	.spectator-note {
+		text-align: center;
+		padding: 2rem;
+		border-radius: var(--aq-radius-lg);
+		background: rgba(255, 255, 255, 0.8);
+		border: 2px dashed rgba(18, 43, 59, 0.2);
+		font-weight: 600;
 	}
 </style>

@@ -36,6 +36,23 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
     })),
   })
 
+  // Find room by code
+  .get('/code/:code', async ({ params: { code }, error }) => {
+    const room = await roomRepository.findByCode(code.toUpperCase());
+
+    if (!room) {
+      apiLogger.warn('Room not found by code', { code });
+      return error(404, { error: 'Room not found' });
+    }
+
+    // Populate players
+    const players = await playerRepository.findByRoom(room.id);
+    room.players = players;
+
+    apiLogger.info('Found room by code', { code, roomId: room.id, roomName: room.name });
+    return room;
+  })
+
   // Create new room
   .post('/', async ({ body, error }) => {
     try {

@@ -62,6 +62,14 @@ class GameStateManager {
   }
 
   /**
+   * Get active session for a room
+   */
+  getActiveSession(roomId: string): GameSession | null {
+    const state = this.getSessionByRoom(roomId);
+    return state?.session || null;
+  }
+
+  /**
    * Update current round
    */
   updateRound(roomId: string, round: Round): void {

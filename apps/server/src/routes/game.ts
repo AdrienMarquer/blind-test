@@ -32,80 +32,50 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
     }
 
     try {
+      // Validate rounds array is provided
+      if (!body.rounds || body.rounds.length === 0) {
+        return error(400, { error: 'At least one round is required. Use the round configuration system.' });
+      }
+
       // Create game session
       const session = await gameSessionRepository.create({
         roomId,
       });
 
-      // Prepare round configuration - properly typed song filters
-      type SongFilterConfig = {
-        genre?: string | string[];
-        yearMin?: number;
-        yearMax?: number;
-        artistName?: string;
-        songCount?: number;
-        songIds?: string[];
-      } | null;
+      const rounds = body.rounds;
 
-      let songFilters: SongFilterConfig = null;
-      let songCount = 0;
+      // Create all rounds
+      for (let i = 0; i < rounds.length; i++) {
+        const roundConfig = rounds[i];
+        const roundId = generateId();
 
-      // Priority 1: Use songFilters (metadata-based approach)
-      if (body.songFilters) {
-        apiLogger.debug('Using metadata filters for game start', { roomId, filters: body.songFilters });
-        songFilters = body.songFilters;
-
-        // Verify filters will return songs
-        const testSongs = await songRepository.findByFilters(body.songFilters);
-        if (testSongs.length === 0) {
-          await gameSessionRepository.delete(session.id);
-          return error(400, { error: 'No songs match the provided filters' });
+        // Verify filters will return songs if provided
+        if (roundConfig.songFilters) {
+          const testSongs = await songRepository.findByFilters(roundConfig.songFilters);
+          if (testSongs.length === 0) {
+            await gameSessionRepository.delete(session.id);
+            return error(400, { error: `No songs match filters for round ${i + 1}` });
+          }
         }
-        songCount = testSongs.length;
-      }
-      // Priority 2: Use explicit songIds
-      else if (body.songIds && body.songIds.length > 0) {
-        apiLogger.debug('Using explicit songIds for game start', { roomId, songCount: body.songIds.length });
-        // Store songIds as a filter
-        songFilters = {
-          songIds: body.songIds,
-        };
-        songCount = body.songIds.length;
-      }
-      // Priority 3: Random selection
-      else {
-        apiLogger.debug('Using random selection for game start', { roomId, songCount: body.songCount || 10 });
-        songFilters = {
-          songCount: body.songCount || 10,
-        };
 
-        const randomSongs = await songRepository.findByFilters(songFilters);
-        if (randomSongs.length === 0) {
-          await gameSessionRepository.delete(session.id);
-          return error(400, { error: 'No songs available in the library' });
-        }
-        songCount = randomSongs.length;
+        await db.insert(schema.rounds).values({
+          id: roundId,
+          sessionId: session.id,
+          index: i,
+          modeType: roundConfig.modeType,
+          mediaType: roundConfig.mediaType,
+          songFilters: roundConfig.songFilters ? JSON.stringify(roundConfig.songFilters) : null,
+          params: roundConfig.params ? JSON.stringify(roundConfig.params) : null,
+          status: 'pending',
+          startedAt: null,
+          endedAt: null,
+          currentSongIndex: 0,
+        });
       }
-
-      // Create single round for now (Phase 3 will support multiple rounds)
-      const roundId = generateId();
-      await db.insert(schema.rounds).values({
-        id: roundId,
-        sessionId: session.id,
-        index: 0,
-        modeType: body.modeType || 'buzz_and_choice',
-        mediaType: body.mediaType || 'music', // Default to music for MVP
-        songFilters: songFilters ? JSON.stringify(songFilters) : null,
-        params: body.params ? JSON.stringify(body.params) : null,
-        status: 'pending',
-        startedAt: null,
-        endedAt: null,
-        currentSongIndex: 0,
-      });
 
       // Update room status
       const updated = await roomRepository.update(roomId, { status: 'playing' });
-      apiLogger.info('Game started', { roomId, roomName: room.name, songCount });
+      apiLogger.info('Game started', { roomId, roomName: room.name, roundCount: rounds.length });
 
       // Start the first round
       try {
@@ -129,8 +99,8 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
         sessionId: session.id,
         roomId,
         status: updated.status,
-        songCount,
-        modeType: body.modeType || 'buzz_and_choice',
+        roundCount: rounds.length,
+        message: `Game started with ${rounds.length} round${rounds.length > 1 ? 's' : ''}`,
       };
     } catch (err) {
       apiLogger.error('Failed to start game', err, { roomId });
@@ -138,48 +108,39 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
     }
   }, {
     body: t.Object({
-      // Legacy playlist support
-      playlistId: t.Optional(t.String()),
-      songIds: t.Optional(t.Array(t.String())),
+      // Multi-round configuration (REQUIRED)
+      rounds: t.Array(t.Object({
+        modeType: t.String(),
+        mediaType: t.String(),
+        songFilters: t.Optional(t.Object({
+          genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
+          yearMin: t.Optional(t.Number()),
+          yearMax: t.Optional(t.Number()),
+          artistName: t.Optional(t.String()),
+          songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+          songIds: t.Optional(t.Array(t.String())),
+        })),
+        params: t.Optional(t.Object({
+          // Universal parameters
+          songDuration: t.Optional(t.Number()),
+          answerTimer: t.Optional(t.Number()),
+          audioPlayback: t.Optional(t.Union([t.Literal('master'), t.Literal('players'), t.Literal('all')])),
 
-      // Metadata-based filtering (NEW - preferred approach)
-      songFilters: t.Optional(t.Object({
-        genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
-        yearMin: t.Optional(t.Number()),
-        yearMax: t.Optional(t.Number()),
-        artistName: t.Optional(t.String()),
-        songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-      })),
+          // Buzz + Choice specific
+          numChoices: t.Optional(t.Number()),
+          pointsTitle: t.Optional(t.Number()),
+          pointsArtist: t.Optional(t.Number()),
+          penaltyEnabled: t.Optional(t.Boolean()),
+          penaltyAmount: t.Optional(t.Number()),
+          allowRebuzz: t.Optional(t.Boolean()),
 
-      // Quick filters (alternative to songFilters object)
-      songCount: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-      genre: t.Optional(t.Union([t.String(), t.Array(t.String())])),
-      yearMin: t.Optional(t.Number()),
-      yearMax: t.Optional(t.Number()),
+          // Fast Buzz specific
+          manualValidation: t.Optional(t.Boolean()),
 
-      // Game configuration
-      modeType: t.Optional(t.String()),
-      mediaType: t.Optional(t.String()),
-      params: t.Optional(t.Object({
-        // Universal parameters
-        songDuration: t.Optional(t.Number()),
-        answerTimer: t.Optional(t.Number()),
-        audioPlayback: t.Optional(t.Union([t.Literal('master'), t.Literal('players'), t.Literal('all')])),
-
-        // Buzz + Choice specific
-        numChoices: t.Optional(t.Number()),
-        pointsTitle: t.Optional(t.Number()),
-        pointsArtist: t.Optional(t.Number()),
-        penaltyEnabled: t.Optional(t.Boolean()),
-        penaltyAmount: t.Optional(t.Number()),
-        allowRebuzz: t.Optional(t.Boolean()),
-
-        // Fast Buzz specific
-        manualValidation: t.Optional(t.Boolean()),
-
-        // Text Input specific
-        fuzzyMatch: t.Optional(t.Boolean()),
-        levenshteinDistance: t.Optional(t.Number()),
+          // Text Input specific
+          fuzzyMatch: t.Optional(t.Boolean()),
+          levenshteinDistance: t.Optional(t.Number()),
+        })),
       })),
     }),
   })
@@ -210,5 +171,33 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
     } catch (err) {
       apiLogger.error('Failed to end game', err, { roomId });
       return error(500, { error: 'Failed to end game' });
+    }
+  })
+
+  // Start next round (from between_rounds state)
+  .post('/next-round', async ({ params: { roomId }, error }) => {
+    const room = await roomRepository.findById(roomId);
+
+    if (!room) {
+      return error(404, { error: 'Room not found' });
+    }
+
+    if (room.status !== 'between_rounds') {
+      return error(409, { error: 'Room is not in between_rounds state' });
+    }
+
+    try {
+      await gameService.startNextRound(roomId);
+
+      apiLogger.info('Started next round', { roomId, roomName: room.name });
+
+      return {
+        roomId,
+        status: 'playing',
+        message: 'Next round started successfully',
+      };
+    } catch (err) {
+      apiLogger.error('Failed to start next round', err, { roomId });
+      return error(500, { error: 'Failed to start next round' });
     }
   });

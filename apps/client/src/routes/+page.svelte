@@ -1,13 +1,34 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
+	import Logo from '$lib/components/Logo.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import InputField from '$lib/components/ui/InputField.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 	import type { Room } from '@blind-test/shared';
+
+	type StatusTone = 'primary' | 'success' | 'warning' | 'neutral';
+
+	const statusMeta: Record<Room['status'], { label: string; tone: StatusTone; icon: string; blurb: string }> = {
+		lobby: { label: 'Lobby ouvert', tone: 'primary', icon: '🕹️', blurb: 'En attente de joueurs' },
+		playing: { label: 'Partie en cours', tone: 'success', icon: '🎧', blurb: 'Le blind test bat son plein' },
+		between_rounds: { label: 'Pause', tone: 'warning', icon: '⏱️', blurb: 'Transition de manche' },
+		finished: { label: 'Terminée', tone: 'neutral', icon: '🏁', blurb: 'Prêt pour un replay' }
+	};
 
 	let rooms = $state<Room[]>([]);
 	let newRoomName = $state('');
+	let roomCode = $state('');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let creating = $state(false);
+	let joiningByCode = $state(false);
+	const roomsApi = api.api.rooms as Record<string, any>;
+
+	const totalPlayers = $derived(rooms.reduce((sum, room) => sum + room.players.length, 0));
+	const activeRooms = $derived(rooms.filter((room) => room.status === 'playing').length);
+	const sortedRooms = $derived([...rooms].sort((a, b) => a.name.localeCompare(b.name)));
 
 	async function loadRooms() {
 		try {
@@ -16,14 +37,12 @@
 			const response = await api.api.rooms.get();
 
 			if (response.data) {
-				// New API returns { rooms, total }
 				rooms = response.data.rooms || [];
-				console.log('Loaded rooms:', rooms);
 			} else {
-				error = 'Failed to load rooms';
+				error = 'Impossible de charger les salles';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load rooms';
+			error = err instanceof Error ? err.message : 'Impossible de charger les salles';
 			console.error('Error loading rooms:', err);
 		} finally {
 			loading = false;
@@ -42,73 +61,60 @@
 			});
 
 			if (response.data) {
-				console.log('Room created:', response.data);
 				const roomId = response.data.id;
 				const masterToken = (response.data as any).masterToken;
 
-				// Store master token (in-memory via URL param, no localStorage)
 				if (masterToken) {
-					console.log(`[Master] Navigating with master token for room ${roomId}`);
 					window.location.href = `/room/${roomId}?token=${masterToken}`;
 				} else {
-					console.warn('[Master] No masterToken in response, navigating without auth');
 					window.location.href = `/room/${roomId}`;
 				}
 			} else {
-				error = 'Failed to create room';
+				error = 'Création impossible';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to create room';
+			error = err instanceof Error ? err.message : 'Création impossible';
 			console.error('Error creating room:', err);
 		} finally {
 			creating = false;
 		}
 	}
 
+	async function joinByCode() {
+		if (!roomCode.trim()) return;
+
+		try {
+			joiningByCode = true;
+			error = null;
+
+			const response = await roomsApi.code[roomCode.trim().toUpperCase()].get();
+
+			if (response.data) {
+				window.location.href = `/room/${response.data.id}`;
+			} else {
+				error = 'Salle introuvable avec ce code';
+			}
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Code de salle invalide';
+			console.error('Error joining by code:', err);
+		} finally {
+			joiningByCode = false;
+		}
+	}
+
 	async function deleteRoom(roomId: string, roomName: string, e: Event) {
-		e.preventDefault(); // Prevent navigation
+		e.preventDefault();
 		e.stopPropagation();
 
-		if (!confirm(`Delete room "${roomName}"?`)) return;
+		if (!confirm(`Supprimer la salle "${roomName}" ?`)) return;
 
 		try {
 			error = null;
-			await api.api.rooms[roomId].delete();
-			console.log('Room deleted successfully');
+			await roomsApi[roomId].delete();
 			await loadRooms();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to delete room';
+			error = err instanceof Error ? err.message : 'Suppression impossible';
 			console.error('Error deleting room:', err);
-		}
-	}
-
-	function getStatusColor(status: Room['status']): string {
-		switch (status) {
-			case 'lobby':
-				return '#3b82f6'; // blue
-			case 'playing':
-				return '#10b981'; // green
-			case 'between_rounds':
-				return '#f59e0b'; // amber
-			case 'finished':
-				return '#6b7280'; // gray
-			default:
-				return '#6b7280';
-		}
-	}
-
-	function getStatusLabel(status: Room['status']): string {
-		switch (status) {
-			case 'lobby':
-				return 'Waiting';
-			case 'playing':
-				return 'Playing';
-			case 'between_rounds':
-				return 'Between Rounds';
-			case 'finished':
-				return 'Finished';
-			default:
-				return status;
 		}
 	}
 
@@ -117,261 +123,286 @@
 	});
 </script>
 
-<main>
-	<div class="page-header">
-		<h1>🎵 Blind Test</h1>
-		<a href="/music" class="music-library-link">📚 Music Library</a>
-	</div>
+<div class="page-header">
+	<Logo size={200} />
+</div>
 
-	<section class="create-room">
-		<h2>Create New Room</h2>
-		<form onsubmit={(e) => { e.preventDefault(); createRoom(); }}>
-			<input
-				type="text"
-				placeholder="Room name"
+<div class="actions-grid">
+	<Card title="Lancer une partie" subtitle="Donne un nom à ta salle et invite tes amis" icon="🚀">
+		<form
+			class="quick-create"
+			onsubmit={(e) => { e.preventDefault(); createRoom(); }}
+		>
+			<InputField
+				label={null}
+				placeholder="Ex: Soirée Adri 🎵"
 				bind:value={newRoomName}
-				disabled={creating}
 				required
 			/>
-			<button type="submit" disabled={creating || !newRoomName.trim()}>
-				{creating ? 'Creating...' : 'Create Room'}
-			</button>
+			<Button type="submit" variant="primary" size="lg" disabled={!newRoomName.trim()} loading={creating}>
+				{creating ? 'Création...' : '✨ Créer ma salle'}
+			</Button>
 		</form>
-	</section>
+		<div class="quick-info">
+			<p>→ Tu obtiendras un <strong>QR code</strong> à scanner</p>
+			<p>→ Configure les rounds et lance quand tout le monde est prêt</p>
+		</div>
+	</Card>
 
-	{#if error}
-		<div class="error">{error}</div>
-	{/if}
+	<Card title="Rejoindre une partie" subtitle="Entre le code de la salle" icon="🎮">
+		<form
+			class="quick-create"
+			onsubmit={(e) => { e.preventDefault(); joinByCode(); }}
+		>
+			<InputField
+				label={null}
+				placeholder="Ex: B7UN"
+				bind:value={roomCode}
+				required
+			/>
+			<Button type="submit" variant="secondary" size="lg" disabled={!roomCode.trim()} loading={joiningByCode}>
+				{joiningByCode ? 'Connexion...' : '🚪 Rejoindre'}
+			</Button>
+		</form>
+		<div class="quick-info">
+			<p>→ Le code est affiché sur l'écran du maître</p>
+			<p>→ Tu pourras aussi scanner le <strong>QR code</strong></p>
+		</div>
+	</Card>
+</div>
 
-	<section class="rooms-list">
-		<h2>Available Rooms</h2>
+{#if error}
+	<div class="aq-feedback error">{error}</div>
+{/if}
 
-		{#if loading}
-			<p class="loading">Loading rooms...</p>
-		{:else if rooms.length === 0}
-			<p class="empty">No rooms available. Create one to get started!</p>
-		{:else}
-			<div class="rooms">
-				{#each rooms as room (room.id)}
-					<div class="room-card-wrapper">
-						<a href="/room/{room.id}" class="room-card">
-							<div class="room-header">
-								<h3>{room.name}</h3>
-								<span class="status" style="background-color: {getStatusColor(room.status)}">
-									{getStatusLabel(room.status)}
-								</span>
-							</div>
-							<div class="room-info">
-								<div class="info-row">
-									<span>🔑 Code: <strong>{room.code}</strong></span>
-									<span>👥 {room.players.length}/{room.maxPlayers} players</span>
-								</div>
-							</div>
-						</a>
-						<button
-							class="delete-button"
-							onclick={(e) => deleteRoom(room.id, room.name, e)}
-							title="Delete room"
-						>
-							🗑️
-						</button>
-					</div>
-				{/each}
+{#if rooms.length > 0}
+	<details class="rooms-collapsible">
+		<summary>
+			<span class="summary-content">
+				<span class="summary-icon">📋</span>
+				<div>
+					<strong>Salles actives ({rooms.length})</strong>
+					<p>Rejoindre ou gérer une salle existante</p>
+				</div>
+			</span>
+			<span class="chevron">▼</span>
+		</summary>
+		<div class="rooms-content">
+			<div class="rooms-actions-inline">
+				<Button variant="ghost" size="sm" onclick={loadRooms} disabled={loading}>
+					{loading ? '⟳' : '↻ Actualiser'}
+				</Button>
 			</div>
-		{/if}
-	</section>
-</main>
+
+			{#if loading}
+				<div class="skeleton-grid">
+					<div class="skeleton-card"></div>
+					<div class="skeleton-card"></div>
+				</div>
+			{:else}
+				<div class="rooms-grid">
+					{#each sortedRooms as room (room.id)}
+						<a href="/room/{room.id}" class="room-card-mini">
+							<div class="room-card-mini__header">
+								<h4>{room.name}</h4>
+								<StatusBadge tone={statusMeta[room.status].tone} icon={statusMeta[room.status].icon}>
+									{statusMeta[room.status].label}
+								</StatusBadge>
+							</div>
+							<div class="room-card-mini__meta">
+								<span>🔑 <strong>{room.code}</strong></span>
+								<span>👥 {room.players.length}/{room.maxPlayers}</span>
+							</div>
+							<button class="ghost-delete-mini" title="Supprimer" onclick={(e) => deleteRoom(room.id, room.name, e)} aria-label={`Supprimer ${room.name}`}>
+								🗑️
+							</button>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</details>
+{/if}
 
 <style>
-	main {
-		max-width: 800px;
-		margin: 0 auto;
-		padding: 2rem;
-	}
-
 	.page-header {
 		display: flex;
+		align-items: center;
+		overflow-x: visible;
+	}
+
+	.actions-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		gap: 1.5rem;
+		width: 100%;
+		margin: 0 auto 2.5rem;
+	}
+
+	.quick-create {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.quick-info {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--aq-color-border);
+	}
+
+	.quick-info p {
+		margin: 0.5rem 0;
+		color: var(--aq-color-muted);
+		font-size: 0.95rem;
+	}
+
+	.rooms-collapsible {
+		margin-top: 3rem;
+		background: rgba(255, 255, 255, 0.9);
+		border-radius: 20px;
+		padding: 1.25rem 1.75rem;
+		border: 1px solid var(--aq-color-border);
+		box-shadow: var(--aq-shadow-soft);
+	}
+
+	.rooms-collapsible summary {
+		cursor: pointer;
+		list-style: none;
+		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 2rem;
+		user-select: none;
 	}
 
-	h1 {
-		font-size: 2.5rem;
-		margin: 0;
-		color: #1f2937;
+	.rooms-collapsible summary::-webkit-details-marker {
+		display: none;
 	}
 
-	.music-library-link {
-		display: inline-block;
-		padding: 0.75rem 1.5rem;
-		font-size: 1rem;
-		font-weight: 600;
-		color: white;
-		background-color: #10b981;
-		text-decoration: none;
-		border-radius: 0.5rem;
-		transition: background-color 0.2s;
-	}
-
-	.music-library-link:hover {
-		background-color: #059669;
-	}
-
-	h2 {
-		font-size: 1.5rem;
-		margin-bottom: 1rem;
-		color: #374151;
-	}
-
-	section {
-		margin-bottom: 2rem;
-	}
-
-	.create-room form {
+	.summary-content {
 		display: flex;
+		align-items: center;
 		gap: 1rem;
 	}
 
-	input {
-		flex: 1;
-		padding: 0.75rem;
-		font-size: 1rem;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		transition: border-color 0.2s;
-	}
-
-	input:focus {
-		outline: none;
-		border-color: #3b82f6;
-	}
-
-	input:disabled {
-		background-color: #f3f4f6;
-		cursor: not-allowed;
-	}
-
-	button {
-		padding: 0.75rem 1.5rem;
-		font-size: 1rem;
-		font-weight: 600;
-		color: white;
-		background-color: #3b82f6;
-		border: none;
-		border-radius: 0.5rem;
-		cursor: pointer;
-		transition: background-color 0.2s;
-	}
-
-	button:hover:not(:disabled) {
-		background-color: #2563eb;
-	}
-
-	button:disabled {
-		background-color: #9ca3af;
-		cursor: not-allowed;
-	}
-
-	.error {
-		padding: 1rem;
-		margin-bottom: 1rem;
-		background-color: #fee2e2;
-		color: #991b1b;
-		border-radius: 0.5rem;
-		border-left: 4px solid #dc2626;
-	}
-
-	.loading,
-	.empty {
-		text-align: center;
-		color: #6b7280;
-		padding: 2rem;
-		font-style: italic;
-	}
-
-	.rooms {
+	.summary-icon {
+		width: 50px;
+		height: 50px;
 		display: grid;
+		place-items: center;
+		font-size: 1.5rem;
+		background: rgba(239, 76, 131, 0.1);
+		border-radius: 14px;
+	}
+
+	.summary-content strong {
+		font-size: 1.1rem;
+		color: var(--aq-color-deep);
+	}
+
+	.summary-content p {
+		margin: 0.25rem 0 0;
+		font-size: 0.9rem;
+		color: var(--aq-color-muted);
+	}
+
+	.chevron {
+		font-size: 0.8rem;
+		color: var(--aq-color-muted);
+		transition: transform 200ms ease;
+	}
+
+	.rooms-collapsible[open] .chevron {
+		transform: rotate(180deg);
+	}
+
+	.rooms-content {
+		margin-top: 1.5rem;
+	}
+
+	.rooms-actions-inline {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: 1rem;
+	}
+
+	.rooms-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 		gap: 1rem;
 	}
 
-	.room-card-wrapper {
-		position: relative;
-	}
-
-	.room-card {
-		display: block;
-		padding: 1.5rem;
-		padding-right: 4rem;
-		background-color: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
+	.room-card-mini {
+		background: rgba(255, 255, 255, 0.8);
+		border-radius: 16px;
+		padding: 1.25rem;
 		text-decoration: none;
 		color: inherit;
-		transition: all 0.2s;
+		position: relative;
+		border: 1px solid var(--aq-color-border);
+		transition: transform 160ms ease, box-shadow 160ms ease;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
 	}
 
-	.room-card:hover {
-		border-color: #3b82f6;
-		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+	.room-card-mini:hover {
 		transform: translateY(-2px);
+		box-shadow: var(--aq-shadow-soft);
 	}
 
-	.delete-button {
-		position: absolute;
-		top: 50%;
-		right: 1rem;
-		transform: translateY(-50%);
-		padding: 0.5rem;
-		background-color: #ef4444;
-		border: none;
-		border-radius: 0.375rem;
-		font-size: 1.25rem;
-		cursor: pointer;
-		transition: background-color 0.2s;
-		line-height: 1;
-	}
-
-	.delete-button:hover {
-		background-color: #dc2626;
-	}
-
-	.room-header {
+	.room-card-mini__header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 0.75rem;
+		gap: 0.75rem;
 	}
 
-	.room-header h3 {
+	.room-card-mini__header h4 {
 		margin: 0;
-		font-size: 1.25rem;
-		color: #1f2937;
+		font-size: 1.1rem;
 	}
 
-	.status {
-		padding: 0.25rem 0.75rem;
-		color: white;
-		font-size: 0.875rem;
-		font-weight: 600;
-		border-radius: 1rem;
-		text-transform: uppercase;
-	}
-
-	.room-info {
-		color: #6b7280;
-		font-size: 0.875rem;
-	}
-
-	.info-row {
+	.room-card-mini__meta {
 		display: flex;
-		justify-content: space-between;
+		gap: 1.5rem;
+		font-size: 0.9rem;
+		color: var(--aq-color-muted);
+	}
+
+	.ghost-delete-mini {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		border: none;
+		background: rgba(239, 76, 131, 0.08);
+		border-radius: 8px;
+		padding: 0.25rem 0.5rem;
+		cursor: pointer;
+		font-size: 0.9rem;
+		transition: background 160ms ease;
+	}
+
+	.ghost-delete-mini:hover {
+		background: rgba(239, 76, 131, 0.18);
+	}
+
+	.skeleton-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 		gap: 1rem;
 	}
 
-	.info-row strong {
-		color: #1f2937;
-		font-family: monospace;
-		font-size: 1rem;
+	.skeleton-card {
+		height: 100px;
+		border-radius: 16px;
+		background: linear-gradient(90deg, rgba(18, 43, 59, 0.05), rgba(18, 43, 59, 0.02), rgba(18, 43, 59, 0.05));
+		background-size: 200% 100%;
+		animation: shimmer 1.4s infinite;
+	}
+
+	@keyframes shimmer {
+		0% { background-position: -100% 0; }
+		100% { background-position: 200% 0; }
 	}
 </style>

@@ -6,6 +6,13 @@
 		error: string | null;
 	}
 
+	const statusLabels: Record<Room['status'], string> = {
+		lobby: 'Lobby',
+		playing: 'Partie en cours',
+		between_rounds: 'Transition',
+		finished: 'Terminée'
+	};
+
 	let { room, error }: Props = $props();
 </script>
 
@@ -14,9 +21,9 @@
 		<div>
 			<h1>{room.name}</h1>
 			<div class="header-info">
-				<p>Room Code: <strong>{room.code}</strong></p>
-				<p>Status: <span class="status-badge status-{room.status}">{room.status}</span></p>
-				<p>Players: {room.players.length} / {room.maxPlayers}</p>
+				<p>Code salle : <strong>{room.code}</strong></p>
+				<p>Statut : <span class="status-badge status-{room.status}">{statusLabels[room.status]}</span></p>
+				<p>Joueurs : {room.players.length} / {room.maxPlayers}</p>
 			</div>
 		</div>
 

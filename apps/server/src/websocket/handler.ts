@@ -7,6 +7,7 @@ import type { ServerWebSocket } from 'bun';
 import { roomRepository, playerRepository } from '../repositories';
 import type { Player, Room, ClientMessage, ServerMessage } from '@blind-test/shared';
 import { gameService } from '../services/GameService';
+import { gameStateManager } from '../services/GameStateManager';
 import { AuthService } from '../services/AuthService';
 import { logger } from '../utils/logger';
 
@@ -562,10 +563,51 @@ async function handleGameSkip(
     return;
   }
 
-  wsLogger.info('Song skipped', { roomId });
+  wsLogger.info('Master skipping song', { roomId });
 
+  // Get current round and song
+  const round = gameStateManager.getCurrentRound(roomId);
+  if (!round) {
+    wsLogger.warn('Cannot skip - no active round', { roomId });
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'No active round to skip' }
+    });
+    return;
+  }
+
+  const currentSongIndex = round.currentSongIndex;
+  if (currentSongIndex === undefined || currentSongIndex === null) {
+    wsLogger.warn('Cannot skip - no active song', { roomId });
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'No active song to skip' }
+    });
+    return;
+  }
+
+  const song = round.songs[currentSongIndex];
+  if (!song || song.status === 'finished') {
+    wsLogger.warn('Cannot skip - song already finished', { roomId, songIndex: currentSongIndex });
+    return;
+  }
+
+  wsLogger.info('Ending current song due to skip', {
+    roomId,
+    roundIndex: round.index,
+    songIndex: currentSongIndex,
+    songTitle: song.song.title
+  });
+
+  // End the current song (will automatically start next song after 5 second delay)
+  await gameService.endSong(roomId, round, currentSongIndex);
+
+  // Broadcast skip confirmation
   broadcastToRoom(roomId, {
     type: 'game:skipped',
-    data: { timestamp: Date.now() }
+    data: {
+      songIndex: currentSongIndex,
+      timestamp: Date.now()
+    }
   });
 }
