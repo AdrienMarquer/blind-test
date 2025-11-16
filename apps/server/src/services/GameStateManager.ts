@@ -76,6 +76,20 @@ class GameStateManager {
     const state = this.getSessionByRoom(roomId);
     if (state) {
       state.currentRound = round;
+
+      // IMPORTANT: Also update the round in the session.rounds array
+      // This ensures that when we search for the next pending round,
+      // we see the updated status (e.g., 'finished' instead of 'pending')
+      const roundIndex = state.session.rounds.findIndex(r => r.id === round.id);
+      if (roundIndex !== -1) {
+        state.session.rounds[roundIndex] = round;
+        stateLogger.debug('Updated round in session', {
+          roomId,
+          roundId: round.id,
+          roundIndex,
+          newStatus: round.status
+        });
+      }
     }
   }
 

@@ -13,7 +13,7 @@
  * 6. Points awarded immediately
  */
 
-import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
+import { DEFAULT_SONG_DURATION, type Round, type RoundSong, type Answer, type Song, type ModeParams, type MediaType } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
 
 export class FastBuzzMode extends BaseModeHandler {
@@ -22,7 +22,7 @@ export class FastBuzzMode extends BaseModeHandler {
   description = 'Buzz in and answer verbally. Master validates manually.';
 
   defaultParams: ModeParams = {
-    songDuration: 20,
+    songDuration: DEFAULT_SONG_DURATION,
     answerTimer: 5,
     pointsTitle: 1,
     pointsArtist: 1,

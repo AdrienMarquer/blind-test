@@ -84,7 +84,7 @@ The blind test application supports **multi-round games** where each round can h
 **Parameters:**
 ```typescript
 {
-  songDuration: 20,
+  songDuration: 30,
   answerTimer: 5,
   pointsTitle: 1,          // Points awarded for correct answer
   manualValidation: true,
@@ -121,7 +121,7 @@ The blind test application supports **multi-round games** where each round can h
 **Parameters:**
 ```typescript
 {
-  songDuration: 25,
+  songDuration: 30,
   answerTimer: 15,
   pointsTitle: 1,
   pointsArtist: 1,
@@ -204,19 +204,19 @@ Two built-in presets are hardcoded in the client (`apps/client/src/lib/presets.t
     modeType: 'fast_buzz',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 20, answerTimer: 5 }
+    params: { songDuration: 30, answerTimer: 5 }
   },
   {
     modeType: 'buzz_and_choice',
     mediaType: 'picture',
     songFilters: { songCount: 7 },
-    params: { songDuration: 10, answerTimer: 15 }
+    params: { songDuration: 30, answerTimer: 15 }
   },
   {
     modeType: 'text_input',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 25, answerTimer: 15 }
+    params: { songDuration: 30, answerTimer: 15 }
   }
 ]
 ```
@@ -228,7 +228,7 @@ Two built-in presets are hardcoded in the client (`apps/client/src/lib/presets.t
     modeType: 'fast_buzz',
     mediaType: 'music',
     songFilters: { songCount: 10 },
-    params: { songDuration: 20, answerTimer: 5 }
+    params: { songDuration: 30, answerTimer: 5 }
   },
   {
     modeType: 'buzz_and_choice',
@@ -240,19 +240,19 @@ Two built-in presets are hardcoded in the client (`apps/client/src/lib/presets.t
     modeType: 'text_input',
     mediaType: 'music',
     songFilters: { songCount: 8 },
-    params: { songDuration: 25, answerTimer: 15 }
+    params: { songDuration: 30, answerTimer: 15 }
   },
   {
     modeType: 'buzz_and_choice',
     mediaType: 'picture',
     songFilters: { songCount: 8 },
-    params: { songDuration: 10, answerTimer: 15 }
+    params: { songDuration: 30, answerTimer: 15 }
   },
   {
     modeType: 'fast_buzz',
     mediaType: 'video',
     songFilters: { songCount: 5 },
-    params: { songDuration: 15, answerTimer: 5 }
+    params: { songDuration: 30, answerTimer: 5 }
   }
 ]
 ```

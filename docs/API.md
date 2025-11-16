@@ -742,7 +742,7 @@ curl -X POST http://localhost:3007/api/game/abc123/start \
   -d '{
     "songCount": 10,
     "params": {
-      "songDuration": 15,
+      "songDuration": 30,
       "answerTimer": 5
     }
   }'

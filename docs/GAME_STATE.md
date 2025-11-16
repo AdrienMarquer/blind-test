@@ -519,7 +519,7 @@ class TimerManager {
 
 | Timer Type | Default Duration | Triggers |
 |------------|------------------|----------|
-| `song` | 15s | Song ends, proceed based on state |
+| `song` | 30s | Song ends, proceed based on state |
 | `answer` | 5s | Answer timeout, lock out player |
 | `auto_continue` | 10s | Auto-advance to next round |
 

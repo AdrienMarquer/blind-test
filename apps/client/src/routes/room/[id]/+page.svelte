@@ -33,7 +33,7 @@
 	let songs = $state<any[]>([]);
 	let rounds = $state<RoundConfig[]>([]);
 	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
-	let showConfig = $state(false);
+	let showConfig = $state(true);
 
 	// Available genres (populated from songs)
 	let availableGenres = $derived.by(() => {
@@ -314,7 +314,7 @@
 
 			// Build request body with rounds
 			const body: any = {
-				rounds: rounds.map(r => ({
+				rounds: rounds.map((r, i) => ({
 					...r,
 					params: {
 						...r.params,
@@ -323,7 +323,16 @@
 				}))
 			};
 
-			console.log('Starting game with rounds:', body);
+			console.log('🎮 Starting game with configuration:', {
+				totalRounds: body.rounds.length,
+				rounds: body.rounds.map((r: any, i: number) => ({
+					roundIndex: i + 1,
+					mode: r.modeType,
+					media: r.mediaType,
+					songCount: r.songFilters?.songCount || 'default',
+					duration: r.params?.songDuration || 'default'
+				}))
+			});
 
 			const response = await gameApi[room.id].start.post(body);
 
@@ -550,7 +559,9 @@
 				</div>
 				<div class="header-meta">
 					<span>👥 {players.length}/{room.maxPlayers} joueurs</span>
-					<span>🎭 {isMaster ? 'Maître du jeu' : currentPlayer ? `Joueur: ${currentPlayer.name}` : 'Spectateur'}</span>
+					<span class="player-badge {isMaster ? 'master' : 'player'}">
+						🎭 {isMaster ? 'Maître du jeu' : currentPlayer ? `Joueur: ${currentPlayer.name}` : 'Spectateur'}
+					</span>
 				</div>
 			</section>
 
@@ -646,7 +657,7 @@
 		</div>
 		{/if}
 
-		{#if showConfig}
+		{#if showConfig && isMaster}
 			<div class="config-wrapper">
 				<GameConfig
 					{songs}
@@ -804,6 +815,22 @@
 		gap: 1.5rem;
 		font-size: 0.9rem;
 		color: var(--aq-color-muted);
+	}
+
+	.player-badge {
+		padding: 0.35rem 0.85rem;
+		border-radius: 999px;
+		font-weight: 600;
+	}
+
+	.player-badge.player {
+		background: linear-gradient(135deg, var(--aq-color-secondary), var(--aq-color-accent));
+		color: var(--aq-color-deep);
+	}
+
+	.player-badge.master {
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		color: white;
 	}
 
 	.code-pill {
@@ -1027,14 +1054,14 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		background: rgba(239, 76, 131, 0.95);
+		background: linear-gradient(135deg, var(--aq-color-secondary), var(--aq-color-accent));
 		backdrop-filter: blur(10px);
 		border: 2px solid rgba(255, 255, 255, 0.3);
 		border-radius: 999px;
 		padding: 0.6rem 1.25rem;
 		font-weight: 700;
-		color: white;
-		box-shadow: 0 8px 24px rgba(239, 76, 131, 0.4);
+		color: var(--aq-color-deep);
+		box-shadow: 0 8px 24px rgba(248, 192, 39, 0.4);
 		z-index: 1001;
 		font-size: 1rem;
 	}

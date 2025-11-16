@@ -2,7 +2,7 @@
  * Song Repository - SQLite implementation with Drizzle ORM
  */
 
-import { eq, like, inArray, sql } from 'drizzle-orm';
+import { eq, like, inArray, sql, or, isNull } from 'drizzle-orm';
 import type { Song, Repository } from '@blind-test/shared';
 import { generateId, shuffle, SONG_CONFIG } from '@blind-test/shared';
 import { db, schema } from '../db';
@@ -23,6 +23,7 @@ interface SongUpdateDTO {
   clipDuration?: number;
   language?: string | null;
   subgenre?: string | null;
+  niche?: boolean;
   spotifyId?: string | null;
   youtubeId?: string | null;
   source?: string;
@@ -50,6 +51,7 @@ export class SongRepository implements Repository<Song> {
       format: dbSong.format,
       language: dbSong.language || undefined,
       subgenre: dbSong.subgenre || undefined,
+      niche: dbSong.niche,
       spotifyId: dbSong.spotifyId || undefined,
       youtubeId: dbSong.youtubeId || undefined,
       source: dbSong.source,
@@ -134,6 +136,82 @@ export class SongRepository implements Repository<Song> {
     return results.map(s => this.toSong(s));
   }
 
+  /**
+   * Find song by Spotify ID
+   * Used for exact duplicate detection
+   */
+  async findBySpotifyId(spotifyId: string): Promise<Song | null> {
+    const result = await db
+      .select()
+      .from(schema.songs)
+      .where(eq(schema.songs.spotifyId, spotifyId))
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return this.toSong(result[0]);
+  }
+
+  /**
+   * Find song by YouTube ID
+   * Used for exact duplicate detection
+   */
+  async findByYoutubeId(youtubeId: string): Promise<Song | null> {
+    const result = await db
+      .select()
+      .from(schema.songs)
+      .where(eq(schema.songs.youtubeId, youtubeId))
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return this.toSong(result[0]);
+  }
+
+  /**
+   * Find songs with incomplete metadata
+   * A song is considered incomplete if it's missing any of: genre, album, language, or subgenre
+   * Uses database-level filtering for optimal performance
+   */
+  async findWithIncompleteMetadata(): Promise<Song[]> {
+    const results = await db
+      .select()
+      .from(schema.songs)
+      .where(
+        or(
+          isNull(schema.songs.genre),
+          isNull(schema.songs.album),
+          isNull(schema.songs.language),
+          isNull(schema.songs.subgenre)
+        )
+      );
+
+    songLogger.debug('Found songs with incomplete metadata', { count: results.length });
+    return results.map(s => this.toSong(s));
+  }
+
+  /**
+   * Find potential duplicates based on title and artist
+   * Returns all songs with similar title or artist for fuzzy matching
+   * This is a broad search - the duplicate detection service handles confidence scoring
+   */
+  async findPotentialDuplicates(criteria: {
+    title: string;
+    artist: string;
+  }): Promise<Song[]> {
+    // Use LIKE for partial matching to catch variations
+    // The DuplicateDetectionService will do precise fuzzy matching on results
+    const results = await db
+      .select()
+      .from(schema.songs)
+      .where(
+        sql`
+          LOWER(${schema.songs.title}) LIKE LOWER(${'%' + criteria.title + '%'})
+          OR LOWER(${schema.songs.artist}) LIKE LOWER(${'%' + criteria.artist + '%'})
+        `
+      );
+
+    return results.map(s => this.toSong(s));
+  }
+
   async create(data: Partial<Song>): Promise<Song> {
     if (!data.filePath || !data.fileName || !data.title || !data.artist || data.year === undefined || !data.duration || !data.fileSize || !data.format) {
       throw new Error('Required fields missing: filePath, fileName, title, artist, year, duration, fileSize, format');
@@ -154,6 +232,7 @@ export class SongRepository implements Repository<Song> {
       duration: data.duration,
       language: data.language || null,
       subgenre: data.subgenre || null,
+      niche: data.niche ?? false,
       spotifyId: data.spotifyId || null,
       youtubeId: data.youtubeId || null,
       source: data.source || 'upload',
@@ -189,6 +268,7 @@ export class SongRepository implements Repository<Song> {
     if (data.clipDuration !== undefined) updateData.clipDuration = data.clipDuration;
     if (data.language !== undefined) updateData.language = data.language;
     if (data.subgenre !== undefined) updateData.subgenre = data.subgenre;
+    if (data.niche !== undefined) updateData.niche = data.niche;
     if (data.spotifyId !== undefined) updateData.spotifyId = data.spotifyId;
     if (data.youtubeId !== undefined) updateData.youtubeId = data.youtubeId;
     if (data.source !== undefined) updateData.source = data.source;
@@ -222,11 +302,17 @@ export class SongRepository implements Repository<Song> {
 
   /**
    * Get random songs for a game round
+   * Excludes niche songs by default unless includeNiche is true
    */
-  async getRandom(count: number): Promise<Song[]> {
-    // SQLite doesn't have a simple RANDOM() that works with Drizzle easily
-    // Get all songs and shuffle in memory (fine for moderate song libraries)
-    const allSongs = await this.findAll();
+  async getRandom(count: number, includeNiche: boolean = false): Promise<Song[]> {
+    // Get all songs (or non-niche songs)
+    let allSongs: Song[];
+    if (includeNiche) {
+      allSongs = await this.findAll();
+    } else {
+      // Use findByFilters with includeNiche: false to exclude niche songs
+      allSongs = await this.findByFilters({ includeNiche: false });
+    }
 
     // Shuffle using shared utility (Fisher-Yates algorithm)
     return shuffle([...allSongs]).slice(0, count);
@@ -243,6 +329,7 @@ export class SongRepository implements Repository<Song> {
   /**
    * Find songs by metadata filters
    * Combines genre, year range, and artist filters
+   * Excludes niche songs by default unless includeNiche is true
    */
   async findByFilters(filters: {
     genre?: string | string[];
@@ -250,6 +337,7 @@ export class SongRepository implements Repository<Song> {
     yearMax?: number;
     artistName?: string;
     songCount?: number;
+    includeNiche?: boolean;
   }): Promise<Song[]> {
     songLogger.debug('Finding songs with filters', { filters });
 
@@ -289,6 +377,11 @@ export class SongRepository implements Repository<Song> {
 
     if (filters.artistName) {
       conditions.push(like(schema.songs.artist, `%${filters.artistName}%`));
+    }
+
+    // Exclude niche songs by default unless includeNiche is true
+    if (!filters.includeNiche) {
+      conditions.push(sql`${schema.songs.niche} = false`);
     }
 
     // Apply all conditions with AND logic

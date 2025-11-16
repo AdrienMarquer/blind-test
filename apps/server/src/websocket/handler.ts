@@ -10,6 +10,7 @@ import { gameService } from '../services/GameService';
 import { gameStateManager } from '../services/GameStateManager';
 import { AuthService } from '../services/AuthService';
 import { logger } from '../utils/logger';
+import { timerManager } from '../services/TimerManager';
 
 const wsLogger = logger.child({ module: 'WebSocket' });
 
@@ -404,6 +405,28 @@ function sendToPlayer(
   });
 }
 
+/**
+ * Broadcast job event to all connected clients
+ * (Job events are global, not room-specific)
+ */
+export function broadcastJobEvent(message: ServerMessage) {
+  const messageStr = JSON.stringify(message);
+  let sentCount = 0;
+
+  // Broadcast to all connections across all rooms
+  roomConnections.forEach((connections) => {
+    connections.forEach(ws => {
+      ws.send(messageStr);
+      sentCount++;
+    });
+  });
+
+  wsLogger.debug('Broadcast job event', {
+    messageType: message.type,
+    sentTo: sentCount
+  });
+}
+
 // ============================================================================
 // Gameplay Event Handlers
 // ============================================================================
@@ -444,12 +467,18 @@ async function handlePlayerBuzz(
 }
 
 async function handlePlayerAnswer(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
   roomId: string,
   data: { songIndex: number; answerType: 'title' | 'artist'; value: string }
 ) {
   const { playerId } = ws.data;
-  if (!playerId) {
+
+  // Check if this is a master validation (value is 'correct' or 'wrong')
+  const isMasterValidation = data.value === 'correct' || data.value === 'wrong';
+
+  // For master validation, allow even without playerId (master uses token auth)
+  // For regular answers, playerId is required
+  if (!playerId && !isMasterValidation) {
     sendMessage(ws, {
       type: 'error',
       data: { message: 'Not authenticated' }
@@ -458,7 +487,7 @@ async function handlePlayerAnswer(
   }
 
   try {
-    wsLogger.debug('Player answered', { roomId, playerId, answerType: data.answerType, value: data.value });
+    wsLogger.debug('Player answered', { roomId, playerId, answerType: data.answerType, value: data.value, isMasterValidation });
 
     // Get current game state to populate answer fields
     const round = gameService.getCurrentRound(roomId);
@@ -479,14 +508,50 @@ async function handlePlayerAnswer(
       return;
     }
 
+    // FIX: Check if this is master validation
+    // If answer value is 'correct' or 'wrong', this is master validation
+    // Use the activePlayerId from the song instead of the WebSocket playerId
+    let actualPlayerId: string;
+    if (isMasterValidation) {
+      // Master validation - must use activePlayerId
+      if (!song.activePlayerId) {
+        wsLogger.error('Master validation but no activePlayerId set', {
+          roomId,
+          songIndex: data.songIndex
+        });
+        sendMessage(ws, {
+          type: 'error',
+          data: { message: 'No active player to validate' }
+        });
+        return;
+      }
+      wsLogger.debug('Master validation detected - using activePlayerId', {
+        roomId,
+        masterId: playerId || 'master',
+        actualPlayerId: song.activePlayerId,
+        validation: data.value
+      });
+      actualPlayerId = song.activePlayerId;
+    } else {
+      // Regular player answer - use their playerId
+      if (!playerId) {
+        sendMessage(ws, {
+          type: 'error',
+          data: { message: 'Not authenticated - playerId required' }
+        });
+        return;
+      }
+      actualPlayerId = playerId;
+    }
+
     // Calculate time to answer from buzz timestamp
-    const buzzTimestamp = song.buzzTimestamps?.get(playerId) || Date.now();
+    const buzzTimestamp = song.buzzTimestamps?.get(actualPlayerId) || Date.now();
     const timeToAnswer = Date.now() - buzzTimestamp;
 
     // Create answer object with all required fields
     const answer = {
-      id: `answer_${Date.now()}_${playerId}`,
-      playerId,
+      id: `answer_${Date.now()}_${actualPlayerId}`,
+      playerId: actualPlayerId,
       roundId: round.id,
       songId: song.song.id,
       type: data.answerType,
@@ -498,7 +563,7 @@ async function handlePlayerAnswer(
     };
 
     // Process answer through GameService
-    await gameService.handleAnswer(roomId, playerId, answer);
+    await gameService.handleAnswer(roomId, actualPlayerId, answer);
   } catch (error) {
     wsLogger.error('Failed to process answer', error, { roomId, playerId });
     sendMessage(ws, {
@@ -523,10 +588,14 @@ async function handleGamePause(
 
   wsLogger.info('Game paused', { roomId });
 
-  broadcastToRoom(roomId, {
-    type: 'game:paused',
-    data: { timestamp: Date.now() }
-  });
+  const paused = timerManager.pauseSongTimer(roomId);
+
+  if (!paused) {
+    broadcastToRoom(roomId, {
+      type: 'game:paused',
+      data: { timestamp: Date.now() }
+    });
+  }
 }
 
 async function handleGameResume(
@@ -544,10 +613,14 @@ async function handleGameResume(
 
   wsLogger.info('Game resumed', { roomId });
 
-  broadcastToRoom(roomId, {
-    type: 'game:resumed',
-    data: { timestamp: Date.now() }
-  });
+  const resumed = timerManager.resumeSongTimer(roomId);
+
+  if (!resumed) {
+    broadcastToRoom(roomId, {
+      type: 'game:resumed',
+      data: { timestamp: Date.now() }
+    });
+  }
 }
 
 async function handleGameSkip(

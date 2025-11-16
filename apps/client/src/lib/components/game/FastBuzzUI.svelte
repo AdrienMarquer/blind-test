@@ -13,9 +13,11 @@
 		<div class="waiting-validation">
 			<div class="pulse-icon">⏳</div>
 			<p class="status-text">Attente validation du maître...</p>
-			<div class="timer">
-				<span>{answerTimeRemaining}s</span>
-			</div>
+			{#if answerTimeRemaining > 0}
+				<div class="timer">
+					<span>{answerTimeRemaining}s</span>
+				</div>
+			{/if}
 			<p class="instruction">Donne ta réponse à voix haute</p>
 		</div>
 	{/if}

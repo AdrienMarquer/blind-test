@@ -8,7 +8,17 @@ export interface YouTubeVideo {
 	videoId: string;
 	title: string;
 	duration: string; // e.g., "3:45"
+	durationSeconds?: number; // Duration in seconds
 	thumbnail: string;
+	uploader?: string;
+}
+
+export interface PlaylistInfo {
+	type: 'video' | 'playlist';
+	title: string;
+	playlistId?: string;
+	videoCount?: number;
+	videos: YouTubeVideo[];
 }
 
 export interface DownloadResult {
@@ -195,6 +205,196 @@ export class YouTubeDownloadService {
 			console.error('Failed to get video info:', error);
 			return null;
 		}
+	}
+
+	/**
+	 * Get playlist info or video info from a YouTube URL
+	 * Supports both single videos and playlists
+	 */
+	async getPlaylistInfo(url: string): Promise<PlaylistInfo> {
+		try {
+			console.log(`📋 Fetching YouTube info: ${url}`);
+
+			// Use yt-dlp to extract playlist/video info without downloading
+			const info: any = await youtubedl(url, {
+				dumpSingleJson: true,
+				flatPlaylist: true,
+				noCheckCertificates: true,
+				noWarnings: true,
+				skipDownload: true
+			});
+
+			// Check if it's a playlist or single video
+			const isPlaylist = info._type === 'playlist';
+
+			if (isPlaylist) {
+				// Extract playlist videos
+				const videos: YouTubeVideo[] = (info.entries || []).map((entry: any) => ({
+					videoId: entry.id,
+					title: entry.title || 'Unknown Title',
+					duration: this.formatDuration(entry.duration || 0),
+					durationSeconds: entry.duration || 0,
+					thumbnail: entry.thumbnail || entry.thumbnails?.[0]?.url || '',
+					uploader: entry.uploader || entry.channel || ''
+				}));
+
+				console.log(`✅ Found playlist with ${videos.length} videos`);
+
+				return {
+					type: 'playlist',
+					title: info.title || 'YouTube Playlist',
+					playlistId: info.id,
+					videoCount: videos.length,
+					videos
+				};
+			} else {
+				// Single video
+				const video: YouTubeVideo = {
+					videoId: info.id,
+					title: info.title || 'Unknown Title',
+					duration: this.formatDuration(info.duration || 0),
+					durationSeconds: info.duration || 0,
+					thumbnail: info.thumbnail || info.thumbnails?.[0]?.url || '',
+					uploader: info.uploader || info.channel || ''
+				};
+
+				console.log(`✅ Found single video: ${video.title}`);
+
+				return {
+					type: 'video',
+					title: video.title,
+					videos: [video]
+				};
+			}
+		} catch (error) {
+			console.error('❌ Failed to get playlist info:', error);
+			throw new Error('Failed to fetch YouTube playlist/video information');
+		}
+	}
+
+	/**
+	 * Get detailed video metadata without downloading
+	 */
+	async getVideoMetadata(videoId: string): Promise<YouTubeVideo> {
+		try {
+			const info: any = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+				dumpSingleJson: true,
+				noCheckCertificates: true,
+				noWarnings: true,
+				skipDownload: true
+			});
+
+			return {
+				videoId: info.id,
+				title: info.title || 'Unknown Title',
+				duration: this.formatDuration(info.duration || 0),
+				durationSeconds: info.duration || 0,
+				thumbnail: info.thumbnail || info.thumbnails?.[0]?.url || '',
+				uploader: info.uploader || info.channel || ''
+			};
+		} catch (error) {
+			console.error('❌ Failed to get video metadata:', error);
+			throw new Error(`Failed to fetch metadata for video ${videoId}`);
+		}
+	}
+
+	/**
+	 * Download a specific clip from a YouTube video
+	 * Uses yt-dlp's --download-sections to extract only the specified portion
+	 */
+	async downloadClip(
+		videoId: string,
+		clipStart: number,
+		clipDuration: number,
+		options: {
+			format?: 'mp3' | 'flac' | 'm4a';
+			quality?: string;
+		} = {}
+	): Promise<DownloadResult> {
+		const { format = 'mp3', quality = '192' } = options;
+
+		try {
+			// Ensure upload directory exists
+			await fs.mkdir(this.uploadDir, { recursive: true });
+
+			// Generate unique filename
+			const timestamp = Date.now();
+			const uniqueId = randomUUID().substring(0, 8);
+			const fileName = `${timestamp}_${uniqueId}.${format}`;
+			const outputPath = path.join(this.uploadDir, fileName);
+
+			console.log(`✂️ Downloading clip from YouTube: ${videoId} (${clipStart}s - ${clipStart + clipDuration}s)`);
+
+			// Calculate end time
+			const clipEnd = clipStart + clipDuration;
+
+			// Download using yt-dlp with --download-sections
+			const ytdlOptions: any = {
+				output: outputPath,
+				extractAudio: true,
+				audioFormat: format,
+				audioQuality: quality,
+				noCheckCertificates: true,
+				noWarnings: true,
+				preferFreeFormats: true,
+				addMetadata: true,
+				noCookies: true,
+				noPlaylist: true,
+				// Download only the specified section
+				downloadSections: `*${clipStart}-${clipEnd}`,
+				// Force keyframes to get exact clip boundaries
+				forceKeyframesAtCuts: true
+			};
+
+			await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, ytdlOptions);
+
+			// Get file stats
+			const stats = await fs.stat(outputPath);
+
+			console.log(`✅ Clip download complete: ${fileName} (${stats.size} bytes)`);
+
+			return {
+				success: true,
+				filePath: outputPath,
+				fileName,
+				fileSize: stats.size,
+				duration: clipDuration
+			};
+		} catch (error: any) {
+			console.error('❌ YouTube clip download error:', error);
+
+			// Extract error message
+			let errorMessage: string;
+			if (error instanceof Error) {
+				errorMessage = error.message;
+			} else if (error?.stderr) {
+				errorMessage = `yt-dlp error: ${error.stderr}`;
+			} else if (typeof error === 'string') {
+				errorMessage = error;
+			} else {
+				errorMessage = 'Unknown download error';
+			}
+
+			console.error('❌ Final error message:', errorMessage);
+			return {
+				success: false,
+				error: errorMessage
+			};
+		}
+	}
+
+	/**
+	 * Format duration in seconds to string (MM:SS or HH:MM:SS)
+	 */
+	private formatDuration(seconds: number): string {
+		const hours = Math.floor(seconds / 3600);
+		const minutes = Math.floor((seconds % 3600) / 60);
+		const secs = seconds % 60;
+
+		if (hours > 0) {
+			return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+		}
+		return `${minutes}:${secs.toString().padStart(2, '0')}`;
 	}
 
 	/**

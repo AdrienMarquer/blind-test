@@ -12,6 +12,17 @@ export type PlayerRole = 'master' | 'player';
 export type GameStatus = 'waiting' | 'playing' | 'paused' | 'finished';
 export type RoundStatus = 'pending' | 'active' | 'finished';
 
+// Music Genres - Canonical list for normalization across providers
+export const CANONICAL_GENRES = [
+  'Rock', 'Metal', 'Punk', 'Alternative', 'Indie',
+  'Pop', 'K-Pop', 'Chanson',
+  'Hip-Hop/Rap', 'R&B', 'Soul', 'Funk',
+  'Electronic', 'House', 'Techno', 'Trance', 'Drum & Bass', 'Dubstep', 'Ambient',
+  'Jazz', 'Blues', 'Country', 'Folk', 'Classical', 'Latin', 'Reggae', 'Reggaeton', 'Afrobeat',
+] as const;
+
+export type CanonicalGenre = typeof CANONICAL_GENRES[number];
+
 // Game Mechanics - HOW players interact
 export type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
 
@@ -101,6 +112,7 @@ export interface Round {
     artistName?: string;     // Filter by artist name (partial match)
     songCount?: number;      // Number of songs to select (random if more available)
     songIds?: string[];      // Explicit song IDs to use (takes precedence)
+    includeNiche?: boolean;  // Include niche songs (default: false)
   };
 
   // Configuration (simplified - no game-level config)
@@ -128,7 +140,7 @@ export interface Mode {
 
 export interface ModeParams {
   // Universal parameters
-  songDuration?: number;        // Seconds (default: 15)
+  songDuration?: number;        // Seconds (default: 30)
   answerTimer?: number;         // Seconds (default: 5)
   audioPlayback?: 'master' | 'players' | 'all'; // Where audio plays (default: 'master')
 
@@ -164,6 +176,7 @@ export interface Song {
   // Enhanced metadata for answer generation
   language?: string;           // ISO 639-1 code (e.g., 'en', 'fr', 'es')
   subgenre?: string;           // More specific genre (e.g., 'french-rap', 'synthwave')
+  niche: boolean;              // Is this a niche/obscure song? (default: false)
 
   // Source tracking
   spotifyId?: string;          // Spotify track ID
@@ -308,6 +321,7 @@ export interface RoundConfig {
     artistName?: string;
     songCount?: number;
     songIds?: string[];
+    includeNiche?: boolean;  // Include niche songs (default: false)
   };
   params?: ModeParams;
 }
@@ -316,8 +330,10 @@ export interface RoundConfig {
 // System Defaults
 // ============================================================================
 
+export const DEFAULT_SONG_DURATION = 30;
+
 export const SYSTEM_DEFAULTS: Required<ModeParams> = {
-  songDuration: 30,
+  songDuration: DEFAULT_SONG_DURATION,
   answerTimer: 5,
   audioPlayback: 'master',     // Only master device plays audio by default
   numChoices: 4,
@@ -415,7 +431,12 @@ export type ServerMessage =
   | { type: 'timer:answer'; data: { playerId: string; timeRemaining: number } }
 
   // Score Updates
-  | { type: 'score:updated'; data: { playerId: string; playerName: string; score: number; pointsAwarded: number } };
+  | { type: 'score:updated'; data: { playerId: string; playerName: string; score: number; pointsAwarded: number } }
+
+  // Import Job Events
+  | { type: 'job:progress'; data: { jobId: string; type: string; status: string; progress: number; currentItem?: number; totalItems?: number } }
+  | { type: 'job:completed'; data: { jobId: string; type: string; metadata: any } }
+  | { type: 'job:failed'; data: { jobId: string; type: string; error: string } };
 
 /**
  * Client → Server Messages

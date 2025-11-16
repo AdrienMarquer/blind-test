@@ -49,9 +49,12 @@ export function createMockSong(overrides: Partial<Song> = {}): Song {
     duration: 180, // 3 minutes
     genre: 'test',
     clipStart: 30,
+    clipDuration: 45,
     fileSize: 5242880, // 5MB
     format: 'mp3',
-    createdAt: new Date().toISOString(),
+    niche: false, // Default: not a niche song
+    source: 'test',
+    createdAt: new Date(),
     ...overrides,
   }
 }
@@ -233,6 +236,7 @@ export class MockSongRepository {
       format: song.format || 'mp3',
       createdAt: song.createdAt || new Date(),
       source: song.source || 'test',
+      niche: song.niche ?? false,
       album: song.album,
       language: song.language,
       subgenre: song.subgenre,
@@ -241,6 +245,63 @@ export class MockSongRepository {
     }
     this.songs.set(newSong.id, newSong)
     return newSong
+  }
+
+  async findByFilters(filters: {
+    genre?: string | string[];
+    yearMin?: number;
+    yearMax?: number;
+    artistName?: string;
+    songCount?: number;
+    includeNiche?: boolean;
+  } = {}): Promise<Song[]> {
+    let songs = Array.from(this.songs.values())
+
+    // Filter by niche (exclude by default unless includeNiche is true)
+    if (!filters.includeNiche) {
+      songs = songs.filter(s => !s.niche)
+    }
+
+    // Filter by genre
+    if (filters.genre) {
+      if (Array.isArray(filters.genre)) {
+        // Multiple genres - OR logic
+        songs = songs.filter(s =>
+          s.genre && filters.genre!.some(g => s.genre?.includes(g))
+        )
+      } else {
+        // Single genre
+        songs = songs.filter(s => s.genre?.includes(filters.genre as string))
+      }
+    }
+
+    // Filter by year range
+    if (filters.yearMin !== undefined) {
+      songs = songs.filter(s => s.year >= filters.yearMin!)
+    }
+    if (filters.yearMax !== undefined) {
+      songs = songs.filter(s => s.year <= filters.yearMax!)
+    }
+
+    // Filter by artist name
+    if (filters.artistName) {
+      songs = songs.filter(s =>
+        s.artist.toLowerCase().includes(filters.artistName!.toLowerCase())
+      )
+    }
+
+    // Limit count (random selection)
+    if (filters.songCount && filters.songCount < songs.length) {
+      // Shuffle and take first N
+      const shuffled = [...songs].sort(() => Math.random() - 0.5)
+      songs = shuffled.slice(0, filters.songCount)
+    }
+
+    return songs
+  }
+
+  async getRandom(count: number, includeNiche: boolean = false): Promise<Song[]> {
+    return this.findByFilters({ songCount: count, includeNiche })
   }
 
   async update(id: string, data: Partial<Song>): Promise<Song> {

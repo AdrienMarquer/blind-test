@@ -33,7 +33,6 @@
 <section class="config-section">
 	<div class="config-header">
 		<h2>Configuration de partie</h2>
-		<button class="close-button" onclick={onCancel}>✕</button>
 	</div>
 
 	<!-- Round Builder -->
@@ -101,17 +100,6 @@
 		margin: 0;
 		font-size: 1.4rem;
 		color: var(--aq-color-deep);
-	}
-
-	.close-button {
-		border: none;
-		background: rgba(239, 76, 131, 0.15);
-		color: var(--aq-color-primary);
-		border-radius: 12px;
-		width: 36px;
-		height: 36px;
-		font-size: 1.1rem;
-		cursor: pointer;
 	}
 
 	.config-tabs {

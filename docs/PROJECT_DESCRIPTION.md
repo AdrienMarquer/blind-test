@@ -57,7 +57,7 @@ Configuration values are resolved with this priority (highest to lowest):
 **Example:**
 ```
 System default: song_duration = 30s
-Mode default (Buzz + Choice): song_duration = 15s
+Mode default (Buzz + Choice): song_duration = 30s
 Game setting: song_duration = 20s
 Round 3 override: song_duration = 10s
 
@@ -186,7 +186,7 @@ Players race to buzz in, then correctly identify both the song title and artist 
 ### Gameplay Flow (Per Song)
 
 ```
-Song starts playing (15s default)
+Song starts playing (30s default)
     ↓
 [Players can buzz at any time]
     ↓
@@ -240,7 +240,7 @@ Show 4 song title options (5s to choose)
 
 **Song End Conditions** (first to occur):
 1. A player correctly identifies both title and artist
-2. Song timer expires (15s default)
+2. Song timer expires (30s default)
 3. All players are locked out
 
 **Round End Conditions**:
@@ -250,7 +250,7 @@ Show 4 song title options (5s to choose)
 
 | Parameter | Default | Range | Description |
 |-----------|---------|-------|-------------|
-| `song_duration` | 15s | 5-60s | How long the song plays |
+| `song_duration` | 30s | 5-60s | How long the song plays |
 | `answer_timer` | 5s | 3-15s | Time to select from options |
 | `penalty_enabled` | false | bool | Enable point deduction for wrong answers |
 | `penalty_amount` | 0 | -5 to 0 | Points deducted (if enabled) |
@@ -527,7 +527,7 @@ The mode system is designed to support any gameplay style. Here are planned mode
 - **Objective**: Identify song played in reverse
 - **Flow**: Reverse audio playback → text/choice answer
 - **Challenge**: High difficulty
-- **Speed**: 15s per song
+- **Speed**: 30s per song
 
 ### Mode #6: "Speed Round"
 - **Objective**: Quick succession of 5s clips
@@ -683,7 +683,7 @@ Track unresolved product questions here:
 - **Song**: Single track played during a round
 - **Buzz**: Action of locking in to answer
 - **Lockout**: State where player cannot buzz for remainder of song
-- **Clip**: Portion of song played (e.g., 15s from 0:30-0:45)
+- **Clip**: Portion of song played (e.g., 30s from 0:30-1:00)
 - **Playlist**: Collection of songs for a game session
 - **QR Code**: Visual code containing room connection info
 

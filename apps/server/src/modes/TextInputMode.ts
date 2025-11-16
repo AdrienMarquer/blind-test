@@ -12,7 +12,7 @@
  * 5. No buzzing or lockouts
  */
 
-import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
+import { DEFAULT_SONG_DURATION, type Round, type RoundSong, type Answer, type Song, type ModeParams, type MediaType } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
 
 export class TextInputMode extends BaseModeHandler {
@@ -21,7 +21,7 @@ export class TextInputMode extends BaseModeHandler {
   description = 'Type your answers. Fuzzy matching allows for small typos.';
 
   defaultParams: ModeParams = {
-    songDuration: 25,
+    songDuration: DEFAULT_SONG_DURATION,
     answerTimer: 15,
     pointsTitle: 1,
     pointsArtist: 1,

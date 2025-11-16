@@ -471,10 +471,10 @@ function resolveParam<T>(
 **Example**:
 ```
 System default: songDuration = 30s
-Mode default (Buzz + Choice): songDuration = 15s
-Round 3 override: songDuration = 10s
+Mode default (Buzz + Choice): songDuration = 30s (inherits system)
+Round override: currently none (can still be set explicitly if needed)
 
-→ Round 3 uses 10s, other rounds use 15s (mode default)
+→ All rounds currently inherit 30s unless a round override is explicitly set
 ```
 
 ### System Defaults

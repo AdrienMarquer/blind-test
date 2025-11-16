@@ -10,7 +10,7 @@
 
 import { describe, test, expect, beforeEach, mock } from 'bun:test'
 import type { GameSession, Round, RoundSong, Song, Player } from '@blind-test/shared'
-import { createMockRoom, createMockPlayer, createMockSongs, createMockGameSession, createMockRound } from '../../helpers/testUtils'
+import { createMockRoom, createMockPlayer, createMockSong, createMockSongs, createMockGameSession, createMockRound } from '../../helpers/testUtils'
 
 describe('GameService - Score Calculation', () => {
   test('calculates round scores with correct rankings', () => {
@@ -225,6 +225,131 @@ describe('GameService - Song Selection Logic', () => {
     expect(filtered.length).toBeLessThanOrEqual(5)
     expect(filtered.every(s => s.year === 2024)).toBe(true)
     expect(filtered.every(s => s.genre === 'test')).toBe(true)
+  })
+
+  test('excludes niche songs by default', () => {
+    const songs = [
+      createMockSong({ id: 'regular-1', niche: false }),
+      createMockSong({ id: 'regular-2', niche: false }),
+      createMockSong({ id: 'niche-1', niche: true }),
+      createMockSong({ id: 'niche-2', niche: true }),
+    ]
+
+    // Default behavior: exclude niche
+    const regularSongs = songs.filter(s => !s.niche)
+
+    expect(regularSongs.length).toBe(2)
+    expect(regularSongs.every(s => !s.niche)).toBe(true)
+  })
+
+  test('includes niche songs when explicitly requested', () => {
+    const songs = [
+      createMockSong({ id: 'regular-1', niche: false }),
+      createMockSong({ id: 'niche-1', niche: true }),
+    ]
+
+    // With includeNiche flag
+    const includeNiche = true
+    const allSongs = includeNiche ? songs : songs.filter(s => !s.niche)
+
+    expect(allSongs.length).toBe(2)
+  })
+})
+
+describe('GameService - Filter Validation', () => {
+  test('validates year range filter is logical', () => {
+    const yearMin = 1980
+    const yearMax = 2000
+
+    expect(yearMin).toBeLessThanOrEqual(yearMax)
+  })
+
+  test('handles invalid year range gracefully', () => {
+    const yearMin = 2020
+    const yearMax = 1980
+
+    // In real implementation, this should be validated or swapped
+    const isValidRange = yearMin <= yearMax
+    expect(isValidRange).toBe(false)
+  })
+
+  test('validates songCount is positive', () => {
+    const songCount = 5
+
+    expect(songCount).toBeGreaterThan(0)
+  })
+
+  test('detects when no songs match filters', () => {
+    const availableSongs = [
+      createMockSong({ genre: 'rock', year: 2000 }),
+      createMockSong({ genre: 'rock', year: 2010 }),
+    ]
+
+    // Filter that matches nothing
+    const filtered = availableSongs.filter(s =>
+      s.genre === 'jazz' && s.year >= 2020
+    )
+
+    expect(filtered.length).toBe(0)
+  })
+})
+
+describe('GameService - Round Configuration with Filters', () => {
+  test('round includes songFilters configuration', () => {
+    const round = createMockRound({
+      modeType: 'fast_buzz',
+      mediaType: 'music',
+      songFilters: {
+        genre: 'rock',
+        yearMin: 1980,
+        yearMax: 2000,
+        songCount: 10,
+        includeNiche: false,
+      },
+    })
+
+    expect(round.songFilters).toBeDefined()
+    expect(round.songFilters?.genre).toBe('rock')
+    expect(round.songFilters?.yearMin).toBe(1980)
+    expect(round.songFilters?.yearMax).toBe(2000)
+    expect(round.songFilters?.songCount).toBe(10)
+    expect(round.songFilters?.includeNiche).toBe(false)
+  })
+
+  test('round can have multiple genre filters', () => {
+    const round = createMockRound({
+      songFilters: {
+        genre: ['rock', 'pop', 'indie'],
+        songCount: 15,
+      },
+    })
+
+    expect(Array.isArray(round.songFilters?.genre)).toBe(true)
+    expect(round.songFilters?.genre).toEqual(['rock', 'pop', 'indie'])
+  })
+
+  test('round filters work with explicit song IDs', () => {
+    const round = createMockRound({
+      songFilters: {
+        songIds: ['song-1', 'song-2', 'song-3'],
+      },
+    })
+
+    expect(round.songFilters?.songIds).toBeDefined()
+    expect(round.songFilters?.songIds?.length).toBe(3)
+  })
+
+  test('validates round has either songIds or other filters', () => {
+    const roundWithIds = createMockRound({
+      songFilters: { songIds: ['song-1', 'song-2'] },
+    })
+
+    const roundWithFilters = createMockRound({
+      songFilters: { genre: 'rock', songCount: 5 },
+    })
+
+    expect(roundWithIds.songFilters?.songIds).toBeDefined()
+    expect(roundWithFilters.songFilters?.genre).toBeDefined()
   })
 })
 

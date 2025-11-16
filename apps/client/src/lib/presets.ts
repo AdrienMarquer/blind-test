@@ -2,7 +2,7 @@
  * Game Presets - Pre-configured multi-round games
  */
 
-import type { RoundConfig } from '@blind-test/shared';
+import { DEFAULT_SONG_DURATION, type RoundConfig } from '@blind-test/shared';
 
 export interface GamePreset {
   id: string;
@@ -27,7 +27,7 @@ const quickGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 20,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 5,
         audioPlayback: 'master',
       },
@@ -39,7 +39,7 @@ const quickGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 15,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 5,
         audioPlayback: 'master',
       },
@@ -51,7 +51,7 @@ const quickGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 20,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 10,
         audioPlayback: 'master',
         numChoices: 4,
@@ -78,7 +78,7 @@ const classicGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 30,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 10,
         audioPlayback: 'master',
         numChoices: 4,
@@ -93,7 +93,7 @@ const classicGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 20,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 5,
         audioPlayback: 'master',
       },
@@ -105,7 +105,7 @@ const classicGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 25,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 15,
         audioPlayback: 'master',
         fuzzyMatch: true,
@@ -119,7 +119,7 @@ const classicGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 25,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 8,
         audioPlayback: 'master',
         numChoices: 4,
@@ -134,7 +134,7 @@ const classicGame: GamePreset = {
         songCount: 5,
       },
       params: {
-        songDuration: 15,
+        songDuration: DEFAULT_SONG_DURATION,
         answerTimer: 5,
         audioPlayback: 'master',
       },

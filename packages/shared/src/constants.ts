@@ -31,8 +31,8 @@ export const PLAYER_CONFIG = {
 
 export const SONG_CONFIG = {
   DEFAULT_CLIP_START: 0, // Default start time in seconds
-  DEFAULT_CLIP_DURATION: 30, // Default clip duration in seconds
-  MAX_CLIP_DURATION: 30, // Maximum clip duration in seconds (3 minutes)
+  DEFAULT_CLIP_DURATION: 60, // Default clip duration in seconds
+  MAX_CLIP_DURATION: 180, // Maximum clip duration in seconds (3 minutes)
 } as const;
 
 // ============================================================================
@@ -79,8 +79,8 @@ export const VALIDATION_PATTERNS = {
 // ============================================================================
 
 export const UPLOAD_CONFIG = {
-  ALLOWED_AUDIO_FORMATS: ['mp3', 'm4a', 'wav', 'flac'],
-  ALLOWED_IMAGE_FORMATS: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-  ALLOWED_VIDEO_FORMATS: ['mp4', 'webm', 'mov'],
+  ALLOWED_AUDIO_FORMATS: ["mp3", "m4a", "wav", "flac"],
+  ALLOWED_IMAGE_FORMATS: ["jpg", "jpeg", "png", "gif", "webp"],
+  ALLOWED_VIDEO_FORMATS: ["mp4", "webm", "mov"],
   MAX_FILE_SIZE: 20 * 1024 * 1024, // 20MB
 } as const;

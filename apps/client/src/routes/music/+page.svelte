@@ -2,17 +2,24 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
 	import type { Song } from '@blind-test/shared';
-	import { SONG_CONFIG } from '@blind-test/shared';
+	import { SONG_CONFIG, CANONICAL_GENRES } from '@blind-test/shared';
 	import AudioClipSelector from '$lib/components/AudioClipSelector.svelte';
+	import YouTubeImportModal from '$lib/components/YouTubeImportModal.svelte';
+	import YouTubeClipSelector from '$lib/components/YouTubeClipSelector.svelte';
+	import ImportProgressIndicator from '$lib/components/ImportProgressIndicator.svelte';
+	import DuplicateWarningModal from '$lib/components/DuplicateWarningModal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
 	import InputField from '$lib/components/ui/InputField.svelte';
+	import EditableSongCard from '$lib/components/EditableSongCard.svelte';
 
 	let songs = $state<Song[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let uploading = $state(false);
 	let searchQuery = $state('');
+	let selectedGenre = $state('');
+	let metadataFilter = $state<'all' | 'incomplete-metadata'>('all');
 	let selectedFile = $state<File | null>(null);
 	let showClipSelector = $state(false);
 	let clipStart = $state<number>(SONG_CONFIG.DEFAULT_CLIP_START);
@@ -25,14 +32,46 @@
 	let addingFromSpotify = $state(false);
 	let selectedSpotifyId = $state<string | null>(null);
 
+	// Spotify clip selection flow
+	let spotifyTempFile = $state<File | null>(null);
+	let spotifyTempFileId = $state<string | null>(null);
+	let spotifyTempMetadata = $state<any>(null);
+	let showSpotifyClipSelector = $state(false);
+
+	// Duplicate warning (Spotify)
+	let showSpotifyDuplicateWarning = $state(false);
+	let spotifyDuplicates = $state<any[]>([]);
+	let pendingSpotifyId = $state<string | null>(null);
+
+	// Duplicate warning (Upload)
+	let showUploadDuplicateWarning = $state(false);
+	let uploadDuplicates = $state<any[]>([]);
+	let uploadCandidateSong = $state<any>(null);
+	let pendingUploadFile = $state<File | null>(null);
+	let pendingUploadClipStart = $state<number>(SONG_CONFIG.DEFAULT_CLIP_START);
+	let pendingUploadClipDuration = $state<number>(SONG_CONFIG.DEFAULT_CLIP_DURATION);
+
+	// YouTube import flow
+	let showYouTubeModal = $state(false);
+	let youtubeVideosForClipSelection = $state<any[]>([]);
+	let showYouTubeClipSelector = $state(false);
+	let importingFromYouTube = $state(false);
+
 	const filteredSongs = $derived(
-		searchQuery.trim()
-			? songs.filter(
-				(song) =>
-					song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-					song.artist.toLowerCase().includes(searchQuery.toLowerCase())
-			)
-			: songs
+		songs.filter((song) => {
+			// Text search filter
+			const matchesSearch = searchQuery.trim()
+				? song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				  song.artist.toLowerCase().includes(searchQuery.toLowerCase())
+				: true;
+
+			// Genre filter
+			const matchesGenre = selectedGenre
+				? song.genre === selectedGenre
+				: true;
+
+			return matchesSearch && matchesGenre;
+		})
 	);
 
 	const totalDuration = $derived(songs.reduce((acc, song) => acc + song.duration, 0));
@@ -68,43 +107,252 @@
 		}
 	}
 
-	async function addFromSpotify(spotifyId: string, title: string) {
-		if (!confirm(`Ajouter "${title}" à la bibliothèque ?\n\nL’audio sera récupéré automatiquement.`)) return;
+	async function addFromSpotify(spotifyId: string, title: string, artist: string, force: boolean = false) {
+		if (!force && !confirm(`Télécharger "${title}" par ${artist} ?\n\nTu pourras ensuite choisir l'extrait à conserver.`)) return;
 
 		try {
 			addingFromSpotify = true;
 			selectedSpotifyId = spotifyId;
 			error = null;
 
-			const response = await fetch('http://localhost:3007/api/songs/add-from-spotify', {
+			// Step 1: Download full song to temp file (with optional force flag)
+			const response = await fetch('http://localhost:3007/api/songs/spotify-download-temp', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ spotifyId })
+				body: JSON.stringify({ spotifyId, force })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Téléchargement impossible');
+			}
+
+			// Check if duplicates were found
+			if (data.duplicates && data.duplicates.length > 0) {
+				// Show duplicate warning modal
+				spotifyDuplicates = data.duplicates;
+				spotifyTempMetadata = data.metadata;
+				pendingSpotifyId = spotifyId;
+				showSpotifyDuplicateWarning = true;
+				addingFromSpotify = false;
+				selectedSpotifyId = null;
+				return;
+			}
+
+			// Step 2: Fetch the temp file as a blob
+			const audioResponse = await fetch(`http://localhost:3007/api/songs/${data.tempFileId}/stream`);
+			if (!audioResponse.ok) {
+				throw new Error('Impossible de charger le fichier audio');
+			}
+
+			const audioBlob = await audioResponse.blob();
+			const audioFile = new File([audioBlob], data.spotify.title + '.mp3', { type: 'audio/mpeg' });
+
+			// Step 3: Show clip selector
+			spotifyTempFile = audioFile;
+			spotifyTempFileId = data.tempFileId;
+			spotifyTempMetadata = data.spotify;
+			showSpotifyClipSelector = true;
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Téléchargement impossible';
+			console.error('Spotify download error:', err);
+			addingFromSpotify = false;
+			selectedSpotifyId = null;
+		}
+	}
+
+	function handleSpotifyDuplicateProceed() {
+		// User wants to force import despite duplicates
+		showSpotifyDuplicateWarning = false;
+		if (pendingSpotifyId && spotifyTempMetadata) {
+			addFromSpotify(pendingSpotifyId, spotifyTempMetadata.title, spotifyTempMetadata.artist, true);
+		}
+	}
+
+	function handleSpotifyDuplicateCancel() {
+		// User cancelled the import
+		showSpotifyDuplicateWarning = false;
+		spotifyDuplicates = [];
+		spotifyTempMetadata = null;
+		pendingSpotifyId = null;
+	}
+
+	function handleUploadDuplicateProceed() {
+		// User wants to force upload despite duplicates
+		showUploadDuplicateWarning = false;
+		if (pendingUploadFile) {
+			// Restore the file and clip settings
+			selectedFile = pendingUploadFile;
+			clipStart = pendingUploadClipStart;
+			clipDuration = pendingUploadClipDuration;
+			// Upload with force flag
+			uploadSong(true);
+		}
+	}
+
+	function handleUploadDuplicateCancel() {
+		// User cancelled the upload
+		showUploadDuplicateWarning = false;
+		uploadDuplicates = [];
+		uploadCandidateSong = null;
+		pendingUploadFile = null;
+		// Clear the file input
+		selectedFile = null;
+		const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+		if (fileInput) fileInput.value = '';
+	}
+
+	async function handleSpotifyClipSelect(start: number, duration: number) {
+		try {
+			error = null;
+
+			// Step 4: Finalize with selected clip
+			const response = await fetch('http://localhost:3007/api/songs/spotify-finalize', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					tempFileId: spotifyTempFileId,
+					clipStart: start,
+					clipDuration: duration,
+					metadata: spotifyTempMetadata
+				})
 			});
 
 			const data = await response.json();
 
 			if (response.ok) {
+				// Clear Spotify search results and reload library
 				spotifyResults = [];
 				spotifyQuery = '';
+				showSpotifyClipSelector = false;
+				spotifyTempFile = null;
+				spotifyTempFileId = null;
+				spotifyTempMetadata = null;
 				await loadSongs();
 			} else {
-				error = data.error || 'Ajout impossible';
+				throw new Error(data.error || 'Finalisation impossible');
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Ajout impossible';
-			console.error('Add from Spotify error:', err);
+			error = err instanceof Error ? err.message : 'Finalisation impossible';
+			console.error('Spotify finalize error:', err);
 		} finally {
 			addingFromSpotify = false;
 			selectedSpotifyId = null;
 		}
 	}
 
+	function handleSpotifyClipCancel() {
+		showSpotifyClipSelector = false;
+		spotifyTempFile = null;
+		spotifyTempFileId = null;
+		spotifyTempMetadata = null;
+		addingFromSpotify = false;
+		selectedSpotifyId = null;
+	}
+
+	// YouTube import handlers
+	async function handleYouTubeImport(videos: Array<{ videoId: string; title: string; clipStart?: number; clipDuration?: number; artist?: string; uploader?: string; durationInSeconds?: number; force?: boolean }>) {
+		try {
+			importingFromYouTube = true;
+			error = null;
+
+			// Step 1: Enrich metadata using Spotify + AI fallback
+			const enrichResponse = await fetch('http://localhost:3007/api/songs/youtube-enrich-batch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					videos: videos.map(v => ({
+						videoId: v.videoId,
+						title: v.title,
+						uploader: v.uploader || v.artist || 'Unknown',
+						durationInSeconds: v.durationInSeconds || 60
+					}))
+				})
+			});
+
+			const enrichData = await enrichResponse.json();
+
+			if (!enrichResponse.ok) {
+				console.warn('Metadata enrichment failed, proceeding without enrichment:', enrichData.error);
+			}
+
+			// Step 2: Merge enriched metadata with video data
+			const enrichedVideos = videos.map((video, index) => {
+				const enrichedMetadata = enrichData.results?.[index];
+				return {
+					videoId: video.videoId,
+					title: video.title,
+					clipStart: video.clipStart,
+					clipDuration: video.clipDuration,
+					force: video.force,
+					// Attach enriched metadata if available
+					metadata: enrichedMetadata ? {
+						title: enrichedMetadata.title,
+						artist: enrichedMetadata.artist,
+						album: enrichedMetadata.album,
+						year: enrichedMetadata.year,
+						genre: enrichedMetadata.genre,
+						subgenre: enrichedMetadata.subgenre,
+						providerId: enrichedMetadata.providerId, // Spotify ID
+						confidence: enrichedMetadata.confidence
+					} : undefined
+				};
+			});
+
+			// Step 3: Create batch import job with enriched metadata
+			const response = await fetch('http://localhost:3007/api/songs/youtube-import-batch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ videos: enrichedVideos })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Import failed');
+			}
+
+			// Close modal
+			showYouTubeModal = false;
+			showYouTubeClipSelector = false;
+			youtubeVideosForClipSelection = [];
+
+			// Show success message
+			alert(`Import démarré ! ${videos.length} vidéo(s) en cours de traitement.\nJob ID: ${data.jobId}`);
+
+			// Reload songs after a delay to show progress
+			setTimeout(() => loadSongs(), 2000);
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Import failed';
+			console.error('YouTube import error:', err);
+		} finally {
+			importingFromYouTube = false;
+		}
+	}
+
+	function handleYouTubeClipSelections(selections: Array<{ videoId: string; clipStart: number; clipDuration: number }>) {
+		// Merge clip selections with video metadata
+		const videosWithClips = youtubeVideosForClipSelection.map(video => {
+			const selection = selections.find(s => s.videoId === video.videoId);
+			return {
+				...video,
+				clipStart: selection?.clipStart,
+				clipDuration: selection?.clipDuration,
+			};
+		});
+
+		handleYouTubeImport(videosWithClips);
+	}
+
 	async function loadSongs() {
 		try {
 			loading = true;
 			error = null;
-			const response = await songsApi.get();
+
+			// Pass metadata filter as query parameter
+			const queryParams = metadataFilter !== 'all' ? { query: { filter: metadataFilter } } : undefined;
+			const response = await songsApi.get(queryParams);
 
 			if (response.data) {
 				songs = response.data.songs || [];
@@ -141,7 +389,7 @@
 		if (fileInput) fileInput.value = '';
 	}
 
-	async function uploadSong() {
+	async function uploadSong(force: boolean = false) {
 		if (!selectedFile) return;
 
 		try {
@@ -153,17 +401,35 @@
 			formData.append('clipStart', clipStart.toString());
 			formData.append('clipDuration', clipDuration.toString());
 
-			const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3007'}/api/songs/upload`, {
+			// Add force query parameter if needed
+			const url = force
+				? `${import.meta.env.VITE_API_URL || 'http://localhost:3007'}/api/songs/upload?force=true`
+				: `${import.meta.env.VITE_API_URL || 'http://localhost:3007'}/api/songs/upload`;
+
+			const response = await fetch(url, {
 				method: 'POST',
 				body: formData
 			});
 
-			if (!response.ok) {
-				const errorData = await response.json();
-				throw new Error(errorData.error || 'Upload impossible');
+			const data = await response.json();
+
+			// Check for duplicate detection (409 Conflict)
+			if (response.status === 409 && data.isDuplicate) {
+				// Show duplicate warning modal
+				uploadDuplicates = data.matches || [];
+				uploadCandidateSong = data.candidateSong;
+				pendingUploadFile = selectedFile;
+				pendingUploadClipStart = clipStart;
+				pendingUploadClipDuration = clipDuration;
+				showUploadDuplicateWarning = true;
+				uploading = false;
+				return;
 			}
 
-			await response.json();
+			if (!response.ok) {
+				throw new Error(data.error || 'Upload impossible');
+			}
+
 			selectedFile = null;
 			const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
 			if (fileInput) fileInput.value = '';
@@ -174,6 +440,17 @@
 			console.error('Error uploading song:', err);
 		} finally {
 			uploading = false;
+		}
+	}
+
+	async function updateSong(songId: string, updates: Partial<Song>) {
+		try {
+			error = null;
+			await songsApi[songId].patch(updates);
+			await loadSongs();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Mise à jour impossible';
+			console.error('Error updating song:', err);
 		}
 	}
 
@@ -203,6 +480,13 @@
 
 	onMount(() => {
 		loadSongs();
+	});
+
+	// Reload songs when metadata filter changes
+	$effect(() => {
+		if (metadataFilter) {
+			loadSongs();
+		}
 	});
 </script>
 
@@ -272,16 +556,25 @@
 								<Button
 									variant="primary"
 									size="sm"
-									onclick={() => addFromSpotify(track.spotifyId, track.title)}
+									onclick={() => addFromSpotify(track.spotifyId, track.title, track.artist)}
 									disabled={addingFromSpotify}
 								>
-								{addingFromSpotify && selectedSpotifyId === track.spotifyId ? 'Ajout...' : 'Importer'}
+								{addingFromSpotify && selectedSpotifyId === track.spotifyId ? 'Téléchargement...' : 'Importer'}
 							</Button>
 						{/if}
 					</div>
 				{/each}
 			</div>
 		{/if}
+	</Card>
+
+	<Card title="Importer depuis YouTube" subtitle="Vidéo ou playlist complète" icon="🎬">
+		<div class="youtube-import">
+			<p>Importe des morceaux directement depuis YouTube. Tu peux ajouter une vidéo unique ou une playlist entière !</p>
+			<Button variant="primary" onclick={() => showYouTubeModal = true} disabled={importingFromYouTube}>
+				{importingFromYouTube ? 'Import en cours...' : 'Ouvrir l\'import YouTube'}
+			</Button>
+		</div>
 	</Card>
 </section>
 
@@ -292,7 +585,20 @@
 <Card title={`Bibliothèque (${songs.length})`} subtitle="Filtre instantané" icon="📚">
 	<div class="library-toolbar">
 		<InputField placeholder="Rechercher un titre ou un artiste" bind:value={searchQuery} />
-		<Button variant="outline" onclick={loadSongs} disabled={loading}>
+
+		<select class="genre-filter" bind:value={selectedGenre}>
+			<option value="">Tous les genres</option>
+			{#each CANONICAL_GENRES as genre}
+				<option value={genre}>{genre}</option>
+			{/each}
+		</select>
+
+		<select class="metadata-filter" bind:value={metadataFilter}>
+			<option value="all">Toutes les musiques</option>
+			<option value="incomplete-metadata">🔍 Métadonnées incomplètes</option>
+		</select>
+
+		<Button variant="primary" onclick={loadSongs} disabled={loading}>
 			{loading ? 'Chargement...' : 'Actualiser'}
 		</Button>
 	</div>
@@ -310,27 +616,13 @@
 	{:else}
 		<div class="songs-grid">
 			{#each filteredSongs as song (song.id)}
-				<div class="song-card">
-					<div class="song-main">
-						<div>
-							<h3>{song.title}</h3>
-							<p>{song.artist}</p>
-						</div>
-						<button class="ghost-delete" onclick={() => deleteSong(song.id, song.title)} aria-label={`Supprimer ${song.title}`}>
-							🗑️
-						</button>
-					</div>
-					<div class="song-meta">
-						<span>{song.album}</span>
-						<span>{song.genre}</span>
-						<span>{song.year}</span>
-					</div>
-					<div class="song-extra">
-						<span>{song.format.toUpperCase()}</span>
-						<span>{formatDuration(song.duration)}</span>
-						<span>{formatFileSize(song.fileSize)}</span>
-					</div>
-				</div>
+				<EditableSongCard
+					{song}
+					onUpdate={updateSong}
+					onDelete={deleteSong}
+					{formatDuration}
+					{formatFileSize}
+				/>
 			{/each}
 		</div>
 	{/if}
@@ -346,6 +638,70 @@
 		onCancel={handleClipCancel}
 	/>
 {/if}
+
+{#if showSpotifyClipSelector && spotifyTempFile}
+	<AudioClipSelector
+		file={spotifyTempFile}
+		defaultClipStart={SONG_CONFIG.DEFAULT_CLIP_START}
+		defaultClipDuration={SONG_CONFIG.DEFAULT_CLIP_DURATION}
+		maxDuration={SONG_CONFIG.MAX_CLIP_DURATION}
+		onSelect={handleSpotifyClipSelect}
+		onCancel={handleSpotifyClipCancel}
+	/>
+{/if}
+
+{#if showSpotifyDuplicateWarning && spotifyTempMetadata}
+	<DuplicateWarningModal
+		candidateSong={{
+			title: spotifyTempMetadata.title,
+			artist: spotifyTempMetadata.artist,
+			album: spotifyTempMetadata.album,
+			year: spotifyTempMetadata.year,
+			duration: spotifyTempMetadata.duration
+		}}
+		duplicates={spotifyDuplicates}
+		onProceed={handleSpotifyDuplicateProceed}
+		onCancel={handleSpotifyDuplicateCancel}
+	/>
+{/if}
+
+{#if showUploadDuplicateWarning && uploadCandidateSong}
+	<DuplicateWarningModal
+		candidateSong={{
+			title: uploadCandidateSong.title,
+			artist: uploadCandidateSong.artist,
+			album: uploadCandidateSong.album,
+			year: uploadCandidateSong.year,
+			duration: uploadCandidateSong.duration
+		}}
+		duplicates={uploadDuplicates}
+		onProceed={handleUploadDuplicateProceed}
+		onCancel={handleUploadDuplicateCancel}
+	/>
+{/if}
+
+{#if showYouTubeModal}
+	<YouTubeImportModal
+		onImport={handleYouTubeImport}
+		onSelectClips={(videos: any[]) => {
+			youtubeVideosForClipSelection = videos;
+			showYouTubeModal = false;
+			showYouTubeClipSelector = true;
+		}}
+		onCancel={() => showYouTubeModal = false}
+	/>
+{/if}
+
+{#if showYouTubeClipSelector && youtubeVideosForClipSelection.length > 0}
+	<YouTubeClipSelector
+		videos={youtubeVideosForClipSelection}
+		onComplete={handleYouTubeClipSelections}
+		onCancel={() => { showYouTubeClipSelector = false; youtubeVideosForClipSelection = []; }}
+	/>
+{/if}
+
+<!-- Floating progress indicator for background imports -->
+<ImportProgressIndicator />
 
 <style>
 	.music-hero {
@@ -463,68 +819,87 @@
 		color: #0f9d58;
 	}
 
+	.youtube-import {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.youtube-import p {
+		margin: 0;
+		color: var(--aq-color-muted);
+	}
+
 	.library-toolbar {
 		display: flex;
-		flex-wrap: wrap;
 		gap: 1rem;
 		align-items: center;
 		margin-bottom: 1rem;
+		flex-wrap: nowrap;
+	}
+
+	.genre-filter {
+		min-width: 180px;
+		padding: 0.65rem 1rem;
+		border-radius: var(--aq-radius-md);
+		border: 2px solid rgba(255, 255, 255, 0.7);
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--aq-color-deep);
+		font-size: 1rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: border-color 180ms ease, box-shadow 180ms ease;
+	}
+
+	.genre-filter:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.genre-filter:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
+	}
+
+	.metadata-filter {
+		min-width: 200px;
+		padding: 0.65rem 1rem;
+		border-radius: var(--aq-radius-md);
+		border: 2px solid rgba(255, 255, 255, 0.7);
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--aq-color-deep);
+		font-size: 1rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: border-color 180ms ease, box-shadow 180ms ease;
+	}
+
+	.metadata-filter:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.metadata-filter:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
+	}
+
+	@media (max-width: 768px) {
+		.library-toolbar {
+			flex-wrap: wrap;
+		}
+
+		.genre-filter,
+		.metadata-filter {
+			flex: 1;
+			min-width: 150px;
+		}
 	}
 
 	.songs-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 		gap: 1rem;
-	}
-
-	.song-card {
-		background: rgba(18, 43, 59, 0.04);
-		border-radius: 24px;
-		padding: 1rem 1.25rem;
-		border: 1px solid rgba(255, 255, 255, 0.4);
-		position: relative;
-	}
-
-	.song-main {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		align-items: flex-start;
-	}
-
-	.song-main h3 {
-		margin: 0;
-	}
-
-	.song-main p {
-		margin: 0.2rem 0 0 0;
-		color: var(--aq-color-muted);
-	}
-
-	.song-meta,
-	.song-extra {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
-		margin-top: 0.5rem;
-		color: var(--aq-color-muted);
-		font-size: 0.9rem;
-	}
-
-	.song-extra span {
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.7);
-		color: var(--aq-color-deep);
-		font-weight: 600;
-	}
-
-	.ghost-delete {
-		border: none;
-		background: rgba(239, 76, 131, 0.12);
-		border-radius: 12px;
-		padding: 0.35rem 0.6rem;
-		cursor: pointer;
 	}
 
 	.empty-state {

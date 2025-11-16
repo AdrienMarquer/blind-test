@@ -30,13 +30,23 @@ dbLogger.info('Initializing PostgreSQL database', { url: maskedUrl });
 
 // Create PostgreSQL connection
 const sql = postgres(DATABASE_URL, {
-  max: 10,              // Max connections in pool
-  idle_timeout: 20,     // Close idle connections after 20s
-  connect_timeout: 10,  // Connection timeout (seconds)
+  max: 10,                    // Max connections in pool
+  idle_timeout: 30,           // Close idle connections after 30s (increased from 20s)
+  connect_timeout: 10,        // Connection timeout (seconds)
+  onnotice: () => {},         // Silence PostgreSQL NOTICE messages
+  connection: {
+    application_name: 'blind-test-server',
+  },
+  debug: process.env.NODE_ENV === 'development' ?
+    (connection, query, params) => dbLogger.debug('Query', { query, params }) :
+    undefined,
 });
 
-// Create Drizzle instance
-export const db = drizzle(sql, { schema });
+// Create Drizzle instance with optional logging
+export const db = drizzle(sql, {
+  schema,
+  logger: process.env.NODE_ENV === 'development',
+});
 
 dbLogger.info('PostgreSQL database initialized');
 
@@ -47,6 +57,21 @@ export async function runMigrations() {
     dbLogger.info('Database migrations completed');
   } catch (error) {
     dbLogger.error('Database migration failed', error);
+    throw error;
+  }
+}
+
+/**
+ * Gracefully close database connections
+ * CRITICAL: Must be called before process exit to prevent connection leaks
+ */
+export async function closeDatabase() {
+  try {
+    dbLogger.info('Closing database connections...');
+    await sql.end({ timeout: 5 }); // Wait up to 5 seconds for queries to finish
+    dbLogger.info('Database connections closed successfully');
+  } catch (error) {
+    dbLogger.error('Error closing database connections', error);
     throw error;
   }
 }

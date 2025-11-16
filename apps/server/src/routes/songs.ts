@@ -16,6 +16,9 @@ import { youtubeDownloadService } from '../services/YouTubeDownloadService';
 import { detectSongLanguage } from '../utils/language-detector';
 import { trimAndReplace, getAudioInfo } from '../utils/audio-processor';
 import { SONG_CONFIG } from '@blind-test/shared';
+import { duplicateDetectionService } from '../services/DuplicateDetectionService';
+import { metadataEnrichmentService } from '../services/MetadataEnrichmentService';
+import { jobQueue } from '../services/JobQueue';
 
 const apiLogger = logger.child({ module: 'API:Songs' });
 
@@ -38,14 +41,31 @@ function getContentType(format: string): string {
 }
 
 export const songRoutes = new Elysia({ prefix: '/api/songs' })
-  // Get all songs
-  .get('/', async () => {
-    apiLogger.debug('Fetching all songs');
-    const songs = await songRepository.findAll();
+  // Get all songs with optional filtering
+  .get('/', async ({ query }) => {
+    const filter = query.filter;
+
+    let songs;
+    if (filter === 'incomplete-metadata') {
+      apiLogger.debug('Fetching songs with incomplete metadata');
+      songs = await songRepository.findWithIncompleteMetadata();
+    } else {
+      apiLogger.debug('Fetching all songs');
+      songs = await songRepository.findAll();
+    }
+
     return {
       songs,
       total: songs.length,
+      filter: filter || 'all',
     };
+  }, {
+    query: t.Object({
+      filter: t.Optional(t.Union([
+        t.Literal('incomplete-metadata'),
+        t.Literal('all')
+      ]))
+    })
   })
 
   // Search songs (must come before /:songId to avoid conflict)
@@ -164,8 +184,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Upload new song
-  .post('/upload', async ({ body, set }) => {
-    apiLogger.info('Uploading song');
+  .post('/upload', async ({ body, set, query }) => {
+    apiLogger.info('Uploading song', { force: query.force || false });
 
     // Validate file
     if (!body.file) {
@@ -199,83 +219,29 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       const buffer = Buffer.from(arrayBuffer);
       await writeFile(filePath, buffer);
 
-      // Get file size
-      const stats = await stat(filePath);
-      const fileSize = stats.size;
-
-      // Extract metadata
-      let metadata;
-      try {
-        metadata = await extractMetadata(filePath);
-      } catch (metadataError) {
-        // Clean up file if metadata extraction fails
-        await unlink(filePath);
-        const errorMsg = metadataError instanceof Error ? metadataError.message : 'Failed to extract metadata';
-        set.status = 400;
-        return { error: errorMsg };
-      }
-
-      // Check if song already exists (by title+artist)
-      const existingSong = await songRepository.findByTitleAndArtist(metadata.title, metadata.artist);
-      if (existingSong) {
-        await unlink(filePath);
-        set.status = 409;
-        return { error: `Song already exists in library: "${metadata.title}" by ${metadata.artist}` };
-      }
-
-      // Detect language
-      const language = detectSongLanguage(metadata.title, metadata.artist);
-
-      // Handle audio trimming if clip parameters provided
-      let finalFileSize = fileSize;
-      const clipStart = body.clipStart ?? SONG_CONFIG.DEFAULT_CLIP_START;
-      const clipDuration = body.clipDuration ?? SONG_CONFIG.DEFAULT_CLIP_DURATION;
-
-      // Trim audio to specified clip if clipStart or clipDuration is provided
-      if (body.clipStart !== undefined || body.clipDuration !== undefined) {
-        try {
-          apiLogger.info('Trimming uploaded audio', { clipStart, clipDuration });
-
-          const trimResult = await trimAndReplace({
-            inputPath: filePath,
-            startTime: clipStart,
-            duration: clipDuration,
-            format: getFileFormat(file.name) as 'mp3' | 'm4a' | 'wav' | 'flac',
-            bitrate: '192k',
-          });
-
-          finalFileSize = trimResult.fileSize;
-          apiLogger.info('Audio trimmed successfully', {
-            originalSize: fileSize,
-            trimmedSize: finalFileSize
-          });
-        } catch (trimError) {
-          apiLogger.warn('Audio trimming failed, keeping original file', trimError);
-          // Continue with original file if trimming fails
-        }
-      }
-
-      // Create song record
-      const song = await songRepository.create({
-        filePath,
+      // Create background job for processing
+      const job = jobQueue.createJob('file_upload', {
+        tempFilePath: filePath,
         fileName: filename,
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        year: metadata.year,
-        genre: metadata.genre,
-        duration: metadata.duration,
-        clipStart,
-        clipDuration,
-        fileSize: finalFileSize,
-        format: getFileFormat(file.name),
-        language,
-        source: 'upload',
+        clipStart: body.clipStart,
+        clipDuration: body.clipDuration,
+        force: query.force || false,
+        providedMetadata: {
+          title: body.title,
+          artist: body.artist,
+          album: body.album,
+          year: body.year,
+          genre: body.genre,
+        },
       });
 
-      apiLogger.info('Uploaded song', { songId: song.id, title: song.title, artist: song.artist });
+      apiLogger.info('File upload job created', { jobId: job.id, fileName: filename });
 
-      return song;
+      return {
+        jobId: job.id,
+        status: 'processing',
+        message: 'File uploaded successfully, processing in background',
+      };
     } catch (err) {
       // Clean up file if it was created
       try {
@@ -296,6 +262,9 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       }),
       clipStart: t.Optional(t.Number({ minimum: 0 })),
       clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })), // Max 3 minutes
+    }),
+    query: t.Object({
+      force: t.Optional(t.Boolean()),
     }),
   })
 
@@ -323,7 +292,51 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       year: t.Optional(t.Number()),
       genre: t.Optional(t.String()),
       clipStart: t.Optional(t.Number({ minimum: 0 })),
+      niche: t.Optional(t.Boolean()),
     }),
+  })
+
+  // Auto-discover metadata for existing song
+  .post('/:songId/auto-discover', async ({ params: { songId }, error }) => {
+    const song = await songRepository.findById(songId);
+
+    if (!song) {
+      return error(404, { error: 'Song not found' });
+    }
+
+    try {
+      // Use the song's current metadata as the YouTube-like input
+      const enrichmentResult = await metadataEnrichmentService.enrichFromYouTube({
+        title: `${song.artist} - ${song.title}`,
+        uploader: song.artist,
+        duration: song.duration,
+        youtubeId: undefined
+      });
+
+      apiLogger.info('Auto-discovered metadata', {
+        songId,
+        provider: metadataEnrichmentService.getProvider().name,
+        confidence: enrichmentResult.enriched.confidence
+      });
+
+      // Return the enrichment result without auto-updating
+      // The client decides whether to apply it
+      return {
+        success: true,
+        provider: metadataEnrichmentService.getProvider().name,
+        enriched: enrichmentResult.enriched,
+        original: {
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          year: song.year,
+          genre: song.genre
+        }
+      };
+    } catch (err) {
+      apiLogger.error('Failed to auto-discover metadata', err, { songId });
+      return error(500, { error: 'Failed to auto-discover metadata' });
+    }
   })
 
   // Delete song
@@ -385,12 +398,67 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     }),
   })
 
-  // Add song from Spotify (downloads from YouTube)
-  .post('/add-from-spotify', async ({ body, set }) => {
-    console.log('🔵 Endpoint hit: /add-from-spotify');
-    console.log('🔵 Body:', JSON.stringify(body));
+  // Check for duplicate songs
+  .post('/check-duplicate', async ({ body, set }) => {
     try {
-      apiLogger.info('Adding song from Spotify', { spotifyId: body.spotifyId });
+      apiLogger.info('Checking for duplicates', { title: body.title, artist: body.artist });
+
+      const result = await duplicateDetectionService.detectDuplicates({
+        title: body.title,
+        artist: body.artist,
+        duration: body.duration,
+        spotifyId: body.spotifyId,
+        youtubeId: body.youtubeId,
+        album: body.album,
+        year: body.year,
+      });
+
+      return {
+        isDuplicate: result.isDuplicate,
+        confidence: result.highestConfidence,
+        matches: result.matches.map(match => ({
+          song: {
+            id: match.song.id,
+            title: match.song.title,
+            artist: match.song.artist,
+            album: match.song.album,
+            year: match.song.year,
+            duration: match.song.duration,
+            source: match.song.source,
+            spotifyId: match.song.spotifyId,
+            youtubeId: match.song.youtubeId,
+          },
+          confidence: match.confidence,
+          reasons: match.reasons,
+          titleScore: match.titleScore,
+          artistScore: match.artistScore,
+          durationMatch: match.durationMatch,
+        })),
+      };
+    } catch (err) {
+      apiLogger.error('Duplicate check failed', err);
+      set.status = 500;
+      return { error: err instanceof Error ? err.message : 'Duplicate check failed' };
+    }
+  }, {
+    body: t.Object({
+      title: t.String(),
+      artist: t.String(),
+      duration: t.Optional(t.Number()),
+      spotifyId: t.Optional(t.String()),
+      youtubeId: t.Optional(t.String()),
+      album: t.Optional(t.String()),
+      year: t.Optional(t.Number()),
+    }),
+  })
+
+  // Download full song from Spotify to temp directory (for clip selection)
+  .post('/spotify-download-temp', async ({ body, set }) => {
+    try {
+      apiLogger.info('Downloading temp song from Spotify', {
+        spotifyId: body.spotifyId,
+        force: body.force || false
+      });
 
       // 1. Get Spotify metadata
       const spotifyTrack = await spotifyService.getTrack(body.spotifyId);
@@ -399,27 +467,47 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         return { error: 'Spotify track not found' };
       }
 
-      // 2. Check if song already exists (by Spotify ID or title+artist)
-      const existingBySpotify = await songRepository.findAll();
-      const duplicate = existingBySpotify.find(
-        s => s.spotifyId === body.spotifyId ||
-             (s.title === spotifyTrack.title && s.artist === spotifyTrack.artist)
-      );
+      // 2. Check for duplicates (unless force flag is set)
+      if (!body.force) {
+        const duplicateCheck = await duplicateDetectionService.detectDuplicates({
+          title: spotifyTrack.title,
+          artist: spotifyTrack.artist,
+          duration: spotifyTrack.duration,
+          spotifyId: body.spotifyId,
+          album: spotifyTrack.album,
+          year: spotifyTrack.year,
+        });
 
-      if (duplicate) {
-        set.status = 409;
-        return {
-          error: 'Song already exists in library',
-          existingSong: duplicate
-        };
+        if (duplicateCheck.isDuplicate) {
+          apiLogger.info('Duplicates found for Spotify track', {
+            spotifyId: body.spotifyId,
+            matchCount: duplicateCheck.matches.length,
+            highestConfidence: duplicateCheck.highestConfidence
+          });
+
+          // Return duplicate info instead of blocking
+          return {
+            duplicates: duplicateCheck.matches.map(match => ({
+              song: {
+                id: match.song.id,
+                title: match.song.title,
+                artist: match.song.artist,
+                album: match.song.album,
+                year: match.song.year,
+                duration: match.song.duration,
+                source: match.song.source,
+                spotifyId: match.song.spotifyId,
+                youtubeId: match.song.youtubeId,
+              },
+              confidence: match.confidence,
+              reasons: match.reasons,
+            })),
+            metadata: spotifyTrack,
+          };
+        }
       }
 
-      // 3. Find and download from YouTube
-      apiLogger.info('Searching YouTube', {
-        title: spotifyTrack.title,
-        artist: spotifyTrack.artist
-      });
-
+      // 3. Find YouTube video
       const youtubeVideo = await youtubeDownloadService.findBestMatch(
         spotifyTrack.title,
         spotifyTrack.artist
@@ -430,7 +518,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         return { error: 'Could not find song on YouTube' };
       }
 
-      apiLogger.info('Downloading from YouTube', { videoId: youtubeVideo.videoId });
+      // 4. Download full song to temp directory
+      apiLogger.info('Downloading full song for clip selection', { videoId: youtubeVideo.videoId });
 
       const downloadResult = await youtubeDownloadService.download(
         youtubeVideo.videoId,
@@ -445,19 +534,59 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         };
       }
 
-      // 4. Detect language
-      const language = detectSongLanguage(spotifyTrack.title, spotifyTrack.artist);
+      // 5. Return temp file info and metadata
+      return {
+        tempFileId: path.basename(downloadResult.filePath, '.mp3'),
+        tempFilePath: downloadResult.filePath,
+        fileName: downloadResult.fileName!,
+        fileSize: downloadResult.fileSize!,
+        spotify: spotifyTrack,
+        youtube: youtubeVideo,
+      };
+    } catch (err) {
+      apiLogger.error('Failed to download temp song from Spotify', err);
+      set.status = 500;
+      return {
+        error: err instanceof Error ? err.message : 'Failed to download song'
+      };
+    }
+  }, {
+    body: t.Object({
+      spotifyId: t.String(),
+      force: t.Optional(t.Boolean()),
+    }),
+  })
 
-      // 4.5. Trim audio to save storage space
-      let finalFileSize = downloadResult.fileSize!;
+  // Finalize Spotify import after clip selection
+  .post('/spotify-finalize', async ({ body, set }) => {
+    try {
+      apiLogger.info('Finalizing Spotify import', {
+        tempFileId: body.tempFileId,
+        clipStart: body.clipStart,
+        clipDuration: body.clipDuration
+      });
+
+      // 1. Verify temp file exists
+      const tempFilePath = path.join(process.cwd(), 'uploads', `${body.tempFileId}.mp3`);
+
+      try {
+        await stat(tempFilePath);
+      } catch {
+        set.status = 404;
+        return { error: 'Temp file not found or expired' };
+      }
+
+      // 2. Trim audio to selected clip
       const clipStart = body.clipStart ?? SONG_CONFIG.DEFAULT_CLIP_START;
       const clipDuration = body.clipDuration ?? SONG_CONFIG.DEFAULT_CLIP_DURATION;
 
+      let finalFileSize: number;
+
       try {
-        apiLogger.info('Trimming downloaded audio', { clipStart, clipDuration });
+        apiLogger.info('Trimming audio to clip', { clipStart, clipDuration });
 
         const trimResult = await trimAndReplace({
-          inputPath: downloadResult.filePath,
+          inputPath: tempFilePath,
           startTime: clipStart,
           duration: clipDuration,
           format: 'mp3',
@@ -465,60 +594,381 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         });
 
         finalFileSize = trimResult.fileSize;
-        apiLogger.info('Downloaded audio trimmed successfully', {
-          originalSize: downloadResult.fileSize,
+
+        apiLogger.info('Audio trimmed successfully', {
+          originalSize: body.originalFileSize,
           trimmedSize: finalFileSize
         });
       } catch (trimError) {
-        apiLogger.warn('Audio trimming failed, keeping original file', trimError);
-        // Continue with original file if trimming fails
+        apiLogger.error('Audio trimming failed', trimError);
+        set.status = 500;
+        return { error: 'Failed to trim audio clip' };
       }
 
-      // 5. Create song record
+      // 3. Enrich Spotify metadata with AI fallback for missing fields
+      const enrichmentResult = await metadataEnrichmentService.enrichFromSpotifyData({
+        title: body.spotify.title,
+        artist: body.spotify.artist,
+        album: body.spotify.album,
+        year: body.spotify.year,
+        genre: body.spotify.genre,
+        duration: body.spotify.duration,
+        spotifyId: body.spotify.spotifyId
+      });
+
+      apiLogger.info('Spotify metadata enriched', {
+        confidence: enrichmentResult.enriched.confidence,
+        provider: enrichmentResult.provider,
+        hasGenre: !!enrichmentResult.enriched.genre,
+        hasAlbum: !!enrichmentResult.enriched.album
+      });
+
+      // 4. Detect language
+      const language = detectSongLanguage(body.spotify.title, body.spotify.artist);
+
+      // 5. Create song record with enriched metadata
       const song = await songRepository.create({
-        filePath: downloadResult.filePath,
-        fileName: downloadResult.fileName!,
-        title: spotifyTrack.title,
-        artist: spotifyTrack.artist,
-        album: spotifyTrack.album,
-        year: spotifyTrack.year || new Date().getFullYear(),
-        genre: body.genre || spotifyTrack.genre,
-        duration: spotifyTrack.duration,
+        filePath: tempFilePath,
+        fileName: path.basename(tempFilePath),
+        title: enrichmentResult.enriched.title,
+        artist: enrichmentResult.enriched.artist,
+        album: enrichmentResult.enriched.album,
+        year: enrichmentResult.enriched.year || new Date().getFullYear(),
+        genre: enrichmentResult.enriched.genre,
+        subgenre: enrichmentResult.enriched.subgenre,
+        duration: body.spotify.duration,
         clipStart,
         clipDuration,
         fileSize: finalFileSize,
         format: 'mp3',
         language,
-        spotifyId: spotifyTrack.spotifyId,
-        youtubeId: youtubeVideo.videoId,
+        spotifyId: body.spotify.spotifyId,
+        youtubeId: body.youtube.videoId,
         source: 'spotify-youtube',
       });
 
-      apiLogger.info('Song added successfully', {
+      apiLogger.info('Song added successfully from Spotify', {
         songId: song.id,
         title: song.title,
-        youtubeId: youtubeVideo.videoId
+        youtubeId: body.youtube.videoId
       });
 
       return {
         song,
         source: {
-          spotify: spotifyTrack,
-          youtube: youtubeVideo,
+          spotify: body.spotify,
+          youtube: body.youtube,
         },
       };
     } catch (err) {
-      apiLogger.error('Failed to add song from Spotify', err);
+      apiLogger.error('Failed to finalize Spotify import', err);
       set.status = 500;
       return {
-        error: err instanceof Error ? err.message : 'Failed to add song'
+        error: err instanceof Error ? err.message : 'Failed to finalize import'
       };
     }
   }, {
     body: t.Object({
-      spotifyId: t.String(),
+      tempFileId: t.String(),
+      originalFileSize: t.Number(),
       clipStart: t.Optional(t.Number({ minimum: 0 })),
-      clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })), // Max 3 minutes
+      clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })),
       genre: t.Optional(t.String()),
+      spotify: t.Object({
+        spotifyId: t.String(),
+        title: t.String(),
+        artist: t.String(),
+        album: t.Optional(t.String()),
+        year: t.Optional(t.Number()),
+        genre: t.Optional(t.String()),
+        duration: t.Number(),
+      }),
+      youtube: t.Object({
+        videoId: t.String(),
+        title: t.String(),
+      }),
     }),
-  });
+  })
+
+  // ========================================================================
+  // YouTube Direct Import
+  // ========================================================================
+
+  // Get YouTube playlist or video info
+  .post('/youtube-playlist-info', async ({ body, set }) => {
+    try {
+      apiLogger.info('Fetching YouTube playlist/video info', { url: body.url });
+
+      const playlistInfo = await youtubeDownloadService.getPlaylistInfo(body.url);
+
+      return playlistInfo;
+    } catch (err) {
+      apiLogger.error('Failed to fetch YouTube playlist info', err);
+      set.status = 500;
+      return {
+        error: err instanceof Error ? err.message : 'Failed to fetch playlist information'
+      };
+    }
+  }, {
+    body: t.Object({
+      url: t.String({ minLength: 1 }),
+    }),
+  })
+
+  // Check YouTube videos for duplicates
+  .post('/youtube-check-duplicates', async ({ body, set }) => {
+    try {
+      apiLogger.info('Checking YouTube videos for duplicates', {
+        videoCount: body.videos.length
+      });
+
+      const results = await Promise.all(
+        body.videos.map(async (video) => {
+          const duplicateCheck = await duplicateDetectionService.detectDuplicates({
+            title: video.title,
+            artist: video.uploader || 'Unknown',
+            duration: video.durationInSeconds,
+            youtubeId: video.videoId,
+          });
+
+          return {
+            videoId: video.videoId,
+            title: video.title,
+            isDuplicate: duplicateCheck.isDuplicate,
+            confidence: duplicateCheck.highestConfidence,
+            matches: duplicateCheck.isDuplicate
+              ? duplicateCheck.matches.map(match => ({
+                  song: {
+                    id: match.song.id,
+                    title: match.song.title,
+                    artist: match.song.artist,
+                    album: match.song.album,
+                    year: match.song.year,
+                    duration: match.song.duration,
+                    source: match.song.source,
+                    spotifyId: match.song.spotifyId,
+                    youtubeId: match.song.youtubeId,
+                  },
+                  confidence: match.confidence,
+                  reasons: match.reasons,
+                }))
+              : [],
+          };
+        })
+      );
+
+      return {
+        results,
+        duplicateCount: results.filter(r => r.isDuplicate).length,
+        total: results.length,
+      };
+    } catch (err) {
+      apiLogger.error('Failed to check YouTube duplicates', err);
+      set.status = 500;
+      return {
+        error: err instanceof Error ? err.message : 'Failed to check duplicates'
+      };
+    }
+  }, {
+    body: t.Object({
+      videos: t.Array(
+        t.Object({
+          videoId: t.String(),
+          title: t.String(),
+          uploader: t.Optional(t.String()),
+          durationInSeconds: t.Optional(t.Number()),
+        })
+      ),
+    }),
+  })
+
+  // Enrich YouTube video metadata with Spotify data
+  .post('/enrich-metadata', async ({ body, set }) => {
+    try {
+      apiLogger.info('Enriching YouTube metadata', {
+        title: body.youtubeTitle,
+        uploader: body.uploader
+      });
+
+      const result = await metadataEnrichmentService.enrichFromYouTube({
+        title: body.youtubeTitle,
+        uploader: body.uploader,
+        duration: body.duration,
+        youtubeId: body.youtubeId,
+      });
+
+      return result;
+    } catch (err) {
+      apiLogger.error('Failed to enrich metadata', err);
+      set.status = 500;
+      return {
+        error: err instanceof Error ? err.message : 'Failed to enrich metadata'
+      };
+    }
+  }, {
+    body: t.Object({
+      youtubeTitle: t.String(),
+      uploader: t.String(),
+      duration: t.Number(),
+      youtubeId: t.Optional(t.String()),
+    }),
+  })
+
+  // Batch enrich YouTube videos metadata
+  .post('/youtube-enrich-batch', async ({ body, set }) => {
+    try {
+      apiLogger.info('Batch enriching YouTube metadata', {
+        videoCount: body.videos.length
+      });
+
+      // Convert to YouTubeMetadata format
+      const youtubeVideos = body.videos.map(video => ({
+        title: video.title,
+        uploader: video.uploader || 'Unknown',
+        duration: video.durationInSeconds,
+        youtubeId: video.videoId,
+      }));
+
+      // Use batch enrichment with retry logic (max 3 attempts)
+      let results;
+      let lastError;
+      const maxRetries = 3;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          results = await metadataEnrichmentService.enrichBatch(youtubeVideos);
+          break; // Success - exit retry loop
+        } catch (err) {
+          lastError = err;
+          apiLogger.warn('Enrichment attempt failed', {
+            attempt,
+            maxRetries,
+            error: err instanceof Error ? err.message : String(err)
+          });
+
+          if (attempt < maxRetries) {
+            // Exponential backoff: 1s, 2s, 4s
+            const delayMs = Math.pow(2, attempt - 1) * 1000;
+            apiLogger.info('Retrying enrichment', { delayMs, nextAttempt: attempt + 1 });
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        }
+      }
+
+      if (!results) {
+        throw lastError || new Error('Enrichment failed after retries');
+      }
+
+      // Enhanced logging for metadata quality
+      const metadataStats = {
+        total: results.length,
+        withGenre: results.filter(r => r.enriched.genre).length,
+        withAlbum: results.filter(r => r.enriched.album).length,
+        withYear: results.filter(r => r.enriched.year).length,
+        withSubgenre: results.filter(r => r.enriched.subgenre).length,
+        lowConfidence: results.filter(r => r.enriched.confidence < 70).length,
+        averageConfidence: Math.round(
+          results.reduce((sum, r) => sum + r.enriched.confidence, 0) / results.length
+        ),
+        providers: [...new Set(results.map(r => r.provider))],
+        usedFallback: results.filter(r => r.provider.includes('+')).length
+      };
+
+      apiLogger.info('Batch enrichment complete', metadataStats);
+
+      // Log individual low-confidence or missing-field results
+      results.forEach((result, index) => {
+        if (result.enriched.confidence < 70 || !result.enriched.genre || !result.enriched.album) {
+          apiLogger.warn('Enrichment quality concern', {
+            index,
+            title: result.enriched.title,
+            artist: result.enriched.artist,
+            confidence: result.enriched.confidence,
+            hasGenre: !!result.enriched.genre,
+            hasAlbum: !!result.enriched.album,
+            hasYear: !!result.enriched.year,
+            provider: result.provider
+          });
+        }
+      });
+
+      return {
+        results,
+        total: results.length,
+      };
+    } catch (err) {
+      apiLogger.error('Failed to batch enrich metadata', err);
+      set.status = 500;
+      return {
+        error: err instanceof Error ? err.message : 'Failed to batch enrich metadata'
+      };
+    }
+  }, {
+    body: t.Object({
+      videos: t.Array(
+        t.Object({
+          videoId: t.String(),
+          title: t.String(),
+          uploader: t.Optional(t.String()),
+          durationInSeconds: t.Number(),
+        })
+      ),
+    }),
+  })
+
+  // Start batch YouTube import job
+  .post('/youtube-import-batch', async ({ body, set }) => {
+    try {
+      apiLogger.info('Starting YouTube batch import', {
+        videoCount: body.videos.length
+      });
+
+      // Import the job queue
+      const { jobQueue } = await import('../services/JobQueue');
+
+      // Create a job for the batch import
+      const job = jobQueue.createJob('youtube_playlist', {
+        playlistTitle: body.playlistTitle,
+        videos: body.videos,
+        genre: body.genre,
+      });
+
+      apiLogger.info('YouTube batch import job created', { jobId: job.id });
+
+      return {
+        success: true,
+        jobId: job.id,
+        job,
+      };
+    } catch (err) {
+      apiLogger.error('Failed to start YouTube batch import', err);
+      set.status = 500;
+      return {
+        error: err instanceof Error ? err.message : 'Failed to start batch import'
+      };
+    }
+  }, {
+    body: t.Object({
+      playlistTitle: t.Optional(t.String()),
+      genre: t.Optional(t.String()),
+      videos: t.Array(t.Object({
+        videoId: t.String(),
+        title: t.String(),
+        clipStart: t.Optional(t.Number({ minimum: 0 })),
+        clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })),
+        force: t.Optional(t.Boolean()),
+        // Enriched metadata from /youtube-enrich-batch
+        metadata: t.Optional(t.Object({
+          title: t.String(),
+          artist: t.String(),
+          album: t.Optional(t.String()),
+          year: t.Optional(t.Number()),
+          genre: t.Optional(t.String()),
+          subgenre: t.Optional(t.String()),
+          providerId: t.Optional(t.String()), // Spotify ID
+          confidence: t.Number(),
+        })),
+      })),
+    }),
+  })
+

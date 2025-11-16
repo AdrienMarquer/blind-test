@@ -14,7 +14,7 @@
 	let totalSongs = $state(0);
 	let isPaused = $state(false);
 	let isPlaying = $state(false);
-	let activePlayerName = $state<string>('En attente d\'un buzz...');
+	let activePlayerName = $state<string>('');
 	let currentTitle = $state('Chargement...');
 	let currentArtist = $state('');
 	let statusMessage = $state<{ type: 'success' | 'info' | 'warning'; text: string } | null>(null);
@@ -146,7 +146,7 @@
 			});
 
 			currentSong = event.songIndex;
-			activePlayerName = 'En attente d\'un buzz...';
+			activePlayerName = '';
 			// Master sees the actual song title and artist
 			currentTitle = event.songTitle || `Morceau ${event.songIndex + 1}`;
 			currentArtist = event.songArtist || '';

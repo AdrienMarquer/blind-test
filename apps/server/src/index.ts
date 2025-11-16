@@ -19,6 +19,10 @@ import { gameRoutes } from './routes/game';
 import { songRoutes } from './routes/songs';
 import { modeRoutes } from './routes/modes';
 import { mediaRoutes } from './routes/media';
+import { jobRoutes } from './routes/jobs';
+import { jobWorker } from './services/JobWorker';
+import { jobQueue } from './services/JobQueue';
+import { broadcastJobEvent } from './websocket/handler';
 
 // Run database migrations
 try {
@@ -29,6 +33,66 @@ try {
   process.exit(1);
 }
 
+// Set up job queue event broadcasting via WebSocket
+jobQueue.on((event) => {
+  const { type, job } = event;
+
+  // Broadcast job events to all connected clients
+  switch (type) {
+    case 'job:progress':
+      broadcastJobEvent({
+        type: 'job:progress',
+        data: {
+          jobId: job.id,
+          type: job.type,
+          status: job.status,
+          progress: job.progress,
+          currentItem: job.currentItem,
+          totalItems: job.totalItems,
+        },
+      });
+      break;
+
+    case 'job:completed':
+      broadcastJobEvent({
+        type: 'job:completed',
+        data: {
+          jobId: job.id,
+          type: job.type,
+          metadata: job.metadata,
+        },
+      });
+      break;
+
+    case 'job:failed':
+      broadcastJobEvent({
+        type: 'job:failed',
+        data: {
+          jobId: job.id,
+          type: job.type,
+          error: job.error || 'Unknown error',
+        },
+      });
+      break;
+
+    case 'job:cancelled':
+      // Treat cancelled as failed for now
+      broadcastJobEvent({
+        type: 'job:failed',
+        data: {
+          jobId: job.id,
+          type: job.type,
+          error: 'Job cancelled',
+        },
+      });
+      break;
+  }
+});
+
+// Start job worker for background processing
+jobWorker.start();
+logger.info('Job worker started', jobWorker.getStatus());
+
 // Create child logger for WebSocket
 const wsLogger = logger.child({ module: 'WebSocket' });
 
@@ -38,6 +102,26 @@ const hasClientBuild = existsSync(clientBuildPath);
 
 // Initialize Elysia app
 const app = new Elysia()
+  // Global error handler
+  .onError(({ code, error, set }) => {
+    logger.error('Request error', { code, error: error.message, stack: error.stack });
+
+    switch (code) {
+      case 'VALIDATION':
+        set.status = 400;
+        return { error: 'Validation failed', details: error.message };
+      case 'NOT_FOUND':
+        set.status = 404;
+        return { error: 'Resource not found' };
+      case 'PARSE':
+        set.status = 400;
+        return { error: 'Invalid request format' };
+      case 'UNKNOWN':
+      default:
+        set.status = 500;
+        return { error: 'Internal server error' };
+    }
+  })
   .use(cors())
 
   // Health check endpoint (for Docker/monitoring)
@@ -56,6 +140,7 @@ const app = new Elysia()
   .use(songRoutes)
   .use(modeRoutes)
   .use(mediaRoutes)
+  .use(jobRoutes)
 
   // WebSocket endpoint for room connections
   .ws('/ws/rooms/:roomId', {
@@ -127,6 +212,33 @@ logger.info(`Server started`, {
   http: `http://${app.server?.hostname}:${app.server?.port}`,
   ws: `ws://${app.server?.hostname}:${app.server?.port}`
 });
+
+// Graceful shutdown handlers
+const shutdown = async (signal: string) => {
+  logger.info(`${signal} received, shutting down gracefully`);
+
+  try {
+    // Stop job worker first to prevent new jobs
+    jobWorker.stop();
+    logger.info('Job worker stopped');
+
+    // Close database connections
+    const { closeDatabase } = await import('./db');
+    await closeDatabase();
+
+    // Stop server
+    await app.stop();
+    logger.info('Server stopped');
+
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during shutdown', error);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Export app type for Eden Treaty
 export type App = typeof app;

@@ -155,11 +155,11 @@ export class TimerManager {
 	 * Pause the song timer (for manual validation)
 	 * Preserves remaining time for resume
 	 */
-	pauseSongTimer(roomId: string): void {
+	pauseSongTimer(roomId: string): boolean {
 		const timer = this.songTimers.get(roomId);
 		if (!timer || timer.paused) {
 			timerLogger.debug('Cannot pause song timer - not found or already paused', { roomId });
-			return;
+			return false;
 		}
 
 		// Calculate remaining time
@@ -180,17 +180,19 @@ export class TimerManager {
 			type: 'game:paused',
 			data: { timestamp: Date.now() }
 		});
+
+		return true;
 	}
 
 	/**
 	 * Resume the song timer (after wrong answer in manual validation)
 	 * Restarts with remaining time
 	 */
-	resumeSongTimer(roomId: string): void {
+	resumeSongTimer(roomId: string): boolean {
 		const timer = this.songTimers.get(roomId);
 		if (!timer || !timer.paused || timer.pausedTimeRemaining === undefined) {
 			timerLogger.debug('Cannot resume song timer - not found or not paused', { roomId });
-			return;
+			return false;
 		}
 
 		const remainingTime = timer.pausedTimeRemaining;
@@ -215,6 +217,8 @@ export class TimerManager {
 			type: 'game:resumed',
 			data: { timestamp: Date.now() }
 		});
+
+		return true;
 	}
 
 	/**

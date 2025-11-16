@@ -4,7 +4,7 @@
  * PostgreSQL version
  */
 
-import { pgTable, text, integer, timestamp, boolean, json } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, boolean, json, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 // ============================================================================
@@ -45,7 +45,9 @@ export const players = pgTable('players', {
 
   // Statistics (stored as JSON)
   stats: json('stats').notNull().default({"totalAnswers":0,"correctAnswers":0,"wrongAnswers":0,"buzzCount":0,"averageAnswerTime":0}),
-});
+}, (table) => ({
+  roomIdIdx: index('players_room_id_idx').on(table.roomId),
+}));
 
 // ============================================================================
 // Songs Table
@@ -67,6 +69,7 @@ export const songs = pgTable('songs', {
   // Enhanced metadata for answer generation
   language: text('language'), // ISO 639-1 code (e.g., 'en', 'fr', 'es')
   subgenre: text('subgenre'), // More specific genre (e.g., 'french-rap', 'synthwave')
+  niche: boolean('niche').notNull().default(false), // Is this a niche/obscure song?
 
   // Source tracking
   spotifyId: text('spotify_id'), // Spotify track ID
@@ -74,15 +77,20 @@ export const songs = pgTable('songs', {
   source: text('source').notNull().default('upload'), // 'upload' | 'spotify-youtube' | 'manual'
 
   // Playback configuration
-  clipStart: integer('clip_start').notNull().default(30), // Start time in seconds
-  clipDuration: integer('clip_duration').notNull().default(45), // Stored clip length in seconds
+  clipStart: integer('clip_start').notNull().default(0), // Start time in seconds
+  clipDuration: integer('clip_duration').notNull().default(60), // Stored clip length in seconds
   // Note: Actual playback duration during game comes from ModeParams.songDuration
 
   // File info
   createdAt: timestamp('created_at').notNull().defaultNow(),
   fileSize: integer('file_size').notNull(), // Bytes
   format: text('format').notNull(), // 'mp3' | 'm4a' | 'wav' | 'flac'
-});
+}, (table) => ({
+  genreIdx: index('songs_genre_idx').on(table.genre),
+  yearIdx: index('songs_year_idx').on(table.year),
+  spotifyIdIdx: index('songs_spotify_id_idx').on(table.spotifyId),
+  youtubeIdIdx: index('songs_youtube_id_idx').on(table.youtubeId),
+}));
 
 // ============================================================================
 // Game Sessions Table (Phase 2+)
@@ -98,7 +106,9 @@ export const gameSessions = pgTable('game_sessions', {
   currentRoundIndex: integer('current_round_index').notNull().default(0),
   currentSongIndex: integer('current_song_index').notNull().default(0),
   status: text('status').notNull().default('waiting'), // 'waiting' | 'playing' | 'paused' | 'finished'
-});
+}, (table) => ({
+  roomIdIdx: index('game_sessions_room_id_idx').on(table.roomId),
+}));
 
 // ============================================================================
 // Rounds Table (Phase 2+)
@@ -122,4 +132,37 @@ export const rounds = pgTable('rounds', {
   startedAt: timestamp('started_at'),
   endedAt: timestamp('ended_at'),
   currentSongIndex: integer('current_song_index').notNull().default(0),
-});
+}, (table) => ({
+  sessionIdIdx: index('rounds_session_id_idx').on(table.sessionId),
+}));
+
+// ============================================================================
+// Import Jobs Table
+// ============================================================================
+
+export const importJobs = pgTable('import_jobs', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(), // 'spotify_download' | 'youtube_download' | 'youtube_playlist'
+  status: text('status').notNull(), // 'pending' | 'downloading' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  progress: integer('progress').notNull().default(0), // 0-100
+
+  // Job-specific metadata (stored as JSON)
+  metadata: json('metadata').notNull().default({}),
+
+  // Error information
+  error: text('error'),
+
+  // Batch job tracking
+  currentItem: integer('current_item'), // Current item being processed (for playlists)
+  totalItems: integer('total_items'), // Total items to process (for playlists)
+
+  // Timing
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+
+  // Retry tracking
+  retryCount: integer('retry_count').notNull().default(0),
+}, (table) => ({
+  statusIdx: index('import_jobs_status_idx').on(table.status),
+}));

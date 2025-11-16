@@ -64,9 +64,11 @@ bun run build
 4. **Démarrer la partie** (minimum 2 joueurs)
 5. **Buzzer** et deviner le titre/artiste !
 
-### 🎵 Import en masse de chansons
+### 🎵 Import de chansons
 
-Pour importer rapidement toute votre bibliothèque musicale :
+Le système supporte plusieurs méthodes d'import :
+
+#### 1. Import en masse depuis fichiers locaux
 
 ```bash
 # Importer toutes les chansons d'un dossier (récursif)
@@ -87,29 +89,48 @@ Le script :
 - ✅ Extrait les métadonnées (titre, artiste, genre, année)
 - ✅ Affiche une progression en temps réel avec un résumé
 
+#### 2. Import depuis YouTube
+
+Le système peut télécharger des chansons depuis YouTube et **enrichir automatiquement les métadonnées** :
+
+- **Interface web** : Importer une vidéo ou une playlist YouTube directement depuis l'UI
+- **Enrichissement automatique** : Les métadonnées (titre, artiste, année, genre) sont enrichies via :
+  - **Spotify** (gratuit, recommandé pour musique populaire)
+  - **OpenAI** (excellente précision, ~$0.001/chanson)
+  - **Anthropic Claude** (meilleur raisonnement, ~$0.003/chanson)
+  - **Google Gemini** (niveau gratuit généreux)
+
+**Configuration** : Voir `apps/server/METADATA_PROVIDER_SETUP.md` pour configurer votre provider préféré
+
+#### 3. Import depuis Spotify (à venir)
+
+Import de playlists Spotify avec métadonnées complètes
+
 ## 💾 Base de données et migrations
 
-Le projet utilise **Drizzle ORM** avec SQLite pour la persistance des données.
+Le serveur tourne sur **PostgreSQL 18** via Drizzle ORM. Configure la connexion avec `DATABASE_URL` dans `apps/server/.env` (voir `.env.example`).
 
-### Modifications du schéma
+### Workflow schéma → migration
 
-Si vous modifiez le schéma de la base de données dans `apps/server/src/db/schema.ts` :
+1. Modifie le schéma dans `apps/server/src/db/schema.ts`.
+2. Génère une migration :
+   ```bash
+   cd apps/server
+   bunx drizzle-kit generate --name <changement>
+   ```
+3. Applique toutes les migrations locales :
+   ```bash
+   bun run db:migrate   # alias pour bunx drizzle-kit migrate
+   ```
+4. Commit les fichiers créés dans `apps/server/drizzle/` **et** `apps/server/drizzle/meta/`.
 
-```bash
-# Générer automatiquement une migration SQL
-cd apps/server
-bunx drizzle-kit generate
-```
-
-Cela créera un nouveau fichier de migration dans `apps/server/drizzle/`.
-
-Les migrations s'exécutent **automatiquement au démarrage du serveur**.
+Les migrations sont aussi lancées automatiquement au démarrage du serveur (voir `runMigrations()` dans `apps/server/src/db/index.ts`).
 
 ### Fichiers importants
 
-- `apps/server/src/db/schema.ts` - Définition du schéma TypeScript
-- `apps/server/drizzle/*.sql` - Migrations SQL générées
-- `apps/server/db/sqlite.db` - Base de données SQLite (gitignorée)
+- `apps/server/src/db/schema.ts` – source de vérité du schéma
+- `apps/server/drizzle/*.sql` – migrations SQL
+- `apps/server/drizzle/meta/*` – snapshots / journal Drizzle
 
 ## 🛠 Stack technique
 

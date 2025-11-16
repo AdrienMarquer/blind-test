@@ -13,7 +13,7 @@
  * 7. Song ends when both correct or timer expires
  */
 
-import type { Round, RoundSong, Answer, Song, ModeParams, MediaType } from '@blind-test/shared';
+import { DEFAULT_SONG_DURATION, type Round, type RoundSong, type Answer, type Song, type ModeParams, type MediaType } from '@blind-test/shared';
 import { BaseModeHandler, type AnswerResult } from './types';
 import { answerGenerationService, AnswerGenerationService } from '../services/AnswerGenerationService';
 
@@ -31,7 +31,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
   }
 
   defaultParams: ModeParams = {
-    songDuration: 15,
+    songDuration: DEFAULT_SONG_DURATION,
     answerTimer: 5,
     numChoices: 4,
     pointsTitle: 1,

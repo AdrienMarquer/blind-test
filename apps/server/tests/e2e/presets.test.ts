@@ -15,7 +15,7 @@
  */
 
 import { describe, test, expect, beforeEach } from 'bun:test'
-import type { RoundConfig, Answer, RoundSong } from '@blind-test/shared'
+import { DEFAULT_SONG_DURATION, type RoundConfig, type Answer, type RoundSong } from '@blind-test/shared'
 import { BuzzAndChoiceMode } from '../../src/modes/BuzzAndChoiceMode'
 import { FastBuzzMode } from '../../src/modes/FastBuzzMode'
 import { TextInputMode } from '../../src/modes/TextInputMode'
@@ -29,19 +29,19 @@ const quickGamePreset: RoundConfig[] = [
     modeType: 'fast_buzz',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 20, answerTimer: 5 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 5 },
   },
   {
     modeType: 'fast_buzz',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 15, answerTimer: 5 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 5 },
   },
   {
     modeType: 'buzz_and_choice',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 20, answerTimer: 10, numChoices: 4 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 10, numChoices: 4 },
   },
 ]
 
@@ -53,31 +53,31 @@ const classicGamePreset: RoundConfig[] = [
     modeType: 'buzz_and_choice',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 30, answerTimer: 10, numChoices: 4 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 10, numChoices: 4 },
   },
   {
     modeType: 'fast_buzz',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 20, answerTimer: 5 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 5 },
   },
   {
     modeType: 'text_input',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 25, answerTimer: 15, fuzzyMatch: true, levenshteinDistance: 2 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 15, fuzzyMatch: true, levenshteinDistance: 2 },
   },
   {
     modeType: 'buzz_and_choice',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 25, answerTimer: 8, numChoices: 4, pointsTitle: 2, pointsArtist: 2 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 8, numChoices: 4, pointsTitle: 2, pointsArtist: 2 },
   },
   {
     modeType: 'fast_buzz',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: 15, answerTimer: 5 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 5 },
   },
 ]
 
@@ -106,7 +106,7 @@ describe('E2E: Quick Game Preset (3 rounds)', () => {
 
     expect(wsCollector.getEvents('game:started').length).toBe(1)
 
-    // === ROUND 1: Fast Buzz (5 songs, 20s duration) ===
+    // === ROUND 1: Fast Buzz (5 songs, 30s duration) ===
     wsCollector.broadcast('round:started', {
       roundIndex: 0,
       modeType: 'fast_buzz',
@@ -131,7 +131,7 @@ describe('E2E: Quick Game Preset (3 rounds)', () => {
       // Song starts
       wsCollector.broadcast('song:started', {
         songIndex: i,
-        duration: 20,
+        duration: DEFAULT_SONG_DURATION,
         clipStart: 30,
         audioPlayback: 'master',
       })
@@ -197,7 +197,7 @@ describe('E2E: Quick Game Preset (3 rounds)', () => {
       ],
     })
 
-    // === ROUND 2: Fast Buzz (5 songs, 15s duration) ===
+    // === ROUND 2: Fast Buzz (5 songs, 30s duration) ===
     wsCollector.broadcast('round:started', {
       roundIndex: 1,
       modeType: 'fast_buzz',
@@ -254,7 +254,7 @@ describe('E2E: Quick Game Preset (3 rounds)', () => {
       ],
     })
 
-    // === ROUND 3: Buzz and Choice (5 songs, 20s duration) ===
+    // === ROUND 3: Buzz and Choice (5 songs, 30s duration) ===
     wsCollector.broadcast('round:started', {
       roundIndex: 2,
       modeType: 'buzz_and_choice',
@@ -369,8 +369,8 @@ describe('E2E: Quick Game Preset (3 rounds)', () => {
     })
 
     // Verify parameters are set
-    expect(quickGamePreset[0].params?.songDuration).toBe(20)
-    expect(quickGamePreset[1].params?.songDuration).toBe(15)
+    expect(quickGamePreset[0].params?.songDuration).toBe(DEFAULT_SONG_DURATION)
+    expect(quickGamePreset[1].params?.songDuration).toBe(DEFAULT_SONG_DURATION)
     expect(quickGamePreset[2].params?.numChoices).toBe(4)
   })
 })

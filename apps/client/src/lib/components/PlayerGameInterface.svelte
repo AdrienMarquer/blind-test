@@ -21,6 +21,7 @@
 	let someoneElseAnswering = $state(false);
 	let activePlayerAnswering = $state<string>(''); // Name of player currently answering
 	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'>('buzz_and_choice');
+	let isSongPlaying = $state(false); // True when a song is actively playing
 
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
@@ -121,6 +122,7 @@
 			isLockedOut = false;
 			someoneElseAnswering = false;
 			activePlayerAnswering = '';
+			isSongPlaying = true; // Song is now playing
 
 			// Clear all old choices and state
 			currentChoices = [];
@@ -346,6 +348,7 @@
 			showChoices = false;
 			hasBuzzed = false;
 			canBuzz = false;
+			isSongPlaying = false; // Song is no longer playing
 
 			console.log('[Player] 👀 Entering answer reveal phase (5 seconds)');
 
@@ -407,21 +410,21 @@
 	{/if}
 
 	<!-- Game Status -->
-	<div class="game-status">
-		{#if isLockedOut}
-			<p class="status-text">🚫 Tu es bloqué pour ce morceau</p>
-		{:else if someoneElseAnswering}
-			<p class="status-text">⏸️ {activePlayerAnswering} répond...</p>
-		{:else if !hasBuzzed && canBuzz}
-			<p class="status-text">🎵 Écoute et buzze dès que tu as la réponse !</p>
-			<div class="timer-bar">
-				<div class="timer-fill" style="width: {(timeRemaining / maxSongDuration) * 100}%"></div>
-			</div>
-			<div class="timer-text">{timeRemaining}s</div>
-		{:else if !showChoices && !hasBuzzed}
-			<p class="status-text">⏸️ En attente...</p>
-		{/if}
-	</div>
+	{#if isSongPlaying}
+		<div class="game-status">
+			{#if isLockedOut}
+				<!-- Show nothing for locked out players -->
+			{:else if someoneElseAnswering}
+				<p class="status-text">⏸️ {activePlayerAnswering} répond...</p>
+			{:else if canBuzz}
+				<p class="status-text">🎵 Écoute et buzze dès que tu as la réponse !</p>
+				<div class="timer-bar">
+					<div class="timer-fill" style="width: {(timeRemaining / maxSongDuration) * 100}%"></div>
+				</div>
+				<div class="timer-text">{timeRemaining}s</div>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Buzz Button (for modes that support buzzing) -->
 	{#if currentModeType !== 'text_input' && !hasBuzzed && canBuzz && !someoneElseAnswering && !isLockedOut}
