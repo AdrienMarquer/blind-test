@@ -27,6 +27,7 @@
 	let draggedIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
 	let isDragging = $state(false);
+	let expandedGenreSections = $state<Set<number>>(new Set());
 
 	// Apply default preset on mount if no rounds are configured
 	onMount(() => {
@@ -139,18 +140,99 @@
 		onUpdateRounds(rounds);
 	}
 
-	// Update genre for a specific round
-	function updateGenre(index: number, genre: string) {
+	// Toggle genre for a specific round (multi-select)
+	function toggleGenre(index: number, genre: string) {
+		const updatedRounds = [...rounds];
+		const currentGenres = updatedRounds[index].songFilters?.genre;
+
+		// Convert to array if needed
+		let genreArray: string[] = [];
+		if (Array.isArray(currentGenres)) {
+			genreArray = [...currentGenres];
+		} else if (currentGenres) {
+			genreArray = [currentGenres];
+		}
+
+		// Toggle the genre
+		const genreIndex = genreArray.indexOf(genre);
+		if (genreIndex > -1) {
+			// Remove genre
+			genreArray.splice(genreIndex, 1);
+		} else {
+			// Add genre
+			genreArray.push(genre);
+		}
+
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			songFilters: {
+				...updatedRounds[index].songFilters,
+				genre: genreArray.length > 0 ? genreArray : undefined
+			}
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
+
+	// Select all genres for a specific round
+	function selectAllGenres(index: number) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
 			...updatedRounds[index],
 			songFilters: {
 				...updatedRounds[index].songFilters,
-				genre: genre || undefined
+				genre: [...CANONICAL_GENRES]
 			}
 		};
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
+	}
+
+	// Clear all genres for a specific round
+	function clearAllGenres(index: number) {
+		const updatedRounds = [...rounds];
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			songFilters: {
+				...updatedRounds[index].songFilters,
+				genre: undefined
+			}
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
+
+	// Helper to check if a genre is selected for a round
+	function isGenreSelected(index: number, genre: string): boolean {
+		const currentGenres = rounds[index].songFilters?.genre;
+		if (!currentGenres) return false;
+		if (Array.isArray(currentGenres)) {
+			return currentGenres.includes(genre);
+		}
+		return currentGenres === genre;
+	}
+
+	// Helper to get selected genres display text
+	function getSelectedGenresText(index: number): string {
+		const currentGenres = rounds[index].songFilters?.genre;
+		if (!currentGenres) return 'Tous les genres';
+		if (Array.isArray(currentGenres)) {
+			return currentGenres.length === CANONICAL_GENRES.length
+				? 'Tous les genres'
+				: currentGenres.join(', ');
+		}
+		return currentGenres;
+	}
+
+	// Toggle genre section expansion
+	function toggleGenreExpansion(index: number) {
+		if (expandedGenreSections.has(index)) {
+			expandedGenreSections.delete(index);
+		} else {
+			expandedGenreSections.add(index);
+		}
+		// Trigger reactivity
+		expandedGenreSections = new Set(expandedGenreSections);
 	}
 
 	// Update includeNiche for a specific round
@@ -326,18 +408,50 @@
 							{#if round.mediaType === 'music'}
 								<div class="filter-controls">
 									<!-- Genre Filter -->
-									<div class="filter-group">
-										<label for="genre-{index}">Genre</label>
-										<select
-											id="genre-{index}"
-											value={round.songFilters?.genre || ''}
-											onchange={(e) => updateGenre(index, e.currentTarget.value)}
+									<div class="filter-group filter-group-wide">
+										<div class="filter-header">
+											<label>Genres</label>
+											{#if expandedGenreSections.has(index)}
+												<div class="filter-actions">
+													<button
+														type="button"
+														class="filter-action-btn"
+														onclick={() => selectAllGenres(index)}
+													>
+														Tous
+													</button>
+													<button
+														type="button"
+														class="filter-action-btn"
+														onclick={() => clearAllGenres(index)}
+													>
+														Aucun
+													</button>
+												</div>
+											{/if}
+										</div>
+										<button
+											type="button"
+											class="genre-selection-summary"
+											onclick={() => toggleGenreExpansion(index)}
 										>
-											<option value="">Tous les genres</option>
-											{#each CANONICAL_GENRES as genre}
-												<option value={genre}>{genre}</option>
-											{/each}
-										</select>
+											<span>{getSelectedGenresText(index)}</span>
+											<span class="chevron" class:expanded={expandedGenreSections.has(index)}>▼</span>
+										</button>
+										{#if expandedGenreSections.has(index)}
+											<div class="genre-checkboxes">
+												{#each CANONICAL_GENRES as genre}
+													<label class="genre-checkbox-label">
+														<input
+															type="checkbox"
+															checked={isGenreSelected(index, genre)}
+															onchange={() => toggleGenre(index, genre)}
+														/>
+														<span>{genre}</span>
+													</label>
+												{/each}
+											</div>
+										{/if}
 									</div>
 
 									<!-- Year Range Filter -->
@@ -769,6 +883,148 @@
 		font-weight: 500;
 	}
 
+	/* Genre Multi-Select Styles */
+	.filter-group-wide {
+		flex: 1 1 100%;
+		min-width: 100%;
+	}
+
+	.filter-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.5rem;
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.filter-action-btn {
+		padding: 0.25rem 0.6rem;
+		border: 1px solid rgba(18, 43, 59, 0.15);
+		border-radius: 6px;
+		background: white;
+		color: rgba(18, 43, 59, 0.7);
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.filter-action-btn:hover {
+		background: var(--aq-color-primary);
+		color: white;
+		border-color: var(--aq-color-primary);
+		transform: scale(1.05);
+	}
+
+	.filter-action-btn:active {
+		transform: scale(0.95);
+	}
+
+	.genre-selection-summary {
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		border-radius: 8px;
+		background: rgba(239, 76, 131, 0.08);
+		border: 1px solid rgba(239, 76, 131, 0.2);
+		font-size: 0.85rem;
+		color: var(--aq-color-deep);
+		margin-bottom: 0.75rem;
+		min-height: 2rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		overflow-wrap: break-word;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		text-align: left;
+	}
+
+	.genre-selection-summary:hover {
+		background: rgba(239, 76, 131, 0.12);
+		border-color: rgba(239, 76, 131, 0.3);
+		transform: scale(1.01);
+	}
+
+	.genre-selection-summary:active {
+		transform: scale(0.99);
+	}
+
+	.chevron {
+		transition: transform 0.2s ease;
+		font-size: 0.7rem;
+		color: rgba(239, 76, 131, 0.7);
+		margin-left: 0.5rem;
+	}
+
+	.chevron.expanded {
+		transform: rotate(180deg);
+	}
+
+	.genre-checkboxes {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+		gap: 0.5rem;
+		max-height: 200px;
+		overflow-y: auto;
+		padding: 0.5rem;
+		border: 1px solid rgba(18, 43, 59, 0.1);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.5);
+	}
+
+	.genre-checkboxes::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.genre-checkboxes::-webkit-scrollbar-track {
+		background: rgba(18, 43, 59, 0.05);
+		border-radius: 3px;
+	}
+
+	.genre-checkboxes::-webkit-scrollbar-thumb {
+		background: rgba(239, 76, 131, 0.3);
+		border-radius: 3px;
+	}
+
+	.genre-checkboxes::-webkit-scrollbar-thumb:hover {
+		background: rgba(239, 76, 131, 0.5);
+	}
+
+	.genre-checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.6rem;
+		border-radius: 6px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		background: transparent;
+		border: 1px solid transparent;
+		font-size: 0.85rem;
+	}
+
+	.genre-checkbox-label:hover {
+		background: rgba(239, 76, 131, 0.08);
+		border-color: rgba(239, 76, 131, 0.2);
+	}
+
+	.genre-checkbox-label input[type="checkbox"] {
+		width: 16px;
+		height: 16px;
+		cursor: pointer;
+		accent-color: var(--aq-color-primary);
+	}
+
+	.genre-checkbox-label span {
+		color: var(--aq-color-deep);
+		font-weight: 500;
+		user-select: none;
+	}
+
 	@media (max-width: 768px) {
 		.filter-controls {
 			flex-direction: column;
@@ -776,6 +1032,10 @@
 
 		.filter-group {
 			min-width: 100%;
+		}
+
+		.genre-checkboxes {
+			grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 		}
 	}
 </style>
