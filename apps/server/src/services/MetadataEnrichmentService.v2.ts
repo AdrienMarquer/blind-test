@@ -90,14 +90,17 @@ export class MetadataEnrichmentService {
 	private needsFallback(metadata: EnrichedTrackMetadata): boolean {
 		// Missing critical fields
 		if (!metadata.genre || !metadata.album || !metadata.year) {
+			console.log(`[Enrichment] needsFallback: YES - Missing fields (genre: ${!!metadata.genre}, album: ${!!metadata.album}, year: ${!!metadata.year})`);
 			return true;
 		}
 
 		// Low confidence match
 		if (metadata.confidence < 70) {
+			console.log(`[Enrichment] needsFallback: YES - Low confidence (${metadata.confidence})`);
 			return true;
 		}
 
+		console.log(`[Enrichment] needsFallback: NO - All fields present and confidence OK`);
 		return false;
 	}
 
@@ -231,6 +234,19 @@ export class MetadataEnrichmentService {
 		const bestMatch = providerResults[0];
 		let finalMatch = bestMatch;
 		let usedFallback = false;
+
+		// Debug: Log what Spotify returned
+		console.log(`[Enrichment] Primary provider result:`, {
+			title: bestMatch.title,
+			artist: bestMatch.artist,
+			genre: bestMatch.genre,
+			album: bestMatch.album,
+			year: bestMatch.year,
+			confidence: bestMatch.confidence,
+			hasGenre: !!bestMatch.genre,
+			hasAlbum: !!bestMatch.album,
+			hasYear: !!bestMatch.year
+		});
 
 		if (this.fallbackProvider && this.needsFallback(bestMatch)) {
 			console.log(`[Enrichment] Primary result needs fallback (genre: ${bestMatch.genre}, album: ${bestMatch.album}, year: ${bestMatch.year}, confidence: ${bestMatch.confidence}), trying fallback`);

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Song } from '@blind-test/shared';
+	import { CANONICAL_GENRES } from '@blind-test/shared';
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
 
@@ -129,7 +130,12 @@
 			<InputField placeholder="Album (optionnel)" bind:value={editedAlbum} />
 			<div class="edit-row">
 				<InputField placeholder="Année" bind:value={editedYear} />
-				<InputField placeholder="Genre" bind:value={editedGenre} />
+				<select class="genre-select" bind:value={editedGenre}>
+					<option value="">Sélectionner un genre</option>
+					{#each CANONICAL_GENRES as genre}
+						<option value={genre}>{genre}</option>
+					{/each}
+				</select>
 			</div>
 			<label class="niche-toggle">
 				<input type="checkbox" bind:checked={editedNiche} />
@@ -335,6 +341,29 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+	}
+
+	.genre-select {
+		width: 100%;
+		padding: 0.75rem 1rem;
+		border: 2px solid rgba(18, 43, 59, 0.15);
+		border-radius: 16px;
+		background: white;
+		font-size: 1rem;
+		font-family: inherit;
+		color: var(--aq-color-deep);
+		cursor: pointer;
+		transition: border-color 0.2s ease;
+	}
+
+	.genre-select:hover {
+		border-color: rgba(18, 43, 59, 0.25);
+	}
+
+	.genre-select:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+		box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
 	}
 
 	.edit-actions {

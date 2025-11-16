@@ -257,54 +257,20 @@
 			importingFromYouTube = true;
 			error = null;
 
-			// Step 1: Enrich metadata using Spotify + AI fallback
-			const enrichResponse = await fetch('http://localhost:3007/api/songs/youtube-enrich-batch', {
+			// Send raw video data to backend - enrichment is handled automatically
+			const response = await fetch('http://localhost:3007/api/songs/youtube-import-batch', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					videos: videos.map(v => ({
 						videoId: v.videoId,
 						title: v.title,
-						uploader: v.uploader || v.artist || 'Unknown',
-						durationInSeconds: v.durationInSeconds || 60
+						clipStart: v.clipStart,
+						clipDuration: v.clipDuration,
+						force: v.force,
+						artist: v.artist || v.uploader
 					}))
 				})
-			});
-
-			const enrichData = await enrichResponse.json();
-
-			if (!enrichResponse.ok) {
-				console.warn('Metadata enrichment failed, proceeding without enrichment:', enrichData.error);
-			}
-
-			// Step 2: Merge enriched metadata with video data
-			const enrichedVideos = videos.map((video, index) => {
-				const enrichedMetadata = enrichData.results?.[index];
-				return {
-					videoId: video.videoId,
-					title: video.title,
-					clipStart: video.clipStart,
-					clipDuration: video.clipDuration,
-					force: video.force,
-					// Attach enriched metadata if available
-					metadata: enrichedMetadata ? {
-						title: enrichedMetadata.title,
-						artist: enrichedMetadata.artist,
-						album: enrichedMetadata.album,
-						year: enrichedMetadata.year,
-						genre: enrichedMetadata.genre,
-						subgenre: enrichedMetadata.subgenre,
-						providerId: enrichedMetadata.providerId, // Spotify ID
-						confidence: enrichedMetadata.confidence
-					} : undefined
-				};
-			});
-
-			// Step 3: Create batch import job with enriched metadata
-			const response = await fetch('http://localhost:3007/api/songs/youtube-import-batch', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ videos: enrichedVideos })
 			});
 
 			const data = await response.json();

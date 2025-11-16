@@ -957,17 +957,9 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         clipStart: t.Optional(t.Number({ minimum: 0 })),
         clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })),
         force: t.Optional(t.Boolean()),
-        // Enriched metadata from /youtube-enrich-batch
-        metadata: t.Optional(t.Object({
-          title: t.String(),
-          artist: t.String(),
-          album: t.Optional(t.String()),
-          year: t.Optional(t.Number()),
-          genre: t.Optional(t.String()),
-          subgenre: t.Optional(t.String()),
-          providerId: t.Optional(t.String()), // Spotify ID
-          confidence: t.Number(),
-        })),
+        // Optional: user-provided metadata (artist, title)
+        // Enrichment is handled automatically in the backend during job processing
+        artist: t.Optional(t.String()),
       })),
     }),
   })

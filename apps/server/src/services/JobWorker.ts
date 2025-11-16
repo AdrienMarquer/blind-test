@@ -299,6 +299,33 @@ export class JobWorker {
 			totalVideos
 		});
 
+		// BATCH ENRICHMENT: Enrich all videos at once to minimize API calls
+		workerLogger.info('Starting batch metadata enrichment', {
+			jobId: job.id,
+			videoCount: totalVideos
+		});
+
+		const { metadataEnrichmentService } = await import('./MetadataEnrichmentService.v2');
+		const batchEnrichmentInput = videos.map(v => ({
+			title: v.title || 'Unknown',
+			uploader: v.artist || 'Unknown',
+			duration: 180, // Use default 3 minutes (duration is used as a matching hint, not critical for enrichment)
+			youtubeId: v.videoId
+		}));
+
+		const batchEnrichmentResults = await metadataEnrichmentService.enrichBatch(batchEnrichmentInput);
+
+		// Store enrichment results in a Map for quick lookup
+		const enrichmentMap = new Map();
+		videos.forEach((video, index) => {
+			enrichmentMap.set(video.videoId, batchEnrichmentResults[index]?.enriched || null);
+		});
+
+		workerLogger.info('Batch metadata enrichment complete', {
+			jobId: job.id,
+			enrichedCount: batchEnrichmentResults.length
+		});
+
 		const results: { success: boolean; video: any; error?: string }[] = [];
 
 		// Process videos sequentially (to avoid overwhelming the system)
@@ -349,6 +376,13 @@ export class JobWorker {
 				// Extract metadata
 				const metadata = await extractMetadata(downloadResult.filePath);
 
+				// Get pre-enriched metadata from batch enrichment
+				const enriched = enrichmentMap.get(video.videoId) || {
+					title: metadata.title,
+					artist: metadata.artist,
+					confidence: 0
+				};
+
 				// Get file stats
 				const stats = await stat(downloadResult.filePath);
 
@@ -358,7 +392,7 @@ export class JobWorker {
 				// Merge metadata using MetadataMerger utility
 				const { mergeMetadata, logEnrichmentStats } = await import('./MetadataMerger');
 				const finalMetadata = mergeMetadata(
-					video.metadata, // enriched metadata from batch enrichment
+					enriched, // enriched metadata from batch enrichment
 					{
 						title: metadata.title,
 						artist: metadata.artist,
@@ -372,7 +406,7 @@ export class JobWorker {
 				);
 
 				// Log enrichment statistics
-				logEnrichmentStats(video.metadata, finalMetadata, { jobId: job.id, videoId: video.videoId, source: 'youtube' });
+				logEnrichmentStats(enriched, finalMetadata, { jobId: job.id, videoId: video.videoId, source: 'youtube' });
 
 				// Check for duplicates (unless force flag is set)
 				if (!video.force) {

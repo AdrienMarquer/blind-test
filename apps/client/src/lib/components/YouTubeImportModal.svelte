@@ -81,7 +81,7 @@
 						videoId: v.videoId,
 						title: v.title,
 						uploader: v.uploader,
-						durationInSeconds: v.duration
+						durationInSeconds: v.durationSeconds
 					}))
 				})
 			});
@@ -137,7 +137,7 @@
 					title: v.title,
 					artist: v.uploader || 'Unknown',
 					uploader: v.uploader,
-					durationInSeconds: v.duration, // Pass duration for metadata enrichment
+					durationInSeconds: v.durationSeconds, // Pass duration for metadata enrichment
 					clipStart: SONG_CONFIG.DEFAULT_CLIP_START,
 					clipDuration: SONG_CONFIG.DEFAULT_CLIP_DURATION,
 					force: duplicateInfo?.isDuplicate ? true : undefined
