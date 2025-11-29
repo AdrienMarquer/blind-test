@@ -1,27 +1,28 @@
 #!/usr/bin/env bun
 /**
- * Sync local data (SQLite DB + uploads) to VPS
+ * Sync local data (SQLite DB + uploads) to VPS K8s pod
  *
  * Usage:
  *   bun scripts/sync-to-vps.ts [--dry-run]
  *
- * This script uses rsync to sync:
+ * This script uses kubectl cp to sync files directly into the running pod:
  * - SQLite database file (./apps/server/data/)
  * - Music files (./apps/server/uploads/)
- *
- * Requires SSH access to the VPS.
  */
 
 import { $ } from 'bun';
-import { existsSync } from 'fs';
-import path from 'path';
+import { existsSync, readdirSync } from 'fs';
 
 // Configuration
 const VPS_HOST = process.env.VPS_HOST || 'dani@51.178.37.88';
-const VPS_DATA_PATH = process.env.VPS_DATA_PATH || '/home/dani/blind-test-data';
+const K8S_NAMESPACE = 'adrien';
+const K8S_DEPLOYMENT = 'blind-test';
 
 const LOCAL_DATA_DIR = './apps/server/data';
 const LOCAL_UPLOADS_DIR = './apps/server/uploads';
+
+const REMOTE_DATA_PATH = '/app/apps/server/data';
+const REMOTE_UPLOADS_PATH = '/app/apps/server/uploads';
 
 // Parse arguments
 const dryRun = process.argv.includes('--dry-run');
@@ -45,10 +46,15 @@ function logStep(step: number, total: number, message: string) {
   log(`\n[${step}/${total}] ${message}`, colors.blue);
 }
 
+async function sshCmd(cmd: string): Promise<string> {
+  const result = await $`ssh ${VPS_HOST} "export KUBECONFIG=~/.kube/config && ${cmd}"`.quiet();
+  return result.stdout.toString().trim();
+}
+
 async function main() {
   console.log(`
 ${colors.bold}${colors.blue}========================================
-   Blind Test - Sync to VPS
+   Blind Test - Sync to VPS (K8s)
 ========================================${colors.reset}
 `);
 
@@ -57,24 +63,31 @@ ${colors.bold}${colors.blue}========================================
   }
 
   // Step 1: Validate local directories exist
-  logStep(1, 4, 'Validating local directories...');
+  logStep(1, 5, 'Validating local directories...');
 
   if (!existsSync(LOCAL_DATA_DIR)) {
     log(`  Data directory not found: ${LOCAL_DATA_DIR}`, colors.red);
     log('  Run the server first to create the database.', colors.gray);
     process.exit(1);
   }
-  log(`  ${colors.green}Data directory: OK${colors.reset}`);
+
+  const dbFile = `${LOCAL_DATA_DIR}/blind-test.db`;
+  if (!existsSync(dbFile)) {
+    log(`  Database file not found: ${dbFile}`, colors.red);
+    log('  Run the server first to create the database.', colors.gray);
+    process.exit(1);
+  }
+  log(`  ${colors.green}Database file: OK${colors.reset}`);
 
   if (!existsSync(LOCAL_UPLOADS_DIR)) {
     log(`  Uploads directory not found: ${LOCAL_UPLOADS_DIR}`, colors.yellow);
-    log('  Creating it...', colors.gray);
-    await $`mkdir -p ${LOCAL_UPLOADS_DIR}`;
+  } else {
+    const uploadFiles = readdirSync(LOCAL_UPLOADS_DIR).filter(f => !f.startsWith('.'));
+    log(`  ${colors.green}Uploads directory: OK (${uploadFiles.length} files)${colors.reset}`);
   }
-  log(`  ${colors.green}Uploads directory: OK${colors.reset}`);
 
   // Step 2: Test SSH connection
-  logStep(2, 4, 'Testing SSH connection...');
+  logStep(2, 5, 'Testing SSH connection...');
   try {
     await $`ssh -o ConnectTimeout=5 -o BatchMode=yes ${VPS_HOST} echo "connected"`.quiet();
     log(`  ${colors.green}SSH connection: OK${colors.reset}`);
@@ -84,52 +97,91 @@ ${colors.bold}${colors.blue}========================================
     process.exit(1);
   }
 
-  // Step 3: Ensure remote directories exist
-  logStep(3, 4, 'Ensuring remote directories exist...');
+  // Step 3: Get pod name
+  logStep(3, 5, 'Finding K8s pod...');
+  let podName: string;
   try {
-    await $`ssh ${VPS_HOST} "mkdir -p ${VPS_DATA_PATH}/data ${VPS_DATA_PATH}/uploads"`;
-    log(`  ${colors.green}Remote directories: OK${colors.reset}`);
+    podName = await sshCmd(`kubectl get pods -n ${K8S_NAMESPACE} -l app=${K8S_DEPLOYMENT} -o jsonpath='{.items[0].metadata.name}'`);
+    if (!podName) throw new Error('No pod found');
+    log(`  ${colors.green}Pod found: ${podName}${colors.reset}`);
   } catch (error) {
-    log(`  ${colors.red}Failed to create remote directories${colors.reset}`, colors.red);
+    log(`  ${colors.red}Failed to find pod${colors.reset}`, colors.red);
     process.exit(1);
   }
-
-  // Step 4: Sync data
-  logStep(4, 4, 'Syncing data...');
-
-  const rsyncFlags = [
-    '-avz',           // archive, verbose, compress
-    '--progress',     // show progress
-    '--stats',        // show statistics
-    '--exclude=.DS_Store',
-    '--exclude=*.db-wal',  // Exclude WAL files (they'll be flushed)
-    '--exclude=*.db-shm',  // Exclude shared memory files
-  ];
 
   if (dryRun) {
-    rsyncFlags.push('--dry-run');
+    log('\n  Would sync:', colors.yellow);
+    log(`    - ${dbFile} -> ${podName}:${REMOTE_DATA_PATH}/`, colors.gray);
+    const uploadFiles = existsSync(LOCAL_UPLOADS_DIR)
+      ? readdirSync(LOCAL_UPLOADS_DIR).filter(f => !f.startsWith('.'))
+      : [];
+    log(`    - ${uploadFiles.length} music files -> ${podName}:${REMOTE_UPLOADS_PATH}/`, colors.gray);
+
+    console.log(`
+${colors.bold}${colors.yellow}========================================
+   Dry run complete
+========================================${colors.reset}
+`);
+    log('Run without --dry-run to perform the actual sync.', colors.gray);
+    process.exit(0);
   }
 
-  // Sync database
-  log('\n  Syncing database...', colors.gray);
+  // Step 4: Sync database
+  logStep(4, 5, 'Syncing database...');
   try {
-    const dataResult = await $`rsync ${rsyncFlags} ${LOCAL_DATA_DIR}/ ${VPS_HOST}:${VPS_DATA_PATH}/data/`;
-    console.log(dataResult.stdout.toString());
+    // Copy local db to VPS temp location
+    log('  Copying database to VPS...', colors.gray);
+    await $`scp ${dbFile} ${VPS_HOST}:/tmp/blind-test.db`;
+
+    // Copy from VPS to pod
+    log('  Copying database to pod...', colors.gray);
+    await sshCmd(`kubectl cp /tmp/blind-test.db ${K8S_NAMESPACE}/${podName}:${REMOTE_DATA_PATH}/blind-test.db`);
+
+    // Cleanup temp file
+    await sshCmd('rm /tmp/blind-test.db');
+
+    log(`  ${colors.green}Database synced!${colors.reset}`);
   } catch (error: any) {
-    log(`  ${colors.red}Failed to sync database${colors.reset}`, colors.red);
-    console.error(error.message);
+    log(`  ${colors.red}Failed to sync database: ${error.message}${colors.reset}`, colors.red);
     process.exit(1);
   }
 
-  // Sync uploads
-  log('\n  Syncing music files...', colors.gray);
-  try {
-    const uploadsResult = await $`rsync ${rsyncFlags} ${LOCAL_UPLOADS_DIR}/ ${VPS_HOST}:${VPS_DATA_PATH}/uploads/`;
-    console.log(uploadsResult.stdout.toString());
-  } catch (error: any) {
-    log(`  ${colors.red}Failed to sync uploads${colors.reset}`, colors.red);
-    console.error(error.message);
-    process.exit(1);
+  // Step 5: Sync uploads
+  logStep(5, 5, 'Syncing music files...');
+  if (!existsSync(LOCAL_UPLOADS_DIR)) {
+    log('  No uploads directory, skipping...', colors.yellow);
+  } else {
+    const uploadFiles = readdirSync(LOCAL_UPLOADS_DIR).filter(f => !f.startsWith('.'));
+    if (uploadFiles.length === 0) {
+      log('  No music files to sync', colors.yellow);
+    } else {
+      log(`  Syncing ${uploadFiles.length} files...`, colors.gray);
+
+      try {
+        // Create tar archive
+        log('  Creating archive...', colors.gray);
+        await $`tar -cf /tmp/uploads.tar -C ${LOCAL_UPLOADS_DIR} .`;
+
+        // Copy to VPS
+        log('  Copying to VPS...', colors.gray);
+        await $`scp /tmp/uploads.tar ${VPS_HOST}:/tmp/uploads.tar`;
+
+        // Extract in pod
+        log('  Extracting in pod...', colors.gray);
+        await sshCmd(`kubectl cp /tmp/uploads.tar ${K8S_NAMESPACE}/${podName}:${REMOTE_UPLOADS_PATH}/uploads.tar`);
+        await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- tar -xf ${REMOTE_UPLOADS_PATH}/uploads.tar -C ${REMOTE_UPLOADS_PATH}`);
+        await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm ${REMOTE_UPLOADS_PATH}/uploads.tar`);
+
+        // Cleanup
+        await $`rm /tmp/uploads.tar`;
+        await sshCmd('rm /tmp/uploads.tar');
+
+        log(`  ${colors.green}${uploadFiles.length} files synced!${colors.reset}`);
+      } catch (error: any) {
+        log(`  ${colors.red}Failed to sync uploads: ${error.message}${colors.reset}`, colors.red);
+        process.exit(1);
+      }
+    }
   }
 
   // Done
@@ -139,13 +191,8 @@ ${colors.bold}${colors.green}========================================
 ========================================${colors.reset}
 `);
 
-  if (dryRun) {
-    log('This was a dry run. No files were actually transferred.', colors.yellow);
-    log('Run without --dry-run to perform the actual sync.', colors.gray);
-  } else {
-    log(`Data synced to: ${VPS_HOST}:${VPS_DATA_PATH}`, colors.green);
-    log('\nRemember to restart the server on VPS if it was running.', colors.gray);
-  }
+  log('Data synced to K8s pod. Changes will persist in PVC.', colors.green);
+  log('\nNote: If you added new songs, the app may need a restart to pick them up.', colors.gray);
 }
 
 main().catch((error) => {
