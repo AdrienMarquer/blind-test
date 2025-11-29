@@ -1,14 +1,14 @@
 /**
  * Buzz + Multiple Choice Mode
  *
- * Players race to buzz in, then identify title and artist from choices.
+ * Players race to buzz in, then identify artist and title from choices.
  *
  * Flow:
  * 1. Song plays
  * 2. Players can buzz at any time
  * 3. First buzz locks in that player
- * 4. Show 4 title choices (5s timer)
- * 5. If correct → show 4 artist choices
+ * 4. Show 4 artist choices (5s timer)
+ * 5. If correct → show 4 title choices
  * 6. If wrong → player locked out, others can buzz
  * 7. Song ends when both correct or timer expires
  */
@@ -134,48 +134,71 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
   async handleAnswer(answer: Answer, song: RoundSong): Promise<AnswerResult> {
     const isCorrect = this.validateAnswer(answer, song.song);
 
-    // Title answer
-    if (answer.type === 'title') {
+    // Artist answer (first question)
+    if (answer.type === 'artist') {
       if (isCorrect) {
-        // Correct title → award points, show artist choices
+        // Correct artist → award points, show title choices
         return {
           isCorrect: true,
-          pointsAwarded: this.defaultParams.pointsTitle!,
-          shouldShowArtistChoices: true,
+          pointsAwarded: this.defaultParams.pointsArtist!,
+          shouldShowTitleChoices: true,
           lockOutPlayer: false,
-          message: 'Correct title! Now guess the artist.',
+          message: 'Correct artist! Now guess the title.',
         };
       } else {
-        // Wrong title → lock out player, allow others to buzz
+        // Wrong artist → ALWAYS show title choices (title is optional)
+        // Player will be locked out AFTER answering title question
         return {
           isCorrect: false,
           pointsAwarded: this.defaultParams.penaltyEnabled! ? this.defaultParams.penaltyAmount! : 0,
-          shouldShowArtistChoices: false,
-          lockOutPlayer: true,
-          message: 'Wrong title. You are locked out.',
+          shouldShowTitleChoices: true, // Show title choices even if artist is wrong
+          lockOutPlayer: false, // Don't lock out yet - wait for title answer
+          message: 'Wrong artist. You can still try the title question.',
         };
       }
     }
 
-    // Artist answer
-    if (answer.type === 'artist') {
-      if (isCorrect) {
-        // Correct artist → award points, song ends
+    // Title answer (second question - bonus point)
+    if (answer.type === 'title') {
+      // Check if player's artist answer was correct
+      const artistAnswer = song.answers.find(a => a.playerId === answer.playerId && a.type === 'artist');
+      const artistWasCorrect = artistAnswer?.isCorrect || false;
+
+      if (isCorrect && artistWasCorrect) {
+        // Correct title AND artist was correct → award bonus point, song ends
         return {
           isCorrect: true,
-          pointsAwarded: this.defaultParams.pointsArtist!,
-          shouldShowArtistChoices: false,
+          pointsAwarded: this.defaultParams.pointsTitle!,
+          shouldShowTitleChoices: false,
           lockOutPlayer: false,
-          message: 'Correct artist! Song complete.',
+          message: 'Correct title! Bonus point earned.',
         };
-      } else {
-        // Wrong artist → lock out player (but keep title points)
+      } else if (isCorrect && !artistWasCorrect) {
+        // Correct title but artist was wrong → no points for title, lock out
+        return {
+          isCorrect: true, // Title was technically correct
+          pointsAwarded: 0, // But no points because artist was wrong
+          shouldShowTitleChoices: false,
+          lockOutPlayer: true,
+          message: 'Correct title, but no bonus points since artist was wrong.',
+        };
+      } else if (!isCorrect && artistWasCorrect) {
+        // Wrong title but artist was correct → lock out player (but keep artist points)
         return {
           isCorrect: false,
           pointsAwarded: 0,
-          shouldShowArtistChoices: false,
+          shouldShowTitleChoices: false,
           lockOutPlayer: true,
-          message: 'Wrong artist. You keep your title point but are locked out.',
+          message: 'Wrong title. You keep your artist point but are locked out.',
+        };
+      } else {
+        // Wrong title AND artist was wrong → lock out player
+        return {
+          isCorrect: false,
+          pointsAwarded: 0,
+          shouldShowTitleChoices: false,
+          lockOutPlayer: true,
+          message: 'Wrong title. You are locked out.',
         };
       }
     }
@@ -247,6 +270,9 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
    * Check if song should end
    *
    * Override to accept optional activePlayerCount for all-locked-out detection
+   *
+   * Song ends when the active player has answered BOTH artist and title questions.
+   * Title is optional bonus points, but player gets a chance to answer it.
    */
   shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean {
     // Song ends if finished status
@@ -254,11 +280,24 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
       return true;
     }
 
-    // Check if someone answered both title and artist correctly
-    const titleAnswer = song.answers.find(a => a.type === 'title' && a.isCorrect);
-    const artistAnswer = song.answers.find(a => a.type === 'artist' && a.isCorrect);
-    if (titleAnswer && artistAnswer) {
-      return true;
+    // Check if the active player has answered BOTH artist and title
+    if (song.activePlayerId) {
+      const playerAnswers = song.answers.filter(a => a.playerId === song.activePlayerId);
+      const hasArtistAnswer = playerAnswers.some(a => a.type === 'artist');
+      const hasTitleAnswer = playerAnswers.some(a => a.type === 'title');
+
+      // Only end if the active player has completed both questions
+      if (hasArtistAnswer && hasTitleAnswer) {
+        const artistCorrect = playerAnswers.find(a => a.type === 'artist')?.isCorrect;
+        const titleCorrect = playerAnswers.find(a => a.type === 'title')?.isCorrect;
+
+        this.modeLogger.debug('Active player completed both questions - ending song', {
+          playerId: song.activePlayerId,
+          artistCorrect,
+          titleCorrect
+        });
+        return true;
+      }
     }
 
     // Check if all active players are locked out (nobody left to buzz)
@@ -277,41 +316,41 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
 
   /**
    * Get buzz payload for WebSocket broadcast
-   * This mode requires titleQuestion to be available
+   * This mode requires artistQuestion to be available (artist first, then title)
    */
   getBuzzPayload(song: RoundSong): Record<string, any> | null {
-    // Validate that titleQuestion exists (should have been generated in startSong)
-    if (!song.titleQuestion || !song.titleQuestion.choices || song.titleQuestion.choices.length === 0) {
-      this.modeLogger.error('Cannot create buzz payload - no title question available', {
+    // Validate that artistQuestion exists (should have been generated in startSong)
+    if (!song.artistQuestion || !song.artistQuestion.choices || song.artistQuestion.choices.length === 0) {
+      this.modeLogger.error('Cannot create buzz payload - no artist question available', {
         songId: song.song.id,
         songTitle: song.song.title,
-        hasTitleQuestion: !!song.titleQuestion
+        hasArtistQuestion: !!song.artistQuestion
       });
       return null; // Reject the buzz
     }
 
-    if (song.titleQuestion.choices.length !== 4) {
-      this.modeLogger.warn('Title question has incorrect number of choices', {
+    if (song.artistQuestion.choices.length !== 4) {
+      this.modeLogger.warn('Artist question has incorrect number of choices', {
         songId: song.song.id,
-        choicesCount: song.titleQuestion.choices.length
+        choicesCount: song.artistQuestion.choices.length
       });
     }
 
-    this.modeLogger.debug('Creating buzz payload with title question', {
+    this.modeLogger.debug('Creating buzz payload with artist question', {
       songId: song.song.id,
-      titleChoicesCount: song.titleQuestion.choices.length
+      artistChoicesCount: song.artistQuestion.choices.length
     });
 
     return {
-      titleQuestion: song.titleQuestion
+      artistQuestion: song.artistQuestion // Send artist choices as artistQuestion
     };
   }
 
   /**
-   * Buzz and choice mode does NOT pause the timer on buzz
-   * Players get automatic answer timer instead
+   * Buzz and choice mode pauses the timer on buzz
+   * Players get automatic answer timer while song is paused
    */
   shouldPauseOnBuzz(): boolean {
-    return false;
+    return true;
   }
 }

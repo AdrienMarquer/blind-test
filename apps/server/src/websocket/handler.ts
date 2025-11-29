@@ -102,9 +102,6 @@ export function handleMessage(
       case 'game:resume':
         handleGameResume(ws, roomId);
         break;
-      case 'game:skip':
-        handleGameSkip(ws, roomId);
-        break;
       default:
         // Type exhaustiveness check - TypeScript will error if we miss a case
         const _exhaustive: never = parsed;
@@ -623,64 +620,3 @@ async function handleGameResume(
   }
 }
 
-async function handleGameSkip(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
-  roomId: string
-) {
-  // Verify master authorization
-  if (!await isMaster(ws, roomId)) {
-    sendMessage(ws, {
-      type: 'error',
-      data: { message: 'Unauthorized: Only the room master can skip the song' }
-    });
-    return;
-  }
-
-  wsLogger.info('Master skipping song', { roomId });
-
-  // Get current round and song
-  const round = gameStateManager.getCurrentRound(roomId);
-  if (!round) {
-    wsLogger.warn('Cannot skip - no active round', { roomId });
-    sendMessage(ws, {
-      type: 'error',
-      data: { message: 'No active round to skip' }
-    });
-    return;
-  }
-
-  const currentSongIndex = round.currentSongIndex;
-  if (currentSongIndex === undefined || currentSongIndex === null) {
-    wsLogger.warn('Cannot skip - no active song', { roomId });
-    sendMessage(ws, {
-      type: 'error',
-      data: { message: 'No active song to skip' }
-    });
-    return;
-  }
-
-  const song = round.songs[currentSongIndex];
-  if (!song || song.status === 'finished') {
-    wsLogger.warn('Cannot skip - song already finished', { roomId, songIndex: currentSongIndex });
-    return;
-  }
-
-  wsLogger.info('Ending current song due to skip', {
-    roomId,
-    roundIndex: round.index,
-    songIndex: currentSongIndex,
-    songTitle: song.song.title
-  });
-
-  // End the current song (will automatically start next song after 5 second delay)
-  await gameService.endSong(roomId, round, currentSongIndex);
-
-  // Broadcast skip confirmation
-  broadcastToRoom(roomId, {
-    type: 'game:skipped',
-    data: {
-      songIndex: currentSongIndex,
-      timestamp: Date.now()
-    }
-  });
-}

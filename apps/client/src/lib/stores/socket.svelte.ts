@@ -28,11 +28,23 @@ const SERVER_URL = getServerUrl();
  */
 export class GameEvents {
   // Song events
+  songPreparing = $state<{ songIndex: number; genre?: string; year?: number; countdown: number } | null>(null);
   songStarted = $state<{ songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all'; songTitle?: string; songArtist?: string } | null>(null);
-  songEnded = $state<{ songIndex: number; correctTitle: string; correctArtist: string } | null>(null);
+  songEnded = $state<{
+    songIndex: number;
+    correctTitle: string;
+    correctArtist: string;
+    winners?: Array<{
+      playerId: string;
+      playerName: string;
+      answersCorrect: ('title' | 'artist')[];
+      pointsEarned: number;
+      timeToAnswer: number;
+    }>;
+  } | null>(null);
 
   // Player events (gameplay)
-  playerBuzzed = $state<{ playerId: string; playerName: string; songIndex: number; modeType: import('@blind-test/shared').ModeType; manualValidation?: boolean; titleQuestion?: MediaQuestion } | null>(null);
+  playerBuzzed = $state<{ playerId: string; playerName: string; songIndex: number; modeType: import('@blind-test/shared').ModeType; manualValidation?: boolean; artistQuestion?: MediaQuestion } | null>(null);
   buzzRejected = $state<{ playerId: string; reason: string } | null>(null);
   answerResult = $state<{
     playerId: string;
@@ -40,10 +52,10 @@ export class GameEvents {
     answerType: 'title' | 'artist';
     isCorrect: boolean;
     pointsAwarded: number;
-    shouldShowArtistChoices?: boolean;
+    shouldShowTitleChoices?: boolean;
     lockOutPlayer?: boolean;
   } | null>(null);
-  artistChoices = $state<{ playerId: string; artistQuestion: MediaQuestion } | null>(null);
+  titleChoices = $state<{ playerId: string; titleQuestion: MediaQuestion } | null>(null);
 
   // Round events
   roundStarted = $state<{ roundIndex: number; songCount: number; modeType: string } | null>(null);
@@ -60,7 +72,6 @@ export class GameEvents {
   // Game control events
   gamePaused = $state<{ timestamp: number } | null>(null);
   gameResumed = $state<{ timestamp: number } | null>(null);
-  gameSkipped = $state<{ timestamp: number } | null>(null);
 
   /**
    * Clear an event after it's been processed
@@ -290,6 +301,10 @@ export class RoomSocket {
         break;
 
       // Song Events - emit to reactive stream
+      case 'song:preparing':
+        this.events.songPreparing = message.data;
+        break;
+
       case 'song:started':
         this.events.songStarted = message.data;
         break;
@@ -313,8 +328,8 @@ export class RoomSocket {
         this.events.answerResult = message.data;
         break;
 
-      case 'choices:artist':
-        this.events.artistChoices = message.data;
+      case 'choices:title':
+        this.events.titleChoices = message.data;
         break;
 
       // Master Controls - emit to reactive stream
@@ -324,10 +339,6 @@ export class RoomSocket {
 
       case 'game:resumed':
         this.events.gameResumed = message.data;
-        break;
-
-      case 'game:skipped':
-        this.events.gameSkipped = message.data;
         break;
 
       // Timer Events
@@ -419,10 +430,6 @@ export class RoomSocket {
 
   resumeGame() {
     this.send({ type: 'game:resume' });
-  }
-
-  skipSong() {
-    this.send({ type: 'game:skip' });
   }
 
   // ========================================================================

@@ -35,6 +35,14 @@
 
 	// Sort scores by rank
 	let sortedScores = $derived(scores.slice().sort((a, b) => a.rank - b.rank));
+
+	// Loading state for starting next round
+	let isStartingRound = $state(false);
+
+	function handleStartNextRound() {
+		isStartingRound = true;
+		onStartNextRound();
+	}
 </script>
 
 <div class="between-rounds">
@@ -87,8 +95,18 @@
 				</div>
 
 				{#if isMaster}
-					<button class="start-next-btn" onclick={onStartNextRound}>
-						Lancer la manche {nextRoundIndex + 1}
+					<button
+						class="start-next-btn"
+						class:loading={isStartingRound}
+						onclick={handleStartNextRound}
+						disabled={isStartingRound}
+					>
+						{#if isStartingRound}
+							<span class="btn-spinner"></span>
+							Chargement...
+						{:else}
+							Lancer la manche {nextRoundIndex + 1}
+						{/if}
 					</button>
 				{:else}
 					<div class="waiting-message">
@@ -211,9 +229,30 @@
 		transition: transform 150ms ease, box-shadow 150ms ease;
 	}
 
-	.start-next-btn:hover {
+	.start-next-btn:hover:not(:disabled) {
 		transform: translateY(-2px);
 		box-shadow: 0 8px 20px rgba(239, 76, 131, 0.3);
+	}
+
+	.start-next-btn:disabled {
+		cursor: not-allowed;
+		opacity: 0.8;
+	}
+
+	.start-next-btn.loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+	}
+
+	.btn-spinner {
+		width: 18px;
+		height: 18px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: #fff;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
 	}
 
 	.subtitle {

@@ -300,7 +300,7 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
 
     expect(result.isCorrect).toBe(true)
     expect(result.pointsAwarded).toBe(1)
-    expect(result.shouldShowArtistChoices).toBe(true)
+    expect(result.shouldShowTitleChoices).toBe(true)
     expect(result.lockOutPlayer).toBe(false)
   })
 
@@ -322,7 +322,7 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
 
     expect(result.isCorrect).toBe(false)
     expect(result.pointsAwarded).toBe(0)
-    expect(result.shouldShowArtistChoices).toBe(false)
+    expect(result.shouldShowTitleChoices).toBe(false)
     expect(result.lockOutPlayer).toBe(true)
   })
 
@@ -342,7 +342,7 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
 
     const result = await mode.handleAnswer(titleAnswer, song)
 
-    expect(result.shouldShowArtistChoices).toBe(true)
+    expect(result.shouldShowTitleChoices).toBe(true)
   })
 
   test('validates correct artist choice', async () => {
@@ -363,7 +363,7 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
 
     expect(result.isCorrect).toBe(true)
     expect(result.pointsAwarded).toBe(1)
-    expect(result.shouldShowArtistChoices).toBe(false)
+    expect(result.shouldShowTitleChoices).toBe(false)
     expect(result.lockOutPlayer).toBe(false)
   })
 

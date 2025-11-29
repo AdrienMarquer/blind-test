@@ -57,7 +57,7 @@ export class TextInputMode extends BaseModeHandler {
     return {
       isCorrect,
       pointsAwarded,
-      shouldShowArtistChoices: false,
+      shouldShowTitleChoices: false,
       lockOutPlayer: false, // No lockouts in text input mode
     };
   }

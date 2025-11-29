@@ -1,11 +1,10 @@
 {
   "name": "blind-test",
   "version": "1.0.0",
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "bun run dev:server & bun run dev:client",
     "dev:server": "cd apps/server && bun run dev",
@@ -19,7 +18,8 @@
     "db:migrate": "cd apps/server && bunx drizzle-kit migrate",
     "db:studio": "cd apps/server && bunx drizzle-kit studio"
   },
-  "devDependencies": {
-    "typescript": "^5.3.3"
-  }
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

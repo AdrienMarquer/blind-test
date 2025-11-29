@@ -100,7 +100,7 @@ export class FastBuzzMode extends BaseModeHandler {
     return {
       isCorrect,
       pointsAwarded,
-      shouldShowArtistChoices: false,
+      shouldShowTitleChoices: false,
       lockOutPlayer,
     };
   }

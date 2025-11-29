@@ -394,6 +394,12 @@ export type ServerMessage =
   | { type: 'game:ended'; data: { finalScores: FinalScore[] } }
 
   // Song Events
+  | { type: 'song:preparing'; data: {
+      songIndex: number;
+      genre?: string;
+      year?: number;
+      countdown: number; // Duration of countdown in seconds (6 seconds)
+    } }
   | { type: 'song:started'; data: {
       songIndex: number;
       duration: number;
@@ -405,10 +411,21 @@ export type ServerMessage =
       songTitle?: string;
       songArtist?: string;
     } }
-  | { type: 'song:ended'; data: { songIndex: number; correctTitle: string; correctArtist: string } }
+  | { type: 'song:ended'; data: {
+      songIndex: number;
+      correctTitle: string;
+      correctArtist: string;
+      winners?: Array<{
+        playerId: string;
+        playerName: string;
+        answersCorrect: ('title' | 'artist')[];
+        pointsEarned: number;
+        timeToAnswer: number;
+      }>;
+    } }
 
   // Gameplay
-  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; songIndex: number; modeType: ModeType; manualValidation?: boolean; titleQuestion?: MediaQuestion } }
+  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; songIndex: number; modeType: ModeType; manualValidation?: boolean; artistQuestion?: MediaQuestion } }
   | { type: 'buzz:rejected'; data: { playerId: string; reason: string } }
   | { type: 'answer:result'; data: {
       playerId: string;
@@ -416,15 +433,14 @@ export type ServerMessage =
       answerType: 'title' | 'artist';
       isCorrect: boolean;
       pointsAwarded: number;
-      shouldShowArtistChoices?: boolean;
+      shouldShowTitleChoices?: boolean;
       lockOutPlayer?: boolean;
     } }
-  | { type: 'choices:artist'; data: { playerId: string; artistQuestion: MediaQuestion } }
+  | { type: 'choices:title'; data: { playerId: string; titleQuestion: MediaQuestion } }
 
   // Master Controls
   | { type: 'game:paused'; data: { timestamp: number } }
   | { type: 'game:resumed'; data: { timestamp: number } }
-  | { type: 'game:skipped'; data: { timestamp: number } }
 
   // Timers
   | { type: 'timer:song'; data: { timeRemaining: number } }
@@ -456,8 +472,7 @@ export type ClientMessage =
 
   // Master Controls
   | { type: 'game:pause' }
-  | { type: 'game:resume' }
-  | { type: 'game:skip' };
+  | { type: 'game:resume' };
 
 /**
  * Extract data type for a specific message type

@@ -21,7 +21,7 @@ export interface AnswerResult {
   message?: string;
 
   // Buzz + Choice specific
-  shouldShowArtistChoices?: boolean; // If title correct, show artist choices
+  shouldShowTitleChoices?: boolean; // If artist answered, show title choices
   lockOutPlayer?: boolean;           // If wrong, lock player out
 }
 

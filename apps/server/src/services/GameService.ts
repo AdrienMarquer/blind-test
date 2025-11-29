@@ -135,6 +135,46 @@ export class GameService {
       throw new Error(`Song ${songIndex} not found in round ${round.index}`);
     }
 
+    // Only skip loading screen for the very first song of the very first round
+    // All other cases (between songs, between rounds) should show loading screen
+    const isVeryFirstSong = songIndex === 0 && round.index === 0;
+
+    if (!isVeryFirstSong) {
+      // Show loading screen for: between songs, or first song of new rounds
+      gameLogger.info('Broadcasting song:preparing event', {
+        roomId,
+        roundIndex: round.index,
+        songIndex,
+        genre: song.song.genre,
+        year: song.song.year,
+        reason: songIndex === 0 ? 'new_round_start' : 'between_songs'
+      });
+
+      broadcastToRoom(roomId, {
+        type: 'song:preparing',
+        data: {
+          songIndex,
+          genre: song.song.genre,
+          year: song.song.year,
+          countdown: 6, // 6 seconds countdown
+        },
+      });
+
+      // Wait 6 seconds for the loading screen
+      await new Promise(resolve => setTimeout(resolve, 6000));
+
+      gameLogger.info('Loading screen complete, starting song playback', {
+        roomId,
+        songIndex
+      });
+    } else {
+      gameLogger.info('Very first song of game - skipping loading screen for immediate start', {
+        roomId,
+        roundIndex: round.index,
+        songIndex
+      });
+    }
+
     // Get mode and media handlers
     const modeHandler = modeRegistry.get(round.modeType);
     const allSongs = round.songs.map(rs => rs.song);
@@ -236,7 +276,7 @@ export class GameService {
             answerType: 'title' as const,
             isCorrect: false,
             pointsAwarded: 0,
-            shouldShowArtistChoices: false,
+            shouldShowTitleChoices: false,
             lockOutPlayer: true,
           },
         });
@@ -444,43 +484,43 @@ export class GameService {
         answerType: answer.type,
         isCorrect: result.isCorrect,
         pointsAwarded: result.pointsAwarded,
-        shouldShowArtistChoices: result.shouldShowArtistChoices,
+        shouldShowTitleChoices: result.shouldShowTitleChoices,
         lockOutPlayer: result.lockOutPlayer,
       },
     });
 
-    // Check if we should show artist question
-    if (result.shouldShowArtistChoices) {
-      if (!song.artistQuestion || !song.artistQuestion.choices || song.artistQuestion.choices.length === 0) {
-        gameLogger.error('CRITICAL: Artist question not available but shouldShowArtistChoices is true', {
+    // Check if we should show second question (title question after artist answer)
+    if (result.shouldShowTitleChoices) {
+      if (!song.titleQuestion || !song.titleQuestion.choices || song.titleQuestion.choices.length === 0) {
+        gameLogger.error('CRITICAL: Title question not available but shouldShowTitleChoices is true', {
           roomId,
           playerId,
           songId: song.song.id,
           songTitle: song.song.title
         });
-        throw new Error('Artist question should have been generated in startSong');
+        throw new Error('Title question should have been generated in startSong');
       }
 
-      if (song.artistQuestion.choices.length !== 4) {
-        gameLogger.warn('Artist question choices count is not 4, game may be corrupted', {
+      if (song.titleQuestion.choices.length !== 4) {
+        gameLogger.warn('Title question choices count is not 4, game may be corrupted', {
           roomId,
-          artistChoicesCount: song.artistQuestion.choices.length
+          titleChoicesCount: song.titleQuestion.choices.length
         });
       }
 
-      gameLogger.info('Sending artist question after correct title', {
+      gameLogger.info('Sending title question after correct artist', {
         roomId,
         playerId,
         playerName,
-        choicesCount: song.artistQuestion.choices.length,
-        correctArtist: song.song.artist || 'Unknown Artist'
+        choicesCount: song.titleQuestion.choices.length,
+        correctTitle: song.song.title
       });
 
       broadcastToRoom(roomId, {
-        type: 'choices:artist',
+        type: 'choices:title',
         data: {
           playerId,
-          artistQuestion: song.artistQuestion,
+          titleQuestion: song.titleQuestion, // Send title choices as titleQuestion
         },
       });
     }
@@ -544,13 +584,17 @@ export class GameService {
     // Update state
     gameStateManager.updateRound(roomId, round);
 
-    // Broadcast song ended with correct answer reveal
+    // Calculate winners for this song
+    const winners = await this.calculateSongWinners(roomId, song);
+
+    // Broadcast song ended with correct answer reveal and winners
     broadcastToRoom(roomId, {
       type: 'song:ended',
       data: {
         songIndex,
         correctTitle: song.song.title,
         correctArtist: song.song.artist,
+        winners: winners.length > 0 ? winners : undefined,
       },
     });
 
@@ -599,6 +643,65 @@ export class GameService {
   }
 
   /**
+   * Calculate winners for a song based on correct answers
+   */
+  private async calculateSongWinners(
+    roomId: string,
+    song: RoundSong
+  ): Promise<Array<{
+    playerId: string;
+    playerName: string;
+    answersCorrect: ('title' | 'artist')[];
+    pointsEarned: number;
+    timeToAnswer: number;
+  }>> {
+    // Group correct answers by player
+    const correctAnswersByPlayer = new Map<string, Answer[]>();
+
+    for (const answer of song.answers) {
+      if (answer.isCorrect) {
+        const existing = correctAnswersByPlayer.get(answer.playerId) || [];
+        existing.push(answer);
+        correctAnswersByPlayer.set(answer.playerId, existing);
+      }
+    }
+
+    // No winners if no correct answers
+    if (correctAnswersByPlayer.size === 0) {
+      return [];
+    }
+
+    // Build winner objects
+    const winners = [];
+    for (const [playerId, answers] of correctAnswersByPlayer.entries()) {
+      const player = await playerRepository.findById(playerId);
+      if (!player) continue;
+
+      const pointsEarned = answers.reduce((sum, a) => sum + a.pointsAwarded, 0);
+      const answersCorrect = answers.map(a => a.type);
+      const timeToAnswer = Math.min(...answers.map(a => a.timeToAnswer));
+
+      winners.push({
+        playerId,
+        playerName: player.name,
+        answersCorrect,
+        pointsEarned,
+        timeToAnswer,
+      });
+    }
+
+    // Sort by points (descending), then by time (ascending - faster is better)
+    winners.sort((a, b) => {
+      if (b.pointsEarned !== a.pointsEarned) {
+        return b.pointsEarned - a.pointsEarned;
+      }
+      return a.timeToAnswer - b.timeToAnswer;
+    });
+
+    return winners;
+  }
+
+  /**
    * End a round
    */
   async endRound(roomId: string, round: Round): Promise<void> {
@@ -631,9 +734,11 @@ export class GameService {
     });
 
     // Check if there are more rounds
-    const session = await gameSessionRepository.findById(round.sessionId);
+    // IMPORTANT: Use in-memory state manager, NOT database repository
+    // The database version has empty songs[] arrays - answers are only in memory
+    const session = gameStateManager.getActiveSession(roomId);
     if (!session) {
-      gameLogger.error('Session not found for round', { roundId: round.id, sessionId: round.sessionId });
+      gameLogger.error('Session not found for round', { roomId, roundId: round.id });
       return;
     }
 

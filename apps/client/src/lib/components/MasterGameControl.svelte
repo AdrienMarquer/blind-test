@@ -23,6 +23,12 @@
 	// Manual validation state
 	let pendingValidation = $state<{ playerId: string; playerName: string; songIndex: number } | null>(null);
 
+	// Loading screen state
+	let showLoadingScreen = $state(false);
+	let loadingCountdown = $state(6);
+	let loadingGenre = $state<string | undefined>(undefined);
+	let countdownInterval: number | null = null;
+
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
 
@@ -46,17 +52,6 @@
 		} else {
 			socket.resumeGame();
 		}
-	}
-
-	function handleSkip() {
-		// Stop current song
-		if (audioElement) {
-			audioElement.pause();
-			audioElement.currentTime = 0;
-			audioElement.src = '';
-		}
-
-		socket.skipSong();
 	}
 
 	function formatAnswerLabel(label: 'title' | 'artist', { withArticle = false } = {}) {
@@ -134,20 +129,65 @@
 		}
 	});
 
+	// Subscribe to song:preparing event (loading screen)
+	$effect(() => {
+		const event = socket.events.songPreparing;
+		if (event) {
+			console.log('[Master] 🔄 SONG PREPARING - Showing loading screen', {
+				songIndex: event.songIndex,
+				genre: event.genre,
+				year: event.year,
+				countdown: event.countdown
+			});
+
+			// Show loading screen
+			showLoadingScreen = true;
+			loadingCountdown = event.countdown;
+			loadingGenre = event.genre;
+
+			// Clear any existing countdown interval
+			if (countdownInterval !== null) {
+				clearInterval(countdownInterval);
+			}
+
+			// Start countdown timer (decrement every second) - purely visual
+			countdownInterval = window.setInterval(() => {
+				loadingCountdown--;
+				if (loadingCountdown <= 0) {
+					// Countdown finished - hide loading screen
+					if (countdownInterval !== null) {
+						clearInterval(countdownInterval);
+						countdownInterval = null;
+					}
+					showLoadingScreen = false;
+				}
+			}, 1000);
+
+			socket.events.clear('songPreparing');
+		}
+	});
+
 	// Subscribe to song:started event
 	$effect(() => {
 		const event = socket.events.songStarted;
 		if (event) {
-			console.log('[Master] 🆕 NEW SONG STARTED', {
+			console.log('[Master] 🆕 SONG STARTED - Server triggered playback', {
 				songIndex: event.songIndex,
 				songTitle: event.songTitle,
 				songArtist: event.songArtist,
 				duration: event.duration
 			});
 
+			// Clear loading screen immediately (server controls timing)
+			if (countdownInterval !== null) {
+				clearInterval(countdownInterval);
+				countdownInterval = null;
+			}
+			showLoadingScreen = false;
+
+			// Update song info
 			currentSong = event.songIndex;
 			activePlayerName = '';
-			// Master sees the actual song title and artist
 			currentTitle = event.songTitle || `Morceau ${event.songIndex + 1}`;
 			currentArtist = event.songArtist || '';
 
@@ -180,6 +220,7 @@
 			} else {
 				console.log(`[Master] Not playing audio (mode: ${event.audioPlayback})`);
 			}
+
 			socket.events.clear('songStarted');
 		}
 	});
@@ -269,7 +310,8 @@
 		if (event) {
 			console.log('[Master] 🏁 SONG ENDED - Revealing answer', {
 				correctTitle: event.correctTitle,
-				correctArtist: event.correctArtist
+				correctArtist: event.correctArtist,
+				winners: event.winners
 			});
 
 			// Clear any pending validation
@@ -281,13 +323,25 @@
 
 			console.log('[Master] 👀 Answer reveal phase (5 seconds)');
 
-			// Show correct answer banner
+			// Show correct answer banner with winner info
 			if (statusTimeout) {
 				clearTimeout(statusTimeout);
 			}
+
+			let statusText = `✅ Réponse correcte : « ${event.correctTitle} » par ${event.correctArtist}`;
+
+			// Add winner information if available
+			if (event.winners && event.winners.length > 0) {
+				const winner = event.winners[0]; // Top winner
+				const answerText = winner.answersCorrect.map((type: 'title' | 'artist') =>
+					type === 'title' ? 'titre' : 'artiste'
+				).join(' + ');
+				statusText += `\n🏆 ${winner.playerName} (+${winner.pointsEarned} pt${winner.pointsEarned !== 1 ? 's' : ''}, ${answerText})`;
+			}
+
 			statusMessage = {
 				type: 'info',
-				text: `✅ Réponse correcte : « ${event.correctTitle} » par ${event.correctArtist}`
+				text: statusText
 			};
 
 			// Clear after 5 seconds when next song starts
@@ -303,6 +357,13 @@
 		const event = socket.events.gamePaused;
 		if (event) {
 			isPaused = true;
+
+			// Pause audio playback when game is paused
+			if (audioElement && !audioElement.paused) {
+				audioElement.pause();
+				console.log('[Master Audio] Paused due to game pause');
+			}
+
 			socket.events.clear('gamePaused');
 		}
 	});
@@ -312,6 +373,15 @@
 		const event = socket.events.gameResumed;
 		if (event) {
 			isPaused = false;
+
+			// Resume audio playback when game is resumed
+			if (audioElement && audioElement.paused && audioElement.src) {
+				audioElement.play().catch(err => {
+					console.error('[Master Audio] Failed to resume:', err);
+				});
+				console.log('[Master Audio] Resumed after game resume');
+			}
+
 			socket.events.clear('gameResumed');
 		}
 	});
@@ -343,6 +413,23 @@
 </script>
 
 <div class="master-control">
+	<!-- Loading Screen -->
+	{#if showLoadingScreen}
+		<div class="loading-screen">
+			<div class="loading-content">
+				<div class="countdown-circle">
+					<span class="countdown-number">{loadingCountdown}</span>
+				</div>
+				<h2 class="loading-title">Prochaine musique</h2>
+				{#if loadingGenre}
+					<div class="loading-info">
+						<span class="info-badge genre">{loadingGenre}</span>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
 	<div class="control-header">
 		<h2>🎮 Contrôles maître</h2>
 		<div class="song-progress">
@@ -399,9 +486,6 @@
 		<button class="control-btn pause-btn" onclick={handlePause}>
 			{isPaused ? '▶️ Reprendre' : '⏸️ Pause'}
 		</button>
-		<button class="control-btn skip-btn" onclick={handleSkip}>
-			⏭️ Passer le morceau
-		</button>
 		<button class="control-btn end-btn" onclick={handleEndGame}>
 			🛑 Terminer la partie
 		</button>
@@ -424,6 +508,7 @@
 
 <style>
 	.master-control {
+		position: relative;
 		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
 		border-radius: 32px;
 		padding: 1.75rem;
@@ -489,7 +574,6 @@
 	}
 
 	.pause-btn { background: rgba(255,255,255,0.2); color:#fff; }
-	.skip-btn { background: rgba(255,255,255,0.2); color:#fff; }
 	.end-btn { background: rgba(18,43,59,0.2); }
 
 	.status-indicators {
@@ -599,5 +683,107 @@
 
 	.validate-btn.wrong:hover {
 		box-shadow: 0 6px 20px rgba(248, 113, 113, 0.4);
+	}
+
+	/* Loading Screen */
+	.loading-screen {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: linear-gradient(135deg, #ef4c83, #f8c027);
+		border-radius: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 100;
+		animation: fadeIn 0.3s ease-in-out;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: scale(0.95);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	.loading-content {
+		text-align: center;
+		color: #fff;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.5rem;
+	}
+
+	.countdown-circle {
+		width: 160px;
+		height: 160px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.25);
+		border: 5px solid rgba(255, 255, 255, 0.6);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		animation: pulse 1s ease-in-out infinite;
+		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+	}
+
+	@keyframes pulse {
+		0%, 100% {
+			transform: scale(1);
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(255, 255, 255, 0.4);
+		}
+		50% {
+			transform: scale(1.05);
+			box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3), 0 0 0 20px rgba(255, 255, 255, 0);
+		}
+	}
+
+	.countdown-number {
+		font-size: 5rem;
+		font-weight: 700;
+		color: #fff;
+		text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	}
+
+	.loading-title {
+		font-size: 2rem;
+		font-weight: 700;
+		margin: 0;
+		color: #fff;
+		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	.loading-info {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.info-badge {
+		padding: 0.65rem 1.5rem;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.25);
+		color: #fff;
+		font-weight: 600;
+		font-size: 1.05rem;
+		backdrop-filter: blur(10px);
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	}
+
+	.info-badge.genre {
+		background: rgba(255, 255, 255, 0.3);
+	}
+
+	.info-badge.year {
+		background: rgba(255, 255, 255, 0.3);
 	}
 </style>
