@@ -197,8 +197,8 @@ const app = new Elysia()
     : (app) => app  // No-op if client not built
   )
 
-  // Fallback for SPA routing - serve index.html for all non-API routes
-  .get('*', async ({ set }) => {
+  // Fallback for SPA routing - serve index.html for non-file routes
+  .get('*', async ({ set, path: reqPath }) => {
     if (!hasClientBuild) {
       set.status = 503;
       return {
@@ -207,11 +207,38 @@ const app = new Elysia()
       };
     }
 
-    // Read and return index.html content for client-side routing
+    // Check if this is a request for a static file
+    const filePath = path.join(clientBuildPath, reqPath);
+    const file = Bun.file(filePath);
+
+    if (await file.exists()) {
+      // Serve the static file with correct MIME type
+      const ext = path.extname(reqPath).toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        '.js': 'application/javascript',
+        '.mjs': 'application/javascript',
+        '.css': 'text/css',
+        '.html': 'text/html',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.webp': 'image/webp',
+        '.ico': 'image/x-icon',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2',
+        '.ttf': 'font/ttf',
+      };
+      set.headers['content-type'] = mimeTypes[ext] || 'application/octet-stream';
+      return file;
+    }
+
+    // Serve index.html for client-side routing (SPA fallback)
     const indexPath = path.join(clientBuildPath, 'index.html');
-    const file = Bun.file(indexPath);
     set.headers['content-type'] = 'text/html; charset=utf-8';
-    return await file.text();
+    return await Bun.file(indexPath).text();
   });
 
 // Start server
