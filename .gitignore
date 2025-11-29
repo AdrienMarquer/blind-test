@@ -54,3 +54,4 @@ apps/server/db/
 .playwright-mcp# SQLite database files
 apps/server/data/*.db
 apps/server/data/*.db-*
+.playwright-mcp/
