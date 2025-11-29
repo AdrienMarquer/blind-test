@@ -11,7 +11,7 @@ COPY apps/client/package.json ./apps/client/
 COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy source code
 COPY apps/client ./apps/client
@@ -37,7 +37,7 @@ COPY apps/server/package.json ./apps/server/
 COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy source code
 COPY apps/server ./apps/server
@@ -82,7 +82,7 @@ COPY --chown=appuser:appuser apps/server/package.json ./apps/server/
 COPY --chown=appuser:appuser packages/shared/package.json ./packages/shared/
 
 # Install production dependencies only
-RUN bun install --frozen-lockfile --production
+RUN bun install --production
 
 # Copy built server from server-builder
 COPY --from=server-builder --chown=appuser:appuser /app/apps/server/dist ./apps/server/dist
