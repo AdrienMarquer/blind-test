@@ -181,15 +181,13 @@ const app = new Elysia()
     ? staticPlugin({
         assets: clientBuildPath,
         prefix: '/',
-        // Enable SPA fallback - serve index.html for non-file routes
-        alwaysStatic: false,
-        // This allows the index.html to handle client-side routing
+        indexHTML: true,  // Serve index.html for directory requests
       })
     : (app) => app  // No-op if client not built
   )
 
   // Fallback for SPA routing - serve index.html for all non-API routes
-  .get('*', ({ set }) => {
+  .get('*', async ({ set }) => {
     if (!hasClientBuild) {
       set.status = 503;
       return {
@@ -198,8 +196,11 @@ const app = new Elysia()
       };
     }
 
-    // Serve index.html for client-side routing
-    return Bun.file(path.join(clientBuildPath, 'index.html'));
+    // Read and return index.html content for client-side routing
+    const indexPath = path.join(clientBuildPath, 'index.html');
+    const file = Bun.file(indexPath);
+    set.headers['content-type'] = 'text/html; charset=utf-8';
+    return await file.text();
   });
 
 // Start server
