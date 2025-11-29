@@ -133,6 +133,17 @@ const app = new Elysia()
     };
   })
 
+  // Explicit root handler for SPA
+  .get('/', async ({ set }) => {
+    if (!hasClientBuild) {
+      set.status = 503;
+      return { error: 'Client not built' };
+    }
+    const indexPath = path.join(clientBuildPath, 'index.html');
+    set.headers['content-type'] = 'text/html; charset=utf-8';
+    return await Bun.file(indexPath).text();
+  })
+
   // API routes (must come before static files to take precedence)
   .use(roomRoutes)
   .use(playerRoutes)
