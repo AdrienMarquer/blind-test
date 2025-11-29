@@ -1,17 +1,17 @@
 /**
  * Drizzle ORM Schema for Blind Test
  * Based on DATABASE.md specification
- * PostgreSQL version
+ * SQLite version
  */
 
-import { pgTable, text, integer, timestamp, boolean, json, index } from 'drizzle-orm/pg-core';
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ============================================================================
 // Rooms Table
 // ============================================================================
 
-export const rooms = pgTable('rooms', {
+export const rooms = sqliteTable('rooms', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   code: text('code').notNull().unique(),
@@ -19,8 +19,8 @@ export const rooms = pgTable('rooms', {
   masterIp: text('master_ip').notNull(),
   masterToken: text('master_token').notNull(), // Secret token for master authorization
   status: text('status').notNull().default('lobby'), // 'lobby' | 'playing' | 'between_rounds' | 'finished'
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
   maxPlayers: integer('max_players').notNull().default(8),
 });
 
@@ -28,23 +28,23 @@ export const rooms = pgTable('rooms', {
 // Players Table
 // ============================================================================
 
-export const players = pgTable('players', {
+export const players = sqliteTable('players', {
   id: text('id').primaryKey(),
   roomId: text('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   role: text('role').notNull().default('player'), // 'master' | 'player'
   token: text('token').notNull(), // Session token for this player
-  connected: boolean('connected').notNull().default(true),
-  joinedAt: timestamp('joined_at').notNull().defaultNow(),
+  connected: integer('connected', { mode: 'boolean' }).notNull().default(true),
+  joinedAt: text('joined_at').notNull().default(sql`(datetime('now'))`),
 
   // Game state
   score: integer('score').notNull().default(0),
   roundScore: integer('round_score').notNull().default(0),
-  isActive: boolean('is_active').notNull().default(false),
-  isLockedOut: boolean('is_locked_out').notNull().default(false),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+  isLockedOut: integer('is_locked_out', { mode: 'boolean' }).notNull().default(false),
 
   // Statistics (stored as JSON)
-  stats: json('stats').notNull().default({"totalAnswers":0,"correctAnswers":0,"wrongAnswers":0,"buzzCount":0,"averageAnswerTime":0}),
+  stats: text('stats', { mode: 'json' }).notNull().default({"totalAnswers":0,"correctAnswers":0,"wrongAnswers":0,"buzzCount":0,"averageAnswerTime":0}),
 }, (table) => ({
   roomIdIdx: index('players_room_id_idx').on(table.roomId),
 }));
@@ -53,7 +53,7 @@ export const players = pgTable('players', {
 // Songs Table
 // ============================================================================
 
-export const songs = pgTable('songs', {
+export const songs = sqliteTable('songs', {
   id: text('id').primaryKey(),
   filePath: text('file_path').notNull().unique(),
   fileName: text('file_name').notNull(),
@@ -69,7 +69,7 @@ export const songs = pgTable('songs', {
   // Enhanced metadata for answer generation
   language: text('language'), // ISO 639-1 code (e.g., 'en', 'fr', 'es')
   subgenre: text('subgenre'), // More specific genre (e.g., 'french-rap', 'synthwave')
-  niche: boolean('niche').notNull().default(false), // Is this a niche/obscure song?
+  niche: integer('niche', { mode: 'boolean' }).notNull().default(false), // Is this a niche/obscure song?
 
   // Source tracking
   spotifyId: text('spotify_id'), // Spotify track ID
@@ -82,7 +82,7 @@ export const songs = pgTable('songs', {
   // Note: Actual playback duration during game comes from ModeParams.songDuration
 
   // File info
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   fileSize: integer('file_size').notNull(), // Bytes
   format: text('format').notNull(), // 'mp3' | 'm4a' | 'wav' | 'flac'
 }, (table) => ({
@@ -96,11 +96,11 @@ export const songs = pgTable('songs', {
 // Game Sessions Table (Phase 2+)
 // ============================================================================
 
-export const gameSessions = pgTable('game_sessions', {
+export const gameSessions = sqliteTable('game_sessions', {
   id: text('id').primaryKey(),
   roomId: text('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
-  startedAt: timestamp('started_at').notNull().defaultNow(),
-  endedAt: timestamp('ended_at'),
+  startedAt: text('started_at').notNull().default(sql`(datetime('now'))`),
+  endedAt: text('ended_at'),
 
   // State
   currentRoundIndex: integer('current_round_index').notNull().default(0),
@@ -114,7 +114,7 @@ export const gameSessions = pgTable('game_sessions', {
 // Rounds Table (Phase 2+)
 // ============================================================================
 
-export const rounds = pgTable('rounds', {
+export const rounds = sqliteTable('rounds', {
   id: text('id').primaryKey(),
   sessionId: text('session_id').notNull().references(() => gameSessions.id, { onDelete: 'cascade' }),
   index: integer('index').notNull(),
@@ -122,15 +122,15 @@ export const rounds = pgTable('rounds', {
   mediaType: text('media_type').notNull(), // 'music' | 'picture' | 'video' | 'text_question'
 
   // Metadata-based song filtering (stored as JSON)
-  songFilters: json('song_filters'),
+  songFilters: text('song_filters', { mode: 'json' }),
 
   // Configuration (stored as JSON)
-  params: json('params'),
+  params: text('params', { mode: 'json' }),
 
   // State
   status: text('status').notNull().default('pending'), // 'pending' | 'active' | 'finished'
-  startedAt: timestamp('started_at'),
-  endedAt: timestamp('ended_at'),
+  startedAt: text('started_at'),
+  endedAt: text('ended_at'),
   currentSongIndex: integer('current_song_index').notNull().default(0),
 }, (table) => ({
   sessionIdIdx: index('rounds_session_id_idx').on(table.sessionId),
@@ -140,14 +140,14 @@ export const rounds = pgTable('rounds', {
 // Import Jobs Table
 // ============================================================================
 
-export const importJobs = pgTable('import_jobs', {
+export const importJobs = sqliteTable('import_jobs', {
   id: text('id').primaryKey(),
   type: text('type').notNull(), // 'spotify_download' | 'youtube_download' | 'youtube_playlist'
   status: text('status').notNull(), // 'pending' | 'downloading' | 'processing' | 'completed' | 'failed' | 'cancelled'
   progress: integer('progress').notNull().default(0), // 0-100
 
   // Job-specific metadata (stored as JSON)
-  metadata: json('metadata').notNull().default({}),
+  metadata: text('metadata', { mode: 'json' }).notNull().default({}),
 
   // Error information
   error: text('error'),
@@ -157,9 +157,9 @@ export const importJobs = pgTable('import_jobs', {
   totalItems: integer('total_items'), // Total items to process (for playlists)
 
   // Timing
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  startedAt: timestamp('started_at'),
-  completedAt: timestamp('completed_at'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  startedAt: text('started_at'),
+  completedAt: text('completed_at'),
 
   // Retry tracking
   retryCount: integer('retry_count').notNull().default(0),

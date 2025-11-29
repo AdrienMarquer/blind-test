@@ -51,4 +51,6 @@ apps/server/uploads/
 # Excludes: *.db, *.db-shm (shared memory), *.db-wal (write-ahead log)
 apps/server/db/
 # Note: apps/server/drizzle/ is NOT ignored - it contains migration files which are source code
-.playwright-mcp
+.playwright-mcp# SQLite database files
+apps/server/data/*.db
+apps/server/data/*.db-*

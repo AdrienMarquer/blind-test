@@ -1,59 +1,49 @@
 /**
  * Database connection and initialization
- * PostgreSQL only (development and production)
+ * SQLite with Bun's built-in sqlite driver
  */
 
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
+import { Database } from 'bun:sqlite';
 import * as schema from './schema';
 import { logger } from '../utils/logger';
+import { existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 
 const dbLogger = logger.child({ module: 'Database' });
 
-// Get DATABASE_URL from environment
-const DATABASE_URL = process.env.DATABASE_URL;
+// Get DATABASE_URL from environment (file path for SQLite)
+const DATABASE_PATH = process.env.DATABASE_URL || './data/blind-test.db';
 
-if (!DATABASE_URL) {
-  dbLogger.error('DATABASE_URL environment variable is not set');
-  throw new Error('DATABASE_URL is required. Please set it in your .env file.');
+// Ensure the directory exists
+const dbDir = dirname(DATABASE_PATH);
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true });
+  dbLogger.info('Created database directory', { dir: dbDir });
 }
 
-if (!DATABASE_URL.startsWith('postgres://') && !DATABASE_URL.startsWith('postgresql://')) {
-  dbLogger.error('Invalid DATABASE_URL format', { url: DATABASE_URL });
-  throw new Error('DATABASE_URL must be a PostgreSQL connection string (postgresql://...)');
-}
+dbLogger.info('Initializing SQLite database', { path: DATABASE_PATH });
 
-// Mask password in logs
-const maskedUrl = DATABASE_URL.replace(/:[^:@]+@/, ':****@');
-dbLogger.info('Initializing PostgreSQL database', { url: maskedUrl });
+// Create SQLite connection using Bun's native driver
+const sqlite = new Database(DATABASE_PATH, { create: true });
 
-// Create PostgreSQL connection
-const sql = postgres(DATABASE_URL, {
-  max: 10,                    // Max connections in pool
-  idle_timeout: 30,           // Close idle connections after 30s (increased from 20s)
-  connect_timeout: 10,        // Connection timeout (seconds)
-  onnotice: () => {},         // Silence PostgreSQL NOTICE messages
-  connection: {
-    application_name: 'blind-test-server',
-  },
-  debug: process.env.NODE_ENV === 'development' ?
-    (connection, query, params) => dbLogger.debug('Query', { query, params }) :
-    undefined,
-});
+// Enable WAL mode for better concurrent read performance
+sqlite.exec('PRAGMA journal_mode = WAL');
+sqlite.exec('PRAGMA busy_timeout = 5000'); // Wait up to 5 seconds if database is locked
 
-// Create Drizzle instance with optional logging
-export const db = drizzle(sql, {
+// Create Drizzle instance
+export const db = drizzle(sqlite, {
   schema,
   logger: process.env.NODE_ENV === 'development',
 });
 
-dbLogger.info('PostgreSQL database initialized');
+dbLogger.info('SQLite database initialized');
 
 // Run migrations using Drizzle's migration runner
-export async function runMigrations() {
+export function runMigrations() {
   try {
-    await migrate(db, { migrationsFolder: './drizzle' });
+    migrate(db, { migrationsFolder: './drizzle' });
     dbLogger.info('Database migrations completed');
   } catch (error) {
     dbLogger.error('Database migration failed', error);
@@ -62,16 +52,15 @@ export async function runMigrations() {
 }
 
 /**
- * Gracefully close database connections
- * CRITICAL: Must be called before process exit to prevent connection leaks
+ * Gracefully close database connection
  */
-export async function closeDatabase() {
+export function closeDatabase() {
   try {
-    dbLogger.info('Closing database connections...');
-    await sql.end({ timeout: 5 }); // Wait up to 5 seconds for queries to finish
-    dbLogger.info('Database connections closed successfully');
+    dbLogger.info('Closing database connection...');
+    sqlite.close();
+    dbLogger.info('Database connection closed successfully');
   } catch (error) {
-    dbLogger.error('Error closing database connections', error);
+    dbLogger.error('Error closing database connection', error);
     throw error;
   }
 }

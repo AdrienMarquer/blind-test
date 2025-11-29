@@ -381,7 +381,7 @@ export class SongRepository implements Repository<Song> {
 
     // Exclude niche songs by default unless includeNiche is true
     if (!filters.includeNiche) {
-      conditions.push(sql`${schema.songs.niche} = false`);
+      conditions.push(eq(schema.songs.niche, false));
     }
 
     // Apply all conditions with AND logic

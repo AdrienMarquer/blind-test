@@ -19,7 +19,6 @@
     "elysia": "^1.0.0",
     "fuzzysort": "^3.1.0",
     "music-metadata": "^11.10.0",
-    "postgres": "^3.4.7",
     "qrcode": "^1.5.3",
     "youtube-dl-exec": "^3.0.26",
     "youtube-search-api": "^2.0.1"

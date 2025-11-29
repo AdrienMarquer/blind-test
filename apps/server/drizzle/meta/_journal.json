@@ -1,40 +1,12 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1762722897256,
-      "tag": "0000_regular_archangel",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1763198478487,
-      "tag": "0001_broken_dazzler",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1763224339640,
-      "tag": "0002_add_niche_to_songs",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1763294020692,
-      "tag": "0003_nappy_wildside",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1763294269789,
-      "tag": "0004_natural_stryfe",
+      "version": "6",
+      "when": 1764438078696,
+      "tag": "0000_whole_the_watchers",
       "breakpoints": true
     }
   ]

@@ -92,9 +92,9 @@ COPY --from=server-builder --chown=appuser:appuser /app/packages/shared ./packag
 # Copy built client from client-builder to server's client build directory
 COPY --from=client-builder --chown=appuser:appuser /app/apps/client/build ./apps/client/build
 
-# Create directories for uploads and database
-RUN mkdir -p /app/apps/server/uploads /app/apps/server/db \
-    && chown -R appuser:appuser /app/apps/server/uploads /app/apps/server/db
+# Create directories for uploads and SQLite database
+RUN mkdir -p /app/apps/server/uploads /app/apps/server/data \
+    && chown -R appuser:appuser /app/apps/server/uploads /app/apps/server/data
 
 # Switch to non-root user
 USER appuser
@@ -105,6 +105,7 @@ WORKDIR /app/apps/server
 # Environment variables (can be overridden at runtime)
 ENV NODE_ENV=production \
     PORT=3007 \
+    DATABASE_URL=./data/blind-test.db \
     YTDLP_PATH=/usr/local/bin/yt-dlp
 
 # Expose port

@@ -1,1 +1,0 @@
-ALTER TABLE "songs" ADD COLUMN "niche" boolean DEFAULT false NOT NULL;

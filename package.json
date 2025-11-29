@@ -16,7 +16,9 @@
     "test:watch": "cd apps/server && bun test --watch",
     "test:coverage": "cd apps/server && bun test --coverage",
     "db:migrate": "cd apps/server && bunx drizzle-kit migrate",
-    "db:studio": "cd apps/server && bunx drizzle-kit studio"
+    "db:studio": "cd apps/server && bunx drizzle-kit studio",
+    "sync:vps": "bun scripts/sync-to-vps.ts",
+    "sync:vps:dry-run": "bun scripts/sync-to-vps.ts --dry-run"
   },
   "workspaces": [
     "apps/*",
