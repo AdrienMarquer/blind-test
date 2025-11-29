@@ -142,8 +142,8 @@ export class RoomRepository implements Repository<Room> {
       masterIp: localIP,
       masterToken, // Store master token in database
       status: 'lobby' as const,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
       maxPlayers: data.maxPlayers || ROOM_CONFIG.DEFAULT_MAX_PLAYERS,
     };
 
@@ -164,8 +164,8 @@ export class RoomRepository implements Repository<Room> {
     if (!existing) throw new Error('Room not found');
 
     // Build typed update DTO with only allowed fields
-    const updateData: RoomUpdateDTO & { updatedAt: Date } = {
-      updatedAt: new Date(),
+    const updateData: RoomUpdateDTO & { updatedAt: string } = {
+      updatedAt: new Date().toISOString(),
     };
 
     // Only update allowed fields (explicit whitelisting)
@@ -237,7 +237,7 @@ export class RoomRepository implements Repository<Room> {
    * Clean up finished rooms older than specified time
    */
   async cleanupOldRooms(maxAge: number = 24 * 60 * 60 * 1000): Promise<number> {
-    const cutoffDate = new Date(Date.now() - maxAge);
+    const cutoffDate = new Date(Date.now() - maxAge).toISOString();
 
     // Delete finished rooms older than cutoff
     const result = await db

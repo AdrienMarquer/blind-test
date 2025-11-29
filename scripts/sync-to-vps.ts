@@ -129,6 +129,10 @@ ${colors.bold}${colors.yellow}========================================
   // Step 4: Sync database
   logStep(4, 5, 'Syncing database...');
   try {
+    // Checkpoint WAL to merge data into main db file
+    log('  Checkpointing WAL...', colors.gray);
+    await $`sqlite3 ${dbFile} "PRAGMA wal_checkpoint(TRUNCATE);"`;
+
     // Copy local db to VPS temp location
     log('  Copying database to VPS...', colors.gray);
     await $`scp ${dbFile} ${VPS_HOST}:/tmp/blind-test.db`;
@@ -191,8 +195,8 @@ ${colors.bold}${colors.green}========================================
 ========================================${colors.reset}
 `);
 
-  log('Data synced to K8s pod. Changes will persist in PVC.', colors.green);
-  log('\nNote: If you added new songs, the app may need a restart to pick them up.', colors.gray);
+  log('Data synced to K8s pod. Data persists in PVC.', colors.green);
+  log('\nNote: Database changes are visible immediately. No restart needed.', colors.gray);
 }
 
 main().catch((error) => {

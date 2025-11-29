@@ -86,7 +86,7 @@ export class GameSessionRepository implements Repository<GameSession> {
     const newSession = {
       id,
       roomId: data.roomId,
-      startedAt: now,
+      startedAt: now.toISOString(),
       endedAt: null,
       currentRoundIndex: 0,
       currentSongIndex: 0,
@@ -107,7 +107,9 @@ export class GameSessionRepository implements Repository<GameSession> {
     if (data.status !== undefined) updateData.status = data.status;
     if (data.currentRoundIndex !== undefined) updateData.currentRoundIndex = data.currentRoundIndex;
     if (data.currentSongIndex !== undefined) updateData.currentSongIndex = data.currentSongIndex;
-    if (data.endedAt !== undefined) updateData.endedAt = data.endedAt;
+    if (data.endedAt !== undefined) {
+      updateData.endedAt = data.endedAt instanceof Date ? data.endedAt.toISOString() : data.endedAt;
+    }
 
     await db
       .update(schema.gameSessions)
@@ -128,7 +130,7 @@ export class GameSessionRepository implements Repository<GameSession> {
   async endSession(id: string): Promise<GameSession> {
     return this.update(id, {
       status: 'finished',
-      endedAt: new Date(),
+      endedAt: new Date().toISOString() as any,
     });
   }
 

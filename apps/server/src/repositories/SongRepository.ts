@@ -238,7 +238,7 @@ export class SongRepository implements Repository<Song> {
       source: data.source || 'upload',
       clipStart: data.clipStart ?? SONG_CONFIG.DEFAULT_CLIP_START,
       clipDuration: data.clipDuration ?? SONG_CONFIG.DEFAULT_CLIP_DURATION,
-      createdAt: now,
+      createdAt: now.toISOString(),
       fileSize: data.fileSize,
       format: data.format,
     };

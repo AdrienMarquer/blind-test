@@ -109,7 +109,7 @@ export class PlayerRepository implements Repository<Player> {
       role: (data.role || 'player') as 'master' | 'player',
       token, // Generate session token
       connected: true,
-      joinedAt: now,
+      joinedAt: now.toISOString(),
       score: 0,
       roundScore: 0,
       isActive: false,
