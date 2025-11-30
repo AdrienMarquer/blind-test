@@ -168,7 +168,7 @@ export class SongRepository implements Repository<Song> {
 
   /**
    * Find songs with incomplete metadata
-   * A song is considered incomplete if it's missing any of: genre, album, language, or subgenre
+   * A song is considered incomplete if it's missing genre or album
    * Uses database-level filtering for optimal performance
    */
   async findWithIncompleteMetadata(): Promise<Song[]> {
@@ -178,9 +178,7 @@ export class SongRepository implements Repository<Song> {
       .where(
         or(
           isNull(schema.songs.genre),
-          isNull(schema.songs.album),
-          isNull(schema.songs.language),
-          isNull(schema.songs.subgenre)
+          isNull(schema.songs.album)
         )
       );
 

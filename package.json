@@ -17,6 +17,9 @@
     "test:coverage": "cd apps/server && bun test --coverage",
     "db:migrate": "cd apps/server && bunx drizzle-kit migrate",
     "db:studio": "cd apps/server && bunx drizzle-kit studio",
+    "db:seed": "cd apps/server && bun run src/db/seed/seed-musiques.ts",
+    "db:seed:dry": "cd apps/server && bun run src/db/seed/seed-musiques.ts --dry-run",
+    "db:seed:metadata": "cd apps/server && bun run src/db/seed/seed-musiques.ts --no-download",
     "sync:vps": "bun scripts/sync-to-vps.ts",
     "sync:vps:dry-run": "bun scripts/sync-to-vps.ts --dry-run"
   },
