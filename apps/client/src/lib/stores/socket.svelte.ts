@@ -12,8 +12,14 @@ const getServerUrl = () => {
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.hostname;
+  const port = window.location.port;
 
-  // If accessing from local network (not localhost), use that IP
+  // Production: no port needed, goes through reverse proxy
+  if (host !== 'localhost' && host !== '127.0.0.1' && !port) {
+    return `${protocol}//${host}`;
+  }
+
+  // Local network with custom port (e.g., 192.168.x.x:5173)
   if (host !== 'localhost' && host !== '127.0.0.1') {
     return `${protocol}//${host}:3007`;
   }
