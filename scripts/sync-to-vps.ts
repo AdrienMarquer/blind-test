@@ -63,7 +63,7 @@ ${colors.bold}${colors.blue}========================================
   }
 
   // Step 1: Validate local directories exist
-  logStep(1, 5, 'Validating local directories...');
+  logStep(1, 6, 'Validating local directories...');
 
   if (!existsSync(LOCAL_DATA_DIR)) {
     log(`  Data directory not found: ${LOCAL_DATA_DIR}`, colors.red);
@@ -87,7 +87,7 @@ ${colors.bold}${colors.blue}========================================
   }
 
   // Step 2: Test SSH connection
-  logStep(2, 5, 'Testing SSH connection...');
+  logStep(2, 6, 'Testing SSH connection...');
   try {
     await $`ssh -o ConnectTimeout=5 -o BatchMode=yes ${VPS_HOST} echo "connected"`.quiet();
     log(`  ${colors.green}SSH connection: OK${colors.reset}`);
@@ -98,7 +98,7 @@ ${colors.bold}${colors.blue}========================================
   }
 
   // Step 3: Get pod name
-  logStep(3, 5, 'Finding K8s pod...');
+  logStep(3, 6, 'Finding K8s pod...');
   let podName: string;
   try {
     podName = await sshCmd(`kubectl get pods -n ${K8S_NAMESPACE} -l app=${K8S_DEPLOYMENT} -o jsonpath='{.items[0].metadata.name}'`);
@@ -127,7 +127,7 @@ ${colors.bold}${colors.yellow}========================================
   }
 
   // Step 4: Sync database
-  logStep(4, 5, 'Syncing database...');
+  logStep(4, 6, 'Syncing database...');
   try {
     // Checkpoint WAL to merge data into main db file
     log('  Checkpointing WAL...', colors.gray);
@@ -141,6 +141,10 @@ ${colors.bold}${colors.yellow}========================================
     log('  Copying database to pod...', colors.gray);
     await sshCmd(`kubectl cp /tmp/blind-test.db ${K8S_NAMESPACE}/${podName}:${REMOTE_DATA_PATH}/blind-test.db`);
 
+    // Delete WAL files in pod to force SQLite to read from the new db file
+    log('  Cleaning up WAL files in pod...', colors.gray);
+    await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm -f ${REMOTE_DATA_PATH}/blind-test.db-shm ${REMOTE_DATA_PATH}/blind-test.db-wal 2>/dev/null || true`);
+
     // Cleanup temp file
     await sshCmd('rm /tmp/blind-test.db');
 
@@ -151,41 +155,79 @@ ${colors.bold}${colors.yellow}========================================
   }
 
   // Step 5: Sync uploads
-  logStep(5, 5, 'Syncing music files...');
+  logStep(5, 6, 'Syncing music files...');
   if (!existsSync(LOCAL_UPLOADS_DIR)) {
     log('  No uploads directory, skipping...', colors.yellow);
   } else {
-    const uploadFiles = readdirSync(LOCAL_UPLOADS_DIR).filter(f => !f.startsWith('.'));
+    const uploadFiles = readdirSync(LOCAL_UPLOADS_DIR).filter(f => f.endsWith('.mp3'));
     if (uploadFiles.length === 0) {
       log('  No music files to sync', colors.yellow);
     } else {
-      log(`  Syncing ${uploadFiles.length} files...`, colors.gray);
+      log(`  Syncing ${uploadFiles.length} MP3 files...`, colors.gray);
 
       try {
-        // Create tar archive
-        log('  Creating archive...', colors.gray);
-        await $`tar -cf /tmp/uploads.tar -C ${LOCAL_UPLOADS_DIR} .`;
+        // Get list of files already in pod
+        log('  Checking existing files in pod...', colors.gray);
+        let existingFiles: Set<string> = new Set();
+        try {
+          const podFiles = await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- ls ${REMOTE_UPLOADS_PATH}/ 2>/dev/null || echo ""`);
+          existingFiles = new Set(podFiles.split('\n').filter(f => f.endsWith('.mp3')));
+          log(`    Found ${existingFiles.size} files already in pod`, colors.gray);
+        } catch {
+          log('    No existing files in pod', colors.gray);
+        }
 
-        // Copy to VPS
-        log('  Copying to VPS...', colors.gray);
-        await $`scp /tmp/uploads.tar ${VPS_HOST}:/tmp/uploads.tar`;
+        // Filter to only new files
+        const newFiles = uploadFiles.filter(f => !existingFiles.has(f));
 
-        // Extract in pod
-        log('  Extracting in pod...', colors.gray);
-        await sshCmd(`kubectl cp /tmp/uploads.tar ${K8S_NAMESPACE}/${podName}:${REMOTE_UPLOADS_PATH}/uploads.tar`);
-        await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- tar -xf ${REMOTE_UPLOADS_PATH}/uploads.tar -C ${REMOTE_UPLOADS_PATH}`);
-        await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm ${REMOTE_UPLOADS_PATH}/uploads.tar`);
+        if (newFiles.length === 0) {
+          log(`  ${colors.green}All ${uploadFiles.length} files already in pod, nothing to sync!${colors.reset}`);
+        } else {
+          log(`  ${newFiles.length} new files to sync (${existingFiles.size} already exist)`, colors.gray);
 
-        // Cleanup
-        await $`rm /tmp/uploads.tar`;
-        await sshCmd('rm /tmp/uploads.tar');
+          // Use rsync to VPS temp directory (only new files)
+          log('  Rsync new files to VPS...', colors.gray);
+          await $`rsync -avz --progress ${LOCAL_UPLOADS_DIR}/ ${VPS_HOST}:/tmp/blindtest-uploads/`;
 
-        log(`  ${colors.green}${uploadFiles.length} files synced!${colors.reset}`);
+          // Copy only new files from VPS to pod
+          log('  Copying new files to pod...', colors.gray);
+
+          const batchSize = 20;
+          for (let i = 0; i < newFiles.length; i += batchSize) {
+            const batch = newFiles.slice(i, i + batchSize);
+            const progress = Math.min(i + batchSize, newFiles.length);
+            log(`    Progress: ${progress}/${newFiles.length} new files...`, colors.gray);
+
+            for (const file of batch) {
+              await sshCmd(`kubectl cp /tmp/blindtest-uploads/${file} ${K8S_NAMESPACE}/${podName}:${REMOTE_UPLOADS_PATH}/${file}`);
+            }
+          }
+
+          // Cleanup VPS temp
+          await sshCmd('rm -rf /tmp/blindtest-uploads');
+
+          log(`  ${colors.green}${newFiles.length} new files synced!${colors.reset}`);
+        }
       } catch (error: any) {
         log(`  ${colors.red}Failed to sync uploads: ${error.message}${colors.reset}`, colors.red);
         process.exit(1);
       }
     }
+  }
+
+  // Step 6: Restart pod for clean state
+  logStep(6, 6, 'Restarting pod for clean state...');
+  try {
+    await sshCmd(`kubectl rollout restart deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}`);
+    log(`  ${colors.green}Pod restart initiated${colors.reset}`);
+
+    // Wait for rollout to complete
+    log('  Waiting for rollout to complete...', colors.gray);
+    await sshCmd(`kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} --timeout=60s`);
+    log(`  ${colors.green}Pod restarted successfully!${colors.reset}`);
+  } catch (error: any) {
+    log(`  ${colors.yellow}Warning: Pod restart failed: ${error.message}${colors.reset}`, colors.yellow);
+    log('  You may need to manually restart: kubectl rollout restart deployment/blind-test -n adrien', colors.gray);
   }
 
   // Done
@@ -195,8 +237,8 @@ ${colors.bold}${colors.green}========================================
 ========================================${colors.reset}
 `);
 
-  log('Data synced to K8s pod. Data persists in PVC.', colors.green);
-  log('\nNote: Database changes are visible immediately. No restart needed.', colors.gray);
+  log('Data synced to K8s pod and pod restarted.', colors.green);
+  log('Changes are now live at https://quiz.amrqr.fr', colors.gray);
 }
 
 main().catch((error) => {

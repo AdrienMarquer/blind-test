@@ -20,6 +20,13 @@ import { logger } from '../utils/logger';
 
 const gameLogger = logger.child({ module: 'GameService' });
 
+// Get public URL for audio streaming (use env var in production, fallback to localhost)
+const getPublicUrl = () => {
+  const publicUrl = process.env.PUBLIC_URL;
+  if (publicUrl) return publicUrl.replace(/\/$/, ''); // Remove trailing slash
+  return `http://localhost:${process.env.PORT || 3007}`;
+};
+
 export class GameService {
 
   /**
@@ -208,7 +215,7 @@ export class GameService {
     gameStateManager.updateRound(roomId, round);
 
     // Construct audio streaming URL
-    const audioUrl = `http://localhost:3007/api/songs/${song.song.id}/stream`;
+    const audioUrl = `${getPublicUrl()}/api/songs/${song.song.id}/stream`;
 
     // Start song duration timer - resolve parameters using inheritance chain
     const songDuration = getSongDuration(round, modeHandler);
