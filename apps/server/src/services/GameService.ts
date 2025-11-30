@@ -475,8 +475,20 @@ export class GameService {
 
       // Resume song timer if it was paused (for modes that pause on buzz)
       if (modeHandler.shouldPauseOnBuzz()) {
-        timerManager.resumeSongTimer(roomId);
-        gameLogger.debug('Song timer resumed after lockout', { roomId, playerId });
+        const resumed = timerManager.resumeSongTimer(roomId);
+        if (!resumed) {
+          // Fallback broadcast to ensure clients resume playback even if timer was already active
+          broadcastToRoom(roomId, {
+            type: 'game:resumed',
+            data: { timestamp: Date.now(), reason: 'lockout-fallback' }
+          });
+          gameLogger.warn('Fallback game:resumed broadcast after lockout - timer was not paused', {
+            roomId,
+            playerId
+          });
+        } else {
+          gameLogger.debug('Song timer resumed after lockout', { roomId, playerId });
+        }
       }
 
       gameLogger.info('Player locked out - SONG STATE RESET', {
@@ -615,10 +627,18 @@ export class GameService {
           data: { timeRemaining: 0 }
         });
         gameLogger.debug('Song timer cleared after correct answer', { roomId });
-      } else {
-        // Wrong answer - resume timer for other players
-        timerManager.resumeSongTimer(roomId);
-        gameLogger.debug('Song timer resumed after wrong answer', { roomId });
+      } else if (!result.shouldShowTitleChoices) {
+        // Resume timer only when gameplay resumes for all players (no bonus question flow)
+        const resumed = timerManager.resumeSongTimer(roomId);
+        if (!resumed) {
+          broadcastToRoom(roomId, {
+            type: 'game:resumed',
+            data: { timestamp: Date.now(), reason: 'resume-fallback' }
+          });
+          gameLogger.warn('Fallback game:resumed broadcast - timer already running', { roomId });
+        } else {
+          gameLogger.debug('Song timer resumed after wrong answer', { roomId });
+        }
       }
     }
 

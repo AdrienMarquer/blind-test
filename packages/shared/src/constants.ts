@@ -70,7 +70,7 @@ export const AUDIO_CONFIG = {
 
 export const VALIDATION_PATTERNS = {
   ROOM_NAME: /^[a-zA-Z0-9\s\-_]+$/,
-  PLAYER_NAME: /^[a-zA-Z0-9\s]+$/,
+  PLAYER_NAME: new RegExp("^[\\p{L}0-9\\s'\\-]+$", 'u'),
   ROOM_CODE: /^[A-Z0-9]{4}$/,
 } as const;
 

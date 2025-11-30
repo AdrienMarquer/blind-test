@@ -68,16 +68,19 @@
 	}
 
 	// Smooth timer animation functions
-	function startSmoothTimer(durationSeconds: number) {
+	function startSmoothTimer(durationSeconds: number, elapsedSeconds = 0) {
 		stopSmoothTimer();
-		timerStartTimestamp = performance.now();
-		smoothProgress = 100;
+		const normalizedDuration = Math.max(durationSeconds, 0.001);
+		const clampedElapsed = Math.min(Math.max(elapsedSeconds, 0), normalizedDuration);
+		timerStartTimestamp = performance.now() - clampedElapsed * 1000;
+		const initialRemaining = Math.max(0, normalizedDuration - clampedElapsed);
+		smoothProgress = (initialRemaining / normalizedDuration) * 100;
 		timerAnimationKey++; // Trigger re-render
 
 		function tick() {
 			const elapsed = (performance.now() - timerStartTimestamp) / 1000;
-			const remaining = Math.max(0, durationSeconds - elapsed);
-			smoothProgress = (remaining / durationSeconds) * 100;
+			const remaining = Math.max(0, normalizedDuration - elapsed);
+			smoothProgress = (remaining / normalizedDuration) * 100;
 
 			if (remaining > 0 && gameState.status === 'ready_to_buzz') {
 				timerRafId = requestAnimationFrame(tick);
@@ -85,6 +88,14 @@
 		}
 
 		timerRafId = requestAnimationFrame(tick);
+	}
+
+	function resumeSmoothTimerFromRemaining(remainingSeconds: number) {
+		const duration = maxSongDuration || remainingSeconds || 0;
+		if (duration <= 0) return;
+		const normalizedRemaining = Math.max(0, Math.min(remainingSeconds, duration));
+		const elapsedSeconds = Math.max(0, duration - normalizedRemaining);
+		startSmoothTimer(duration, elapsedSeconds);
 	}
 
 	function stopSmoothTimer() {
@@ -415,12 +426,15 @@
 				}
 
 				// If someone else answered wrong and was locked out, allow others to buzz again
-				if (event.lockOutPlayer && gameState.status === 'watching_other_player') {
-					gameState = {
-						status: 'ready_to_buzz',
-						timeRemaining: timeRemaining
-					};
-				}
+			if (event.lockOutPlayer && gameState.status === 'watching_other_player') {
+				const fallbackRemaining = Math.ceil((smoothProgress / 100) * maxSongDuration);
+				const remaining = timeRemaining > 0 ? timeRemaining : Math.max(fallbackRemaining, 0);
+				gameState = {
+					status: 'ready_to_buzz',
+					timeRemaining: remaining
+				};
+				resumeSmoothTimerFromRemaining(remaining);
+			}
 			}
 
 			// Auto-clear feedback after 3 seconds
