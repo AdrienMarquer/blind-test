@@ -1,0 +1,4538 @@
+[
+  {
+    "title": "Billie Jean",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Beat It",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Thriller",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Smooth Criminal",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Like a Virgin",
+    "artist": "Madonna"
+  },
+  {
+    "title": "Material Girl",
+    "artist": "Madonna"
+  },
+  {
+    "title": "Vogue",
+    "artist": "Madonna"
+  },
+  {
+    "title": "Girls Just Want to Have Fun",
+    "artist": "Cyndi Lauper"
+  },
+  {
+    "title": "Time After Time",
+    "artist": "Cyndi Lauper"
+  },
+  {
+    "title": "Take On Me",
+    "artist": "A-ha"
+  },
+  {
+    "title": "The Sun Always Shines on T.V.",
+    "artist": "A-ha"
+  },
+  {
+    "title": "Sweet Dreams (Are Made of This)",
+    "artist": "Eurythmics"
+  },
+  {
+    "title": "Here Comes the Rain Again",
+    "artist": "Eurythmics"
+  },
+  {
+    "title": "Africa",
+    "artist": "Toto"
+  },
+  {
+    "title": "Rosanna",
+    "artist": "Toto"
+  },
+  {
+    "title": "Every Breath You Take",
+    "artist": "The Police"
+  },
+  {
+    "title": "Roxanne",
+    "artist": "The Police"
+  },
+  {
+    "title": "Message in a Bottle",
+    "artist": "The Police"
+  },
+  {
+    "title": "With or Without You",
+    "artist": "U2"
+  },
+  {
+    "title": "Sunday Bloody Sunday",
+    "artist": "U2"
+  },
+  {
+    "title": "Livin' on a Prayer",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "You Give Love a Bad Name",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "Runaway",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "Eye of the Tiger",
+    "artist": "Survivor"
+  },
+  {
+    "title": "Don't Stop Believin'",
+    "artist": "Journey"
+  },
+  {
+    "title": "Separate Ways",
+    "artist": "Journey"
+  },
+  {
+    "title": "Jump",
+    "artist": "Van Halen"
+  },
+  {
+    "title": "Panama",
+    "artist": "Van Halen"
+  },
+  {
+    "title": "Summer of '69",
+    "artist": "Bryan Adams"
+  },
+  {
+    "title": "Heaven",
+    "artist": "Bryan Adams"
+  },
+  {
+    "title": "Faith",
+    "artist": "George Michael"
+  },
+  {
+    "title": "Careless Whisper",
+    "artist": "George Michael"
+  },
+  {
+    "title": "Wake Me Up Before You Go-Go",
+    "artist": "Wham!"
+  },
+  {
+    "title": "Everything She Wants",
+    "artist": "Wham!"
+  },
+  {
+    "title": "I'm Still Standing",
+    "artist": "Elton John"
+  },
+  {
+    "title": "Tiny Dancer",
+    "artist": "Elton John"
+  },
+  {
+    "title": "Rocket Man",
+    "artist": "Elton John"
+  },
+  {
+    "title": "Sweet Child O' Mine",
+    "artist": "Guns N' Roses"
+  },
+  {
+    "title": "Paradise City",
+    "artist": "Guns N' Roses"
+  },
+  {
+    "title": "Welcome to the Jungle",
+    "artist": "Guns N' Roses"
+  },
+  {
+    "title": "Bohemian Rhapsody",
+    "artist": "Queen"
+  },
+  {
+    "title": "Another One Bites the Dust",
+    "artist": "Queen"
+  },
+  {
+    "title": "We Will Rock You",
+    "artist": "Queen"
+  },
+  {
+    "title": "Hotel California",
+    "artist": "Eagles"
+  },
+  {
+    "title": "Take It Easy",
+    "artist": "Eagles"
+  },
+  {
+    "title": "Stayin' Alive",
+    "artist": "Bee Gees"
+  },
+  {
+    "title": "Night Fever",
+    "artist": "Bee Gees"
+  },
+  {
+    "title": "Le Freak",
+    "artist": "Chic"
+  },
+  {
+    "title": "Good Times",
+    "artist": "Chic"
+  },
+  {
+    "title": "September",
+    "artist": "Earth, Wind & Fire"
+  },
+  {
+    "title": "Let's Groove",
+    "artist": "Earth, Wind & Fire"
+  },
+  {
+    "title": "Superstition",
+    "artist": "Stevie Wonder"
+  },
+  {
+    "title": "Isn't She Lovely",
+    "artist": "Stevie Wonder"
+  },
+  {
+    "title": "I Will Survive",
+    "artist": "Gloria Gaynor"
+  },
+  {
+    "title": "Dancing Queen",
+    "artist": "ABBA"
+  },
+  {
+    "title": "Mamma Mia",
+    "artist": "ABBA"
+  },
+  {
+    "title": "Gimme! Gimme! Gimme!",
+    "artist": "ABBA"
+  },
+  {
+    "title": "Take a Chance on Me",
+    "artist": "ABBA"
+  },
+  {
+    "title": "Smells Like Teen Spirit",
+    "artist": "Nirvana"
+  },
+  {
+    "title": "Come As You Are",
+    "artist": "Nirvana"
+  },
+  {
+    "title": "Lithium",
+    "artist": "Nirvana"
+  },
+  {
+    "title": "Wonderwall",
+    "artist": "Oasis"
+  },
+  {
+    "title": "Don't Look Back in Anger",
+    "artist": "Oasis"
+  },
+  {
+    "title": "Champagne Supernova",
+    "artist": "Oasis"
+  },
+  {
+    "title": "Losing My Religion",
+    "artist": "R.E.M."
+  },
+  {
+    "title": "Everybody Hurts",
+    "artist": "R.E.M."
+  },
+  {
+    "title": "Man on the Moon",
+    "artist": "R.E.M."
+  },
+  {
+    "title": "Creep",
+    "artist": "Radiohead"
+  },
+  {
+    "title": "Karma Police",
+    "artist": "Radiohead"
+  },
+  {
+    "title": "High and Dry",
+    "artist": "Radiohead"
+  },
+  {
+    "title": "Black Hole Sun",
+    "artist": "Soundgarden"
+  },
+  {
+    "title": "Californication",
+    "artist": "Red Hot Chili Peppers"
+  },
+  {
+    "title": "Under the Bridge",
+    "artist": "Red Hot Chili Peppers"
+  },
+  {
+    "title": "Scar Tissue",
+    "artist": "Red Hot Chili Peppers"
+  },
+  {
+    "title": "Enter Sandman",
+    "artist": "Metallica"
+  },
+  {
+    "title": "Nothing Else Matters",
+    "artist": "Metallica"
+  },
+  {
+    "title": "The Unforgiven",
+    "artist": "Metallica"
+  },
+  {
+    "title": "Basket Case",
+    "artist": "Green Day"
+  },
+  {
+    "title": "American Idiot",
+    "artist": "Green Day"
+  },
+  {
+    "title": "Good Riddance (Time of Your Life)",
+    "artist": "Green Day"
+  },
+  {
+    "title": "Zombie",
+    "artist": "The Cranberries"
+  },
+  {
+    "title": "Linger",
+    "artist": "The Cranberries"
+  },
+  {
+    "title": "Torn",
+    "artist": "Natalie Imbruglia"
+  },
+  {
+    "title": "I Want It That Way",
+    "artist": "Backstreet Boys"
+  },
+  {
+    "title": "Everybody (Backstreet's Back)",
+    "artist": "Backstreet Boys"
+  },
+  {
+    "title": "Quit Playing Games",
+    "artist": "Backstreet Boys"
+  },
+  {
+    "title": "…Baby One More Time",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Oops!... I Did It Again",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Stronger",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Genie in a Bottle",
+    "artist": "Christina Aguilera"
+  },
+  {
+    "title": "Fighter",
+    "artist": "Christina Aguilera"
+  },
+  {
+    "title": "Dirrty",
+    "artist": "Christina Aguilera"
+  },
+  {
+    "title": "Survivor",
+    "artist": "Destiny's Child"
+  },
+  {
+    "title": "Say My Name",
+    "artist": "Destiny's Child"
+  },
+  {
+    "title": "Lose My Breath",
+    "artist": "Destiny's Child"
+  },
+  {
+    "title": "No Scrubs",
+    "artist": "TLC"
+  },
+  {
+    "title": "Waterfalls",
+    "artist": "TLC"
+  },
+  {
+    "title": "Killing Me Softly",
+    "artist": "Fugees"
+  },
+  {
+    "title": "Ready or Not",
+    "artist": "Fugees"
+  },
+  {
+    "title": "California Love",
+    "artist": "2Pac"
+  },
+  {
+    "title": "Changes",
+    "artist": "2Pac"
+  },
+  {
+    "title": "Juicy",
+    "artist": "The Notorious B.I.G."
+  },
+  {
+    "title": "Hypnotize",
+    "artist": "The Notorious B.I.G."
+  },
+  {
+    "title": "Gangsta's Paradise",
+    "artist": "Coolio"
+  },
+  {
+    "title": "Stan",
+    "artist": "Eminem"
+  },
+  {
+    "title": "Without Me",
+    "artist": "Eminem"
+  },
+  {
+    "title": "Lose Yourself",
+    "artist": "Eminem"
+  },
+  {
+    "title": "In da Club",
+    "artist": "50 Cent"
+  },
+  {
+    "title": "Candy Shop",
+    "artist": "50 Cent"
+  },
+  {
+    "title": "Hey Ya!",
+    "artist": "Outkast"
+  },
+  {
+    "title": "Ms. Jackson",
+    "artist": "Outkast"
+  },
+  {
+    "title": "Crazy in Love",
+    "artist": "Beyoncé"
+  },
+  {
+    "title": "Single Ladies",
+    "artist": "Beyoncé"
+  },
+  {
+    "title": "Irreplaceable",
+    "artist": "Beyoncé"
+  },
+  {
+    "title": "Umbrella",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Diamonds",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "We Found Love",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Hips Don't Lie",
+    "artist": "Shakira"
+  },
+  {
+    "title": "Whenever, Wherever",
+    "artist": "Shakira"
+  },
+  {
+    "title": "Yeah!",
+    "artist": "Usher"
+  },
+  {
+    "title": "Burn",
+    "artist": "Usher"
+  },
+  {
+    "title": "Cry Me a River",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "SexyBack",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "Mr. Brightside",
+    "artist": "The Killers"
+  },
+  {
+    "title": "Somebody Told Me",
+    "artist": "The Killers"
+  },
+  {
+    "title": "Seven Nation Army",
+    "artist": "The White Stripes"
+  },
+  {
+    "title": "Last Nite",
+    "artist": "The Strokes"
+  },
+  {
+    "title": "I Bet You Look Good on the Dancefloor",
+    "artist": "Arctic Monkeys"
+  },
+  {
+    "title": "Do I Wanna Know?",
+    "artist": "Arctic Monkeys"
+  },
+  {
+    "title": "Clocks",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "Yellow",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "The Scientist",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "In the End",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "Numb",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "Breaking the Habit",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "Bring Me to Life",
+    "artist": "Evanescence"
+  },
+  {
+    "title": "Complicated",
+    "artist": "Avril Lavigne"
+  },
+  {
+    "title": "Sk8er Boi",
+    "artist": "Avril Lavigne"
+  },
+  {
+    "title": "Rolling in the Deep",
+    "artist": "Adele"
+  },
+  {
+    "title": "Someone Like You",
+    "artist": "Adele"
+  },
+  {
+    "title": "Hello",
+    "artist": "Adele"
+  },
+  {
+    "title": "Shape of You",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Perfect",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Thinking Out Loud",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Locked Out of Heaven",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Treasure",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "24K Magic",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Uptown Funk",
+    "artist": "Mark Ronson ft. Bruno Mars"
+  },
+  {
+    "title": "Happy",
+    "artist": "Pharrell Williams"
+  },
+  {
+    "title": "Get Lucky",
+    "artist": "Daft Punk ft. Pharrell Williams"
+  },
+  {
+    "title": "Blinding Lights",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "Can't Feel My Face",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "Starboy",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "Bad Guy",
+    "artist": "Billie Eilish"
+  },
+  {
+    "title": "Ocean Eyes",
+    "artist": "Billie Eilish"
+  },
+  {
+    "title": "Royals",
+    "artist": "Lorde"
+  },
+  {
+    "title": "Team",
+    "artist": "Lorde"
+  },
+  {
+    "title": "Radioactive",
+    "artist": "Imagine Dragons"
+  },
+  {
+    "title": "Believer",
+    "artist": "Imagine Dragons"
+  },
+  {
+    "title": "Demons",
+    "artist": "Imagine Dragons"
+  },
+  {
+    "title": "Titanium",
+    "artist": "David Guetta ft. Sia"
+  },
+  {
+    "title": "Without You",
+    "artist": "David Guetta ft. Usher"
+  },
+  {
+    "title": "Wake Me Up",
+    "artist": "Avicii"
+  },
+  {
+    "title": "Levels",
+    "artist": "Avicii"
+  },
+  {
+    "title": "Lean On",
+    "artist": "Major Lazer & DJ Snake"
+  },
+  {
+    "title": "Turn Down for What",
+    "artist": "DJ Snake & Lil Jon"
+  },
+  {
+    "title": "Sorry",
+    "artist": "Justin Bieber"
+  },
+  {
+    "title": "Love Yourself",
+    "artist": "Justin Bieber"
+  },
+  {
+    "title": "Joe le taxi",
+    "artist": "Vanessa Paradis"
+  },
+  {
+    "title": "Pour que tu m'aimes encore",
+    "artist": "Céline Dion"
+  },
+  {
+    "title": "Les lacs du Connemara",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "Je te promets",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Allumer le feu",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Désenchantée",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "Sans contrefaçon",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "Moi... Lolita",
+    "artist": "Alizée"
+  },
+  {
+    "title": "La tribu de Dana",
+    "artist": "Manau"
+  },
+  {
+    "title": "Aïcha",
+    "artist": "Khaled"
+  },
+  {
+    "title": "Je danse le mia",
+    "artist": "IAM"
+  },
+  {
+    "title": "Petit frère",
+    "artist": "IAM"
+  },
+  {
+    "title": "La boulette",
+    "artist": "Diam's"
+  },
+  {
+    "title": "Confessions nocturnes",
+    "artist": "Diam's & Vitaa"
+  },
+  {
+    "title": "Dernière danse",
+    "artist": "Indila"
+  },
+  {
+    "title": "Tourner dans le vide",
+    "artist": "Indila"
+  },
+  {
+    "title": "Alors on danse",
+    "artist": "Stromae"
+  },
+  {
+    "title": "Papaoutai",
+    "artist": "Stromae"
+  },
+  {
+    "title": "Formidable",
+    "artist": "Stromae"
+  },
+  {
+    "title": "Bella",
+    "artist": "Gims"
+  },
+  {
+    "title": "Sapés comme jamais",
+    "artist": "Gims"
+  },
+  {
+    "title": "Basique",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Tout oublier",
+    "artist": "Angèle"
+  },
+  {
+    "title": "Balance ton quoi",
+    "artist": "Angèle"
+  },
+  {
+    "title": "Toxic",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Gimme More",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Piece of Me",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Because of You",
+    "artist": "Kelly Clarkson"
+  },
+  {
+    "title": "Since U Been Gone",
+    "artist": "Kelly Clarkson"
+  },
+  {
+    "title": "Behind These Hazel Eyes",
+    "artist": "Kelly Clarkson"
+  },
+  {
+    "title": "So What",
+    "artist": "P!nk"
+  },
+  {
+    "title": "Just Like a Pill",
+    "artist": "P!nk"
+  },
+  {
+    "title": "Get the Party Started",
+    "artist": "P!nk"
+  },
+  {
+    "title": "Raise Your Glass",
+    "artist": "P!nk"
+  },
+  {
+    "title": "Hollaback Girl",
+    "artist": "Gwen Stefani"
+  },
+  {
+    "title": "Rich Girl",
+    "artist": "Gwen Stefani"
+  },
+  {
+    "title": "Cool",
+    "artist": "Gwen Stefani"
+  },
+  {
+    "title": "Don't Speak",
+    "artist": "No Doubt"
+  },
+  {
+    "title": "Just a Girl",
+    "artist": "No Doubt"
+  },
+  {
+    "title": "Spiderwebs",
+    "artist": "No Doubt"
+  },
+  {
+    "title": "Unwritten",
+    "artist": "Natasha Bedingfield"
+  },
+  {
+    "title": "Pocketful of Sunshine",
+    "artist": "Natasha Bedingfield"
+  },
+  {
+    "title": "Bleeding Love",
+    "artist": "Leona Lewis"
+  },
+  {
+    "title": "Bleed It Out",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "What I've Done",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "Somewhere I Belong",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "In My Place",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "Speed of Sound",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "Viva La Vida",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "Take Me Out",
+    "artist": "Franz Ferdinand"
+  },
+  {
+    "title": "No You Girls",
+    "artist": "Franz Ferdinand"
+  },
+  {
+    "title": "Chelsea Dagger",
+    "artist": "The Fratellis"
+  },
+  {
+    "title": "Naive",
+    "artist": "The Kooks"
+  },
+  {
+    "title": "She Moves in Her Own Way",
+    "artist": "The Kooks"
+  },
+  {
+    "title": "Chasing Cars",
+    "artist": "Snow Patrol"
+  },
+  {
+    "title": "Run",
+    "artist": "Snow Patrol"
+  },
+  {
+    "title": "How to Save a Life",
+    "artist": "The Fray"
+  },
+  {
+    "title": "Over My Head (Cable Car)",
+    "artist": "The Fray"
+  },
+  {
+    "title": "Apologize",
+    "artist": "OneRepublic"
+  },
+  {
+    "title": "Counting Stars",
+    "artist": "OneRepublic"
+  },
+  {
+    "title": "Love Runs Out",
+    "artist": "OneRepublic"
+  },
+  {
+    "title": "Sugar",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "This Love",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "She Will Be Loved",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "Moves Like Jagger",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "It's My Life",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "Always",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "Bed of Roses",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "Don't Stop Me Now",
+    "artist": "Queen"
+  },
+  {
+    "title": "Somebody to Love",
+    "artist": "Queen"
+  },
+  {
+    "title": "Radio Ga Ga",
+    "artist": "Queen"
+  },
+  {
+    "title": "Bad",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Man in the Mirror",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Human Nature",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "Levitating",
+    "artist": "Dua Lipa"
+  },
+  {
+    "title": "Don't Start Now",
+    "artist": "Dua Lipa"
+  },
+  {
+    "title": "New Rules",
+    "artist": "Dua Lipa"
+  },
+  {
+    "title": "Physical",
+    "artist": "Dua Lipa"
+  },
+  {
+    "title": "Happier Than Ever",
+    "artist": "Billie Eilish"
+  },
+  {
+    "title": "Therefore I Am",
+    "artist": "Billie Eilish"
+  },
+  {
+    "title": "Bad Habits",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Castle on the Hill",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Shivers",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Watermelon Sugar",
+    "artist": "Harry Styles"
+  },
+  {
+    "title": "Sign of the Times",
+    "artist": "Harry Styles"
+  },
+  {
+    "title": "Adore You",
+    "artist": "Harry Styles"
+  },
+  {
+    "title": "As It Was",
+    "artist": "Harry Styles"
+  },
+  {
+    "title": "Positions",
+    "artist": "Ariana Grande"
+  },
+  {
+    "title": "7 rings",
+    "artist": "Ariana Grande"
+  },
+  {
+    "title": "thank u, next",
+    "artist": "Ariana Grande"
+  },
+  {
+    "title": "No Tears Left to Cry",
+    "artist": "Ariana Grande"
+  },
+  {
+    "title": "Side to Side",
+    "artist": "Ariana Grande"
+  },
+  {
+    "title": "Shallow",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Stupid Love",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "The Edge of Glory",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Born This Way",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Paparazzi",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Just Dance",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Tik Tok",
+    "artist": "Kesha"
+  },
+  {
+    "title": "Die Young",
+    "artist": "Kesha"
+  },
+  {
+    "title": "We R Who We R",
+    "artist": "Kesha"
+  },
+  {
+    "title": "Glad You Came",
+    "artist": "The Wanted"
+  },
+  {
+    "title": "What Makes You Beautiful",
+    "artist": "One Direction"
+  },
+  {
+    "title": "Story of My Life",
+    "artist": "One Direction"
+  },
+  {
+    "title": "Best Song Ever",
+    "artist": "One Direction"
+  },
+  {
+    "title": "Steal My Girl",
+    "artist": "One Direction"
+  },
+  {
+    "title": "Wrecking Ball",
+    "artist": "Miley Cyrus"
+  },
+  {
+    "title": "Party in the U.S.A.",
+    "artist": "Miley Cyrus"
+  },
+  {
+    "title": "Midnight Sky",
+    "artist": "Miley Cyrus"
+  },
+  {
+    "title": "We Can't Stop",
+    "artist": "Miley Cyrus"
+  },
+  {
+    "title": "Shake It Off",
+    "artist": "Taylor Swift"
+  },
+  {
+    "title": "Blank Space",
+    "artist": "Taylor Swift"
+  },
+  {
+    "title": "Love Story",
+    "artist": "Taylor Swift"
+  },
+  {
+    "title": "You Belong With Me",
+    "artist": "Taylor Swift"
+  },
+  {
+    "title": "Style",
+    "artist": "Taylor Swift"
+  },
+  {
+    "title": "Anti-Hero",
+    "artist": "Taylor Swift"
+  },
+  {
+    "title": "Can't Stop the Feeling!",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "Rock Your Body",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "Mirrors",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "That's What I Like",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Grenade",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Just the Way You Are",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Stronger",
+    "artist": "Kanye West"
+  },
+  {
+    "title": "Gold Digger",
+    "artist": "Kanye West"
+  },
+  {
+    "title": "Heartless",
+    "artist": "Kanye West"
+  },
+  {
+    "title": "Ni**as in Paris",
+    "artist": "JAY-Z & Kanye West"
+  },
+  {
+    "title": "Empire State of Mind",
+    "artist": "JAY-Z & Alicia Keys"
+  },
+  {
+    "title": "99 Problems",
+    "artist": "JAY-Z"
+  },
+  {
+    "title": "P.I.M.P.",
+    "artist": "50 Cent"
+  },
+  {
+    "title": "Hotline Bling",
+    "artist": "Drake"
+  },
+  {
+    "title": "One Dance",
+    "artist": "Drake"
+  },
+  {
+    "title": "God's Plan",
+    "artist": "Drake"
+  },
+  {
+    "title": "Started From the Bottom",
+    "artist": "Drake"
+  },
+  {
+    "title": "Sicko Mode",
+    "artist": "Travis Scott"
+  },
+  {
+    "title": "Goosebumps",
+    "artist": "Travis Scott"
+  },
+  {
+    "title": "Rockstar",
+    "artist": "Post Malone"
+  },
+  {
+    "title": "Circles",
+    "artist": "Post Malone"
+  },
+  {
+    "title": "Sunflower",
+    "artist": "Post Malone & Swae Lee"
+  },
+  {
+    "title": "Congratulations",
+    "artist": "Post Malone"
+  },
+  {
+    "title": "Lucid Dreams",
+    "artist": "Juice WRLD"
+  },
+  {
+    "title": "XO TOUR Llif3",
+    "artist": "Lil Uzi Vert"
+  },
+  {
+    "title": "Mask Off",
+    "artist": "Future"
+  },
+  {
+    "title": "Bad and Boujee",
+    "artist": "Migos"
+  },
+  {
+    "title": "Panda",
+    "artist": "Desiigner"
+  },
+  {
+    "title": "Black Beatles",
+    "artist": "Rae Sremmurd"
+  },
+  {
+    "title": "HUMBLE.",
+    "artist": "Kendrick Lamar"
+  },
+  {
+    "title": "Alright",
+    "artist": "Kendrick Lamar"
+  },
+  {
+    "title": "DNA.",
+    "artist": "Kendrick Lamar"
+  },
+  {
+    "title": "Power",
+    "artist": "Kanye West"
+  },
+  {
+    "title": "Jesus Walks",
+    "artist": "Kanye West"
+  },
+  {
+    "title": "Lose Control",
+    "artist": "Missy Elliott"
+  },
+  {
+    "title": "Work It",
+    "artist": "Missy Elliott"
+  },
+  {
+    "title": "1, 2 Step",
+    "artist": "Ciara"
+  },
+  {
+    "title": "Goodies",
+    "artist": "Ciara"
+  },
+  {
+    "title": "My Boo",
+    "artist": "Usher & Alicia Keys"
+  },
+  {
+    "title": "No One",
+    "artist": "Alicia Keys"
+  },
+  {
+    "title": "Fallin'",
+    "artist": "Alicia Keys"
+  },
+  {
+    "title": "If I Ain't Got You",
+    "artist": "Alicia Keys"
+  },
+  {
+    "title": "Freed from Desire",
+    "artist": "Gala"
+  },
+  {
+    "title": "Rhythm Is a Dancer",
+    "artist": "Snap!"
+  },
+  {
+    "title": "What Is Love",
+    "artist": "Haddaway"
+  },
+  {
+    "title": "Blue (Da Ba Dee)",
+    "artist": "Eiffel 65"
+  },
+  {
+    "title": "Better Off Alone",
+    "artist": "Alice Deejay"
+  },
+  {
+    "title": "Insomnia",
+    "artist": "Faithless"
+  },
+  {
+    "title": "Sandstorm",
+    "artist": "Darude"
+  },
+  {
+    "title": "Infinity 2000",
+    "artist": "Guru Josh Project"
+  },
+  {
+    "title": "Children",
+    "artist": "Robert Miles"
+  },
+  {
+    "title": "Everytime We Touch",
+    "artist": "Cascada"
+  },
+  {
+    "title": "Evacuate the Dancefloor",
+    "artist": "Cascada"
+  },
+  {
+    "title": "Call on Me",
+    "artist": "Eric Prydz"
+  },
+  {
+    "title": "One More Time",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Around the World",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Harder, Better, Faster, Stronger",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "When Love Takes Over",
+    "artist": "David Guetta ft. Kelly Rowland"
+  },
+  {
+    "title": "Play Hard",
+    "artist": "David Guetta ft. Ne-Yo & Akon"
+  },
+  {
+    "title": "Don't You Worry Child",
+    "artist": "Swedish House Mafia"
+  },
+  {
+    "title": "Save the World",
+    "artist": "Swedish House Mafia"
+  },
+  {
+    "title": "The Nights",
+    "artist": "Avicii"
+  },
+  {
+    "title": "Hey Brother",
+    "artist": "Avicii"
+  },
+  {
+    "title": "Clarity",
+    "artist": "Zedd ft. Foxes"
+  },
+  {
+    "title": "Spectrum",
+    "artist": "Zedd ft. Matthew Koma"
+  },
+  {
+    "title": "Turn Up the Speakers",
+    "artist": "Afrojack & Martin Garrix"
+  },
+  {
+    "title": "Animals",
+    "artist": "Martin Garrix"
+  },
+  {
+    "title": "Scared to be Lonely",
+    "artist": "Martin Garrix & Dua Lipa"
+  },
+  {
+    "title": "Cold Water",
+    "artist": "Major Lazer ft. Justin Bieber & MØ"
+  },
+  {
+    "title": "Light It Up",
+    "artist": "Major Lazer"
+  },
+  {
+    "title": "Chandelier",
+    "artist": "Sia"
+  },
+  {
+    "title": "Cheap Thrills",
+    "artist": "Sia"
+  },
+  {
+    "title": "Unstoppable",
+    "artist": "Sia"
+  },
+  {
+    "title": "Valerie",
+    "artist": "Amy Winehouse"
+  },
+  {
+    "title": "Back to Black",
+    "artist": "Amy Winehouse"
+  },
+  {
+    "title": "Rehab",
+    "artist": "Amy Winehouse"
+  },
+  {
+    "title": "You Know I'm No Good",
+    "artist": "Amy Winehouse"
+  },
+  {
+    "title": "Mercy",
+    "artist": "Duffy"
+  },
+  {
+    "title": "Warwick Avenue",
+    "artist": "Duffy"
+  },
+  {
+    "title": "Put Your Records On",
+    "artist": "Corinne Bailey Rae"
+  },
+  {
+    "title": "Like a Star",
+    "artist": "Corinne Bailey Rae"
+  },
+  {
+    "title": "A Thousand Miles",
+    "artist": "Vanessa Carlton"
+  },
+  {
+    "title": "Big Yellow Taxi",
+    "artist": "Counting Crows"
+  },
+  {
+    "title": "Mr. Jones",
+    "artist": "Counting Crows"
+  },
+  {
+    "title": "Hey There Delilah",
+    "artist": "Plain White T’s"
+  },
+  {
+    "title": "Rhythm of Love",
+    "artist": "Plain White T’s"
+  },
+  {
+    "title": "She’s So High",
+    "artist": "Tal Bachman"
+  },
+  {
+    "title": "Unwell",
+    "artist": "Matchbox Twenty"
+  },
+  {
+    "title": "Push",
+    "artist": "Matchbox Twenty"
+  },
+  {
+    "title": "Smooth",
+    "artist": "Santana & Rob Thomas"
+  },
+  {
+    "title": "Maria Maria",
+    "artist": "Santana"
+  },
+  {
+    "title": "Black Magic Woman",
+    "artist": "Santana"
+  },
+  {
+    "title": "I'm Yours",
+    "artist": "Jason Mraz"
+  },
+  {
+    "title": "Lucky",
+    "artist": "Jason Mraz & Colbie Caillat"
+  },
+  {
+    "title": "Bubbly",
+    "artist": "Colbie Caillat"
+  },
+  {
+    "title": "Brighter Than the Sun",
+    "artist": "Colbie Caillat"
+  },
+  {
+    "title": "Sex and Candy",
+    "artist": "Marcy Playground"
+  },
+  {
+    "title": "Teenage Dirtbag",
+    "artist": "Wheatus"
+  },
+  {
+    "title": "Stacy's Mom",
+    "artist": "Fountains of Wayne"
+  },
+  {
+    "title": "1985",
+    "artist": "Bowling for Soup"
+  },
+  {
+    "title": "I Write Sins Not Tragedies",
+    "artist": "Panic! At The Disco"
+  },
+  {
+    "title": "Nine in the Afternoon",
+    "artist": "Panic! At The Disco"
+  },
+  {
+    "title": "Sugar, We're Goin Down",
+    "artist": "Fall Out Boy"
+  },
+  {
+    "title": "Thnks fr th Mmrs",
+    "artist": "Fall Out Boy"
+  },
+  {
+    "title": "Dance, Dance",
+    "artist": "Fall Out Boy"
+  },
+  {
+    "title": "Welcome to My Life",
+    "artist": "Simple Plan"
+  },
+  {
+    "title": "Perfect",
+    "artist": "Simple Plan"
+  },
+  {
+    "title": "Addicted",
+    "artist": "Simple Plan"
+  },
+  {
+    "title": "21 Guns",
+    "artist": "Green Day"
+  },
+  {
+    "title": "Boulevard of Broken Dreams",
+    "artist": "Green Day"
+  },
+  {
+    "title": "Dirty Little Secret",
+    "artist": "The All-American Rejects"
+  },
+  {
+    "title": "Gives You Hell",
+    "artist": "The All-American Rejects"
+  },
+  {
+    "title": "Move Along",
+    "artist": "The All-American Rejects"
+  },
+  {
+    "title": "Numb/Encore",
+    "artist": "Linkin Park & JAY-Z"
+  },
+  {
+    "title": "Faint",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "Papercut",
+    "artist": "Linkin Park"
+  },
+  {
+    "title": "My Own Worst Enemy",
+    "artist": "Lit"
+  },
+  {
+    "title": "The Middle",
+    "artist": "Jimmy Eat World"
+  },
+  {
+    "title": "Pain",
+    "artist": "Jimmy Eat World"
+  },
+  {
+    "title": "Buddy Holly",
+    "artist": "Weezer"
+  },
+  {
+    "title": "Island in the Sun",
+    "artist": "Weezer"
+  },
+  {
+    "title": "Say It Ain’t So",
+    "artist": "Weezer"
+  },
+  {
+    "title": "Tainted Love",
+    "artist": "Soft Cell"
+  },
+  {
+    "title": "Don’t You Want Me",
+    "artist": "The Human League"
+  },
+  {
+    "title": "Sweet Dreams",
+    "artist": "Eurythmics"
+  },
+  {
+    "title": "Enjoy the Silence",
+    "artist": "Depeche Mode"
+  },
+  {
+    "title": "Personal Jesus",
+    "artist": "Depeche Mode"
+  },
+  {
+    "title": "Just Can't Get Enough",
+    "artist": "Depeche Mode"
+  },
+  {
+    "title": "Blue Monday",
+    "artist": "New Order"
+  },
+  {
+    "title": "Bizarre Love Triangle",
+    "artist": "New Order"
+  },
+  {
+    "title": "Don't You (Forget About Me)",
+    "artist": "Simple Minds"
+  },
+  {
+    "title": "Alive and Kicking",
+    "artist": "Simple Minds"
+  },
+  {
+    "title": "Take My Breath Away",
+    "artist": "Berlin"
+  },
+  {
+    "title": "Self Control",
+    "artist": "Laura Branigan"
+  },
+  {
+    "title": "Gloria",
+    "artist": "Laura Branigan"
+  },
+  {
+    "title": "Forever Young",
+    "artist": "Alphaville"
+  },
+  {
+    "title": "Big in Japan",
+    "artist": "Alphaville"
+  },
+  {
+    "title": "You Spin Me Round",
+    "artist": "Dead or Alive"
+  },
+  {
+    "title": "Never Gonna Give You Up",
+    "artist": "Rick Astley"
+  },
+  {
+    "title": "Together Forever",
+    "artist": "Rick Astley"
+  },
+  {
+    "title": "Everybody Wants to Rule the World",
+    "artist": "Tears for Fears"
+  },
+  {
+    "title": "Shout",
+    "artist": "Tears for Fears"
+  },
+  {
+    "title": "Head Over Heels",
+    "artist": "Tears for Fears"
+  },
+  {
+    "title": "I Kissed a Girl",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "Teenage Dream",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "Firework",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "Roar",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "Dark Horse",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "California Gurls",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "Blow",
+    "artist": "Kesha"
+  },
+  {
+    "title": "Your Love Is My Drug",
+    "artist": "Kesha"
+  },
+  {
+    "title": "S&M",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Rude Boy",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Only Girl (In the World)",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "SOS",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Pon de Replay",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Wanted",
+    "artist": "Hunter Hayes"
+  },
+  {
+    "title": "Before He Cheats",
+    "artist": "Carrie Underwood"
+  },
+  {
+    "title": "Need You Now",
+    "artist": "Lady A"
+  },
+  {
+    "title": "Cruise",
+    "artist": "Florida Georgia Line"
+  },
+  {
+    "title": "Take Your Time",
+    "artist": "Sam Hunt"
+  },
+  {
+    "title": "Body Like a Back Road",
+    "artist": "Sam Hunt"
+  },
+  {
+    "title": "Ho Hey",
+    "artist": "The Lumineers"
+  },
+  {
+    "title": "Ophelia",
+    "artist": "The Lumineers"
+  },
+  {
+    "title": "Little Talks",
+    "artist": "Of Monsters and Men"
+  },
+  {
+    "title": "Dirty Paws",
+    "artist": "Of Monsters and Men"
+  },
+  {
+    "title": "Home",
+    "artist": "Edward Sharpe & The Magnetic Zeros"
+  },
+  {
+    "title": "Way Down We Go",
+    "artist": "KALEO"
+  },
+  {
+    "title": "Youth",
+    "artist": "Daughter"
+  },
+  {
+    "title": "Breezeblocks",
+    "artist": "alt-J"
+  },
+  {
+    "title": "Left Hand Free",
+    "artist": "alt-J"
+  },
+  {
+    "title": "Somewhere Only We Know",
+    "artist": "Keane"
+  },
+  {
+    "title": "Everybody’s Changing",
+    "artist": "Keane"
+  },
+  {
+    "title": "Moulins de mon cœur",
+    "artist": "Claude Nougaro"
+  },
+  {
+    "title": "Aux Champs-Élysées",
+    "artist": "Joe Dassin"
+  },
+  {
+    "title": "L'Amérique",
+    "artist": "Joe Dassin"
+  },
+  {
+    "title": "Le Sud",
+    "artist": "Nino Ferrer"
+  },
+  {
+    "title": "Je t'aimais, je t'aime, je t'aimerai",
+    "artist": "Francis Cabrel"
+  },
+  {
+    "title": "La Corrida",
+    "artist": "Francis Cabrel"
+  },
+  {
+    "title": "Je l'aime à mourir",
+    "artist": "Francis Cabrel"
+  },
+  {
+    "title": "Comment est ta peine ?",
+    "artist": "Benjamin Biolay"
+  },
+  {
+    "title": "La chanson des vieux amants",
+    "artist": "Jacques Brel"
+  },
+  {
+    "title": "Amsterdam",
+    "artist": "Jacques Brel"
+  },
+  {
+    "title": "Ne me quitte pas",
+    "artist": "Jacques Brel"
+  },
+  {
+    "title": "L'aigle noir",
+    "artist": "Barbara"
+  },
+  {
+    "title": "L'Hymne à l'amour",
+    "artist": "Édith Piaf"
+  },
+  {
+    "title": "La vie en rose",
+    "artist": "Édith Piaf"
+  },
+  {
+    "title": "Milord",
+    "artist": "Édith Piaf"
+  },
+  {
+    "title": "Le métèque",
+    "artist": "Georges Moustaki"
+  },
+  {
+    "title": "Elle m'a dit",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "New York avec toi",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "Ça (c’est vraiment toi)",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "Un autre monde",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "L'aventurier",
+    "artist": "Indochine"
+  },
+  {
+    "title": "Trois nuits par semaine",
+    "artist": "Indochine"
+  },
+  {
+    "title": "Replay",
+    "artist": "Iyaz"
+  },
+  {
+    "title": "Solo",
+    "artist": "Clean Bandit ft. Demi Lovato"
+  },
+  {
+    "title": "Rockabye",
+    "artist": "Clean Bandit"
+  },
+  {
+    "title": "Rather Be",
+    "artist": "Clean Bandit"
+  },
+  {
+    "title": "Symphony",
+    "artist": "Clean Bandit ft. Zara Larsson"
+  },
+  {
+    "title": "Lush Life",
+    "artist": "Zara Larsson"
+  },
+  {
+    "title": "Never Forget You",
+    "artist": "Zara Larsson & MNEK"
+  },
+  {
+    "title": "I Took a Pill in Ibiza",
+    "artist": "Mike Posner"
+  },
+  {
+    "title": "Cooler Than Me",
+    "artist": "Mike Posner"
+  },
+  {
+    "title": "Lean Wit Me",
+    "artist": "Juice WRLD"
+  },
+  {
+    "title": "Robbery",
+    "artist": "Juice WRLD"
+  },
+  {
+    "title": "Talk",
+    "artist": "Khalid"
+  },
+  {
+    "title": "Location",
+    "artist": "Khalid"
+  },
+  {
+    "title": "Young Dumb & Broke",
+    "artist": "Khalid"
+  },
+  {
+    "title": "Peaches",
+    "artist": "Justin Bieber"
+  },
+  {
+    "title": "Ghost",
+    "artist": "Justin Bieber"
+  },
+  {
+    "title": "Intentions",
+    "artist": "Justin Bieber"
+  },
+  {
+    "title": "Heat Waves",
+    "artist": "Glass Animals"
+  },
+  {
+    "title": "Gooey",
+    "artist": "Glass Animals"
+  },
+  {
+    "title": "Tokyo Drift",
+    "artist": "Teriyaki Boyz"
+  },
+  {
+    "title": "Pursuit of Happiness",
+    "artist": "Kid Cudi"
+  },
+  {
+    "title": "Memories",
+    "artist": "Kid Cudi"
+  },
+  {
+    "title": "Day 'n' Nite",
+    "artist": "Kid Cudi"
+  },
+  {
+    "title": "Elastic Heart",
+    "artist": "Sia"
+  },
+  {
+    "title": "Alive",
+    "artist": "Sia"
+  },
+  {
+    "title": "She Wolf",
+    "artist": "David Guetta ft. Sia"
+  },
+  {
+    "title": "Turn Me On",
+    "artist": "David Guetta ft. Nicki Minaj"
+  },
+  {
+    "title": "Starships",
+    "artist": "Nicki Minaj"
+  },
+  {
+    "title": "Super Bass",
+    "artist": "Nicki Minaj"
+  },
+  {
+    "title": "Bang Bang",
+    "artist": "Jessie J, Ariana Grande, Nicki Minaj"
+  },
+  {
+    "title": "Dernière danse",
+    "artist": "Kyo"
+  },
+  {
+    "title": "Le chemin",
+    "artist": "Kyo"
+  },
+  {
+    "title": "Contact",
+    "artist": "Kyo"
+  },
+  {
+    "title": "Comme des enfants",
+    "artist": "Cœur de Pirate"
+  },
+  {
+    "title": "Adieu",
+    "artist": "Cœur de Pirate"
+  },
+  {
+    "title": "On verra",
+    "artist": "Nekfeu"
+  },
+  {
+    "title": "Ma dope",
+    "artist": "Nekfeu ft. S.Pri Noir"
+  },
+  {
+    "title": "Égérie",
+    "artist": "Nekfeu"
+  },
+  {
+    "title": "1995",
+    "artist": "Nekfeu"
+  },
+  {
+    "title": "Marly-Gomont",
+    "artist": "Kamini"
+  },
+  {
+    "title": "Là-bas",
+    "artist": "Jean-Jacques Goldman & Sirima"
+  },
+  {
+    "title": "Je te donne",
+    "artist": "Jean-Jacques Goldman & Michael Jones"
+  },
+  {
+    "title": "Quand la musique est bonne",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Encore un matin",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Je marche seul",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Face à la mer",
+    "artist": "Calogero & Passi"
+  },
+  {
+    "title": "En apesanteur",
+    "artist": "Calogero"
+  },
+  {
+    "title": "Si seulement je pouvais lui manquer",
+    "artist": "Calogero"
+  },
+  {
+    "title": "Un jour au mauvais endroit",
+    "artist": "Calogero"
+  },
+  {
+    "title": "J't'emmène au vent",
+    "artist": "Louise Attaque"
+  },
+  {
+    "title": "Ton invitation",
+    "artist": "Louise Attaque"
+  },
+  {
+    "title": "Ça sent la pluie",
+    "artist": "Louise Attaque"
+  },
+  {
+    "title": "Un homme debout",
+    "artist": "Claudio Capéo"
+  },
+  {
+    "title": "Riche",
+    "artist": "Claudio Capéo"
+  },
+  {
+    "title": "Ça ira",
+    "artist": "Claudio Capéo"
+  },
+  {
+    "title": "Jour 1",
+    "artist": "Louane"
+  },
+  {
+    "title": "Je vole",
+    "artist": "Louane"
+  },
+  {
+    "title": "Donne-moi ton cœur",
+    "artist": "Louane"
+  },
+  {
+    "title": "Saint Claude",
+    "artist": "Christine and the Queens"
+  },
+  {
+    "title": "Christine",
+    "artist": "Christine and the Queens"
+  },
+  {
+    "title": "Tilted",
+    "artist": "Christine and the Queens"
+  },
+  {
+    "title": "Je te pardonne",
+    "artist": "Maître Gims & Sia"
+  },
+  {
+    "title": "J’me tire",
+    "artist": "Maître Gims"
+  },
+  {
+    "title": "Sapés comme jamais",
+    "artist": "Maître Gims"
+  },
+  {
+    "title": "Bella",
+    "artist": "Maître Gims"
+  },
+  {
+    "title": "Réseaux",
+    "artist": "Niska"
+  },
+  {
+    "title": "Médicament",
+    "artist": "Niska ft. Booba"
+  },
+  {
+    "title": "Tuba Life",
+    "artist": "Jul"
+  },
+  {
+    "title": "Wesh alors",
+    "artist": "Jul"
+  },
+  {
+    "title": "J'oublie tout",
+    "artist": "Jul"
+  },
+  {
+    "title": "Je ne me vois pas briller",
+    "artist": "Jul"
+  },
+  {
+    "title": "À l’ammoniaque",
+    "artist": "PNL"
+  },
+  {
+    "title": "DA",
+    "artist": "PNL"
+  },
+  {
+    "title": "Le monde ou rien",
+    "artist": "PNL"
+  },
+  {
+    "title": "Naha",
+    "artist": "PNL"
+  },
+  {
+    "title": "La terre est ronde",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Tout va bien",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Notes pour trop tard",
+    "artist": "Orelsan ft. Ibeyi"
+  },
+  {
+    "title": "J'ai demandé à la lune",
+    "artist": "Indochine"
+  },
+  {
+    "title": "Alice & June",
+    "artist": "Indochine"
+  },
+  {
+    "title": "L'opportuniste",
+    "artist": "Jacques Dutronc"
+  },
+  {
+    "title": "Il est cinq heures, Paris s'éveille",
+    "artist": "Jacques Dutronc"
+  },
+  {
+    "title": "Et moi, et moi, et moi",
+    "artist": "Jacques Dutronc"
+  },
+  {
+    "title": "Tous les mêmes",
+    "artist": "Stromae"
+  },
+  {
+    "title": "Bruxelles je t'aime",
+    "artist": "Angèle"
+  },
+  {
+    "title": "Le festin",
+    "artist": "Camélia Jordana"
+  },
+  {
+    "title": "Djadja",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Copines",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Jolie nana",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Pookie",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Goutte d'eau",
+    "artist": "Ninho"
+  },
+  {
+    "title": "La vie qu’on mène",
+    "artist": "Ninho"
+  },
+  {
+    "title": "Lettre à une femme",
+    "artist": "Ninho"
+  },
+  {
+    "title": "Putana",
+    "artist": "Ninho"
+  },
+  {
+    "title": "Macarena",
+    "artist": "Damso"
+  },
+  {
+    "title": "Amnésie",
+    "artist": "Damso"
+  },
+  {
+    "title": "Θ. Macarena",
+    "artist": "Damso"
+  },
+  {
+    "title": "Feu de bois",
+    "artist": "Damso"
+  },
+  {
+    "title": "Dommage",
+    "artist": "Bigflo & Oli"
+  },
+  {
+    "title": "Sur la lune",
+    "artist": "Bigflo & Oli"
+  },
+  {
+    "title": "Je suis",
+    "artist": "Bigflo & Oli"
+  },
+  {
+    "title": "Salope!",
+    "artist": "Bigflo & Oli"
+  },
+  {
+    "title": "Dans un autre monde",
+    "artist": "Céline Dion"
+  },
+  {
+    "title": "Immortelle",
+    "artist": "Kyo"
+  },
+  {
+    "title": "Sur ma route",
+    "artist": "Black M"
+  },
+  {
+    "title": "Mme Pavoshko",
+    "artist": "Black M"
+  },
+  {
+    "title": "Dès que le vent soufflera",
+    "artist": "Renaud"
+  },
+  {
+    "title": "Mistral gagnant",
+    "artist": "Renaud"
+  },
+  {
+    "title": "Manhattan-Kaboul",
+    "artist": "Renaud & Axelle Red"
+  },
+  {
+    "title": "Je veux",
+    "artist": "Zaz"
+  },
+  {
+    "title": "Éblouie par la nuit",
+    "artist": "Zaz"
+  },
+  {
+    "title": "Si jamais j'oublie",
+    "artist": "Zaz"
+  },
+  {
+    "title": "Poker Face",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Bad Romance",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Save Your Tears",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "Take My Breath",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "Leave the Door Open",
+    "artist": "Silk Sonic"
+  },
+  {
+    "title": "In Bloom",
+    "artist": "Nirvana"
+  },
+  {
+    "title": "Hardest Button to Button",
+    "artist": "The White Stripes"
+  },
+  {
+    "title": "Fell In Love With a Girl",
+    "artist": "The White Stripes"
+  },
+  {
+    "title": "Thunder",
+    "artist": "Imagine Dragons"
+  },
+  {
+    "title": "Whatever It Takes",
+    "artist": "Imagine Dragons"
+  },
+  {
+    "title": "Animals",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "Memories",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "Riptide",
+    "artist": "Vance Joy"
+  },
+  {
+    "title": "Take Me to Church",
+    "artist": "Hozier"
+  },
+  {
+    "title": "Someone You Loved",
+    "artist": "Lewis Capaldi"
+  },
+  {
+    "title": "Rumour Has It",
+    "artist": "Adele"
+  },
+  {
+    "title": "Easy On Me",
+    "artist": "Adele"
+  },
+  {
+    "title": "Tremblement de terre",
+    "artist": "Tryo"
+  },
+  {
+    "title": "Désolé pour hier soir",
+    "artist": "Tryo"
+  },
+  {
+    "title": "L'hymne de nos campagnes",
+    "artist": "Tryo"
+  },
+  {
+    "title": "Toi + Moi",
+    "artist": "Grégoire"
+  },
+  {
+    "title": "Rue des étoiles",
+    "artist": "Grégoire"
+  },
+  {
+    "title": "Au revoir",
+    "artist": "Grégoire"
+  },
+  {
+    "title": "Un peu de rêve",
+    "artist": "Patrick Bruel"
+  },
+  {
+    "title": "Place des grands hommes",
+    "artist": "Patrick Bruel"
+  },
+  {
+    "title": "Qui a le droit",
+    "artist": "Patrick Bruel"
+  },
+  {
+    "title": "Casser la voix",
+    "artist": "Patrick Bruel"
+  },
+  {
+    "title": "Tomber la chemise",
+    "artist": "Zebda"
+  },
+  {
+    "title": "Motivés",
+    "artist": "Zebda"
+  },
+  {
+    "title": "Zidane y va marquer",
+    "artist": "Zebda"
+  },
+  {
+    "title": "Le petit bal perdu",
+    "artist": "Bourvil"
+  },
+  {
+    "title": "Salade de fruits",
+    "artist": "Bourvil"
+  },
+  {
+    "title": "La Bohème",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Emmenez-moi",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Foule sentimentale",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "Allô maman bobo",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "Les mots bleus",
+    "artist": "Christophe"
+  },
+  {
+    "title": "Aline",
+    "artist": "Christophe"
+  },
+  {
+    "title": "Sous le vent",
+    "artist": "Garou & Céline Dion"
+  },
+  {
+    "title": "Que je t’aime",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Marie",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "L’envie",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Femme libérée",
+    "artist": "Cookie Dingler"
+  },
+  {
+    "title": "Les brunes comptent pas pour des prunes",
+    "artist": "Lio"
+  },
+  {
+    "title": "Banana Split",
+    "artist": "Lio"
+  },
+  {
+    "title": "Tandem",
+    "artist": "Vanessa Paradis"
+  },
+  {
+    "title": "Divine Idylle",
+    "artist": "Vanessa Paradis"
+  },
+  {
+    "title": "Be My Baby",
+    "artist": "Vanessa Paradis"
+  },
+  {
+    "title": "J’ai encore rêvé d’elle",
+    "artist": "Il était une fois"
+  },
+  {
+    "title": "Les démons de minuit",
+    "artist": "Émile & Images"
+  },
+  {
+    "title": "Ma philosophie",
+    "artist": "Amel Bent"
+  },
+  {
+    "title": "Eye du tigre (fr)",
+    "artist": "Ridan"
+  },
+  {
+    "title": "U-Turn (Lili)",
+    "artist": "AaRON"
+  },
+  {
+    "title": "Le temps est bon",
+    "artist": "Isabelle Pierre"
+  },
+  {
+    "title": "Je suis malade",
+    "artist": "Serge Lama"
+  },
+  {
+    "title": "Les p'tites boîtes",
+    "artist": "Graeme Allwright"
+  },
+  {
+    "title": "Le coup de soleil",
+    "artist": "Richard Cocciante"
+  },
+  {
+    "title": "Avec le temps",
+    "artist": "Léo Ferré"
+  },
+  {
+    "title": "La javanaise",
+    "artist": "Serge Gainsbourg"
+  },
+  {
+    "title": "Je t’aime… moi non plus",
+    "artist": "Gainsbourg & Birkin"
+  },
+  {
+    "title": "Initials B.B.",
+    "artist": "Serge Gainsbourg"
+  },
+  {
+    "title": "Les sucettes",
+    "artist": "France Gall"
+  },
+  {
+    "title": "Poupée de cire, poupée de son",
+    "artist": "France Gall"
+  },
+  {
+    "title": "Ella, elle l’a",
+    "artist": "France Gall"
+  },
+  {
+    "title": "Voyage, voyage",
+    "artist": "Desireless"
+  },
+  {
+    "title": "Toute Première Fois",
+    "artist": "Jeanne Mas"
+  },
+  {
+    "title": "En rouge et noir",
+    "artist": "Jeanne Mas"
+  },
+  {
+    "title": "Besoin de rien, envie de toi",
+    "artist": "Peter et Sloane"
+  },
+  {
+    "title": "Ouragan",
+    "artist": "Stéphanie de Monaco"
+  },
+  {
+    "title": "Aficionado",
+    "artist": "Ycare"
+  },
+  {
+    "title": "Mon précieux",
+    "artist": "Soprano"
+  },
+  {
+    "title": "Clown",
+    "artist": "Soprano"
+  },
+  {
+    "title": "Cosmo",
+    "artist": "Soprano"
+  },
+  {
+    "title": "Roule",
+    "artist": "Soprano"
+  },
+  {
+    "title": "Sobri (notre destin)",
+    "artist": "Leslie & Amine"
+  },
+  {
+    "title": "Dernier verre (laisse-moi t’aimer)",
+    "artist": "Amine"
+  },
+  {
+    "title": "Mon étoile",
+    "artist": "Amine"
+  },
+  {
+    "title": "Elle me contrôle",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "Juste une photo de toi",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "Tombé",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "Désolé",
+    "artist": "Sexion d’Assaut"
+  },
+  {
+    "title": "Avant qu’elle parte",
+    "artist": "Sexion d’Assaut"
+  },
+  {
+    "title": "Wati by night",
+    "artist": "Sexion d’Assaut"
+  },
+  {
+    "title": "Ma direction",
+    "artist": "Sexion d’Assaut"
+  },
+  {
+    "title": "Sapé comme jamais",
+    "artist": "Maître Gims"
+  },
+  {
+    "title": "Petite sœur",
+    "artist": "Diam's"
+  },
+  {
+    "title": "DJ",
+    "artist": "Diam's"
+  },
+  {
+    "title": "Marine",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Défaite de famille",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Raelsan",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Évidemment",
+    "artist": "Jenifer"
+  },
+  {
+    "title": "Au soleil",
+    "artist": "Jenifer"
+  },
+  {
+    "title": "Ma révolution",
+    "artist": "Jenifer"
+  },
+  {
+    "title": "À nos actes manqués",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "On écrit sur les murs",
+    "artist": "Kids United"
+  },
+  {
+    "title": "L’oiseau et l’enfant",
+    "artist": "Marie Myriam"
+  },
+  {
+    "title": "Zoubida",
+    "artist": "Lagaf"
+  },
+  {
+    "title": "Le plastique c’est fantastique",
+    "artist": "Elmer Food Beat"
+  },
+  {
+    "title": "Daniela",
+    "artist": "Elmer Food Beat"
+  },
+  {
+    "title": "La kiffance",
+    "artist": "Naps"
+  },
+  {
+    "title": "Cœur de pirate",
+    "artist": "Jul"
+  },
+  {
+    "title": "J’suis pas un héros",
+    "artist": "Daniel Balavoine"
+  },
+  {
+    "title": "Tous les cris les SOS",
+    "artist": "Daniel Balavoine"
+  },
+  {
+    "title": "Le chanteur",
+    "artist": "Daniel Balavoine"
+  },
+  {
+    "title": "Quand on arrive en ville",
+    "artist": "Balavoine & Berger"
+  },
+  {
+    "title": "Diego, libre dans sa tête",
+    "artist": "Michel Berger"
+  },
+  {
+    "title": "La groupie du pianiste",
+    "artist": "Michel Berger"
+  },
+  {
+    "title": "Résiste",
+    "artist": "France Gall"
+  },
+  {
+    "title": "Il jouait du piano debout",
+    "artist": "France Gall"
+  },
+  {
+    "title": "Tombé pour elle",
+    "artist": "Pascal Obispo"
+  },
+  {
+    "title": "Lucie",
+    "artist": "Pascal Obispo"
+  },
+  {
+    "title": "Fan",
+    "artist": "Pascal Obispo"
+  },
+  {
+    "title": "Pour que tu m’aimes encore",
+    "artist": "Céline Dion"
+  },
+  {
+    "title": "J’irai où tu iras",
+    "artist": "Céline Dion"
+  },
+  {
+    "title": "S'il suffisait d’aimer",
+    "artist": "Céline Dion"
+  },
+  {
+    "title": "Même si",
+    "artist": "Grégoire"
+  },
+  {
+    "title": "À fleur de toi",
+    "artist": "Vitaa"
+  },
+  {
+    "title": "Confessions nocturnes",
+    "artist": "Vitaa & Diam’s"
+  },
+  {
+    "title": "VersuS",
+    "artist": "Vitaa & Slimane"
+  },
+  {
+    "title": "Avant toi",
+    "artist": "Vitaa & Slimane"
+  },
+  {
+    "title": "Marcia Baila",
+    "artist": "Les Rita Mitsouko"
+  },
+  {
+    "title": "C’est comme ça",
+    "artist": "Les Rita Mitsouko"
+  },
+  {
+    "title": "Andy",
+    "artist": "Les Rita Mitsouko"
+  },
+  {
+    "title": "Je danse donc je suis",
+    "artist": "Brigitte Bardot"
+  },
+  {
+    "title": "Harley Davidson",
+    "artist": "Brigitte Bardot"
+  },
+  {
+    "title": "La madrague",
+    "artist": "Brigitte Bardot"
+  },
+  {
+    "title": "Les rois du monde",
+    "artist": "Roméo & Juliette"
+  },
+  {
+    "title": "Vivre",
+    "artist": "Notre-Dame de Paris"
+  },
+  {
+    "title": "Belle",
+    "artist": "Notre-Dame de Paris"
+  },
+  {
+    "title": "L’assasymphonie",
+    "artist": "Mozart l’opéra rock"
+  },
+  {
+    "title": "Tatoue-moi",
+    "artist": "Mozart l’opéra rock"
+  },
+  {
+    "title": "Le bien qui fait mal",
+    "artist": "Mozart l’opéra rock"
+  },
+  {
+    "title": "Blurred Lines",
+    "artist": "Robin Thicke"
+  },
+  {
+    "title": "Get Lucky",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Digital Love",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Harder Better Faster Stronger",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Superheroes",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Black or White",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "When You Were Young",
+    "artist": "The Killers"
+  },
+  {
+    "title": "Adventure Of A Lifetime",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "Nés sous la même étoile",
+    "artist": "IAM"
+  },
+  {
+    "title": "L'école du micro d'argent",
+    "artist": "IAM"
+  },
+  {
+    "title": "Demain c’est loin",
+    "artist": "IAM"
+  },
+  {
+    "title": "Le monde de demain",
+    "artist": "Suprême NTM"
+  },
+  {
+    "title": "Ma Benz",
+    "artist": "Suprême NTM"
+  },
+  {
+    "title": "Seine-Saint-Denis Style",
+    "artist": "Suprême NTM"
+  },
+  {
+    "title": "Passe passe le oinj",
+    "artist": "Fonky Family"
+  },
+  {
+    "title": "Art de rue",
+    "artist": "Fonky Family"
+  },
+  {
+    "title": "Sans rémission",
+    "artist": "Fonky Family"
+  },
+  {
+    "title": "Wati Bon Son",
+    "artist": "Sexion d’Assaut"
+  },
+  {
+    "title": "C’est ma vie",
+    "artist": "Sexion d’Assaut"
+  },
+  {
+    "title": "93 Empire",
+    "artist": "Sofiane"
+  },
+  {
+    "title": "Toka",
+    "artist": "Sofiane"
+  },
+  {
+    "title": "Je suis chez moi",
+    "artist": "Black M"
+  },
+  {
+    "title": "French Kiss",
+    "artist": "Black M"
+  },
+  {
+    "title": "Caramello",
+    "artist": "Ninho"
+  },
+  {
+    "title": "Binks to Binks",
+    "artist": "Ninho"
+  },
+  {
+    "title": "À la faveur de l’automne",
+    "artist": "Tété"
+  },
+  {
+    "title": "Le bonheur",
+    "artist": "Tété"
+  },
+  {
+    "title": "Femme like you",
+    "artist": "K-Maro"
+  },
+  {
+    "title": "Crazy",
+    "artist": "K-Maro"
+  },
+  {
+    "title": "Hey Oh",
+    "artist": "Tragédie"
+  },
+  {
+    "title": "Sexy pour moi",
+    "artist": "Tragédie"
+  },
+  {
+    "title": "Ma meilleure",
+    "artist": "La Fouine & Zaho"
+  },
+  {
+    "title": "Tombé",
+    "artist": "La Fouine"
+  },
+  {
+    "title": "Paname",
+    "artist": "Slimane"
+  },
+  {
+    "title": "Viens on s’aime",
+    "artist": "Slimane"
+  },
+  {
+    "title": "Je vole",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "En chantant",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "La java de Broadway",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "Être une femme",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "Le France",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "For me formidable",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Je m’voyais déjà",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Comme ils disent",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Message personnel",
+    "artist": "Françoise Hardy"
+  },
+  {
+    "title": "Le temps de l’amour",
+    "artist": "Françoise Hardy"
+  },
+  {
+    "title": "Comment te dire adieu",
+    "artist": "Françoise Hardy"
+  },
+  {
+    "title": "Et si tu n’existais pas",
+    "artist": "Joe Dassin"
+  },
+  {
+    "title": "Le dernier slow",
+    "artist": "Joe Dassin"
+  },
+  {
+    "title": "Les Champs-Élysées",
+    "artist": "Zaz"
+  },
+  {
+    "title": "Que vendra",
+    "artist": "Zaz"
+  },
+  {
+    "title": "Capri c’est fini",
+    "artist": "Hervé Vilard"
+  },
+  {
+    "title": "Vous les femmes",
+    "artist": "Julio Iglesias"
+  },
+  {
+    "title": "Je n’aurai pas le temps",
+    "artist": "Michel Fugain"
+  },
+  {
+    "title": "Une belle histoire",
+    "artist": "Michel Fugain"
+  },
+  {
+    "title": "Partir un jour",
+    "artist": "2Be3"
+  },
+  {
+    "title": "Donne-moi une raison",
+    "artist": "Alliage"
+  },
+  {
+    "title": "Emmène-moi",
+    "artist": "Marc Lavoine"
+  },
+  {
+    "title": "Toi mon amour",
+    "artist": "Marc Lavoine"
+  },
+  {
+    "title": "Elle a les yeux revolver",
+    "artist": "Marc Lavoine"
+  },
+  {
+    "title": "Y’a d’la joie",
+    "artist": "Charles Trenet"
+  },
+  {
+    "title": "La mer",
+    "artist": "Charles Trenet"
+  },
+  {
+    "title": "À l’international",
+    "artist": "Tal"
+  },
+  {
+    "title": "Le sens de la vie",
+    "artist": "Tal"
+  },
+  {
+    "title": "Waya Waya",
+    "artist": "MHD"
+  },
+  {
+    "title": "La puissance",
+    "artist": "MHD"
+  },
+  {
+    "title": "Afro Trap Part. 7",
+    "artist": "MHD"
+  },
+  {
+    "title": "Rendez-vous",
+    "artist": "Christine and the Queens"
+  },
+  {
+    "title": "People, I've Been Sad",
+    "artist": "Christine and the Queens"
+  },
+  {
+    "title": "Les planètes",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "Reste",
+    "artist": "M. Pokora & Delia"
+  },
+  {
+    "title": "Zumba Cafew",
+    "artist": "DJ Mam's"
+  },
+  {
+    "title": "Fiesta Buena",
+    "artist": "DJ Mam's"
+  },
+  {
+    "title": "Danza Kuduro",
+    "artist": "Don Omar"
+  },
+  {
+    "title": "Limbo",
+    "artist": "Daddy Yankee"
+  },
+  {
+    "title": "Versace On The Floor",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Electric Feel",
+    "artist": "MGMT"
+  },
+  {
+    "title": "Kids",
+    "artist": "MGMT"
+  },
+  {
+    "title": "Time to Pretend",
+    "artist": "MGMT"
+  },
+  {
+    "title": "Somebody That I Used to Know",
+    "artist": "Gotye"
+  },
+  {
+    "title": "Budapest",
+    "artist": "George Ezra"
+  },
+  {
+    "title": "Shotgun",
+    "artist": "George Ezra"
+  },
+  {
+    "title": "Alejandro",
+    "artist": "Lady Gaga"
+  },
+  {
+    "title": "Payphone",
+    "artist": "Maroon 5"
+  },
+  {
+    "title": "Heroes",
+    "artist": "David Bowie"
+  },
+  {
+    "title": "Let's Dance",
+    "artist": "David Bowie"
+  },
+  {
+    "title": "Space Oddity",
+    "artist": "David Bowie"
+  },
+  {
+    "title": "Walking on the Moon",
+    "artist": "The Police"
+  },
+  {
+    "title": "Dani California",
+    "artist": "Red Hot Chili Peppers"
+  },
+  {
+    "title": "No One Knows",
+    "artist": "Queens of the Stone Age"
+  },
+  {
+    "title": "Little Sister",
+    "artist": "Queens of the Stone Age"
+  },
+  {
+    "title": "Fix You",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "I Gotta Feeling",
+    "artist": "The Black Eyed Peas"
+  },
+  {
+    "title": "Pump It",
+    "artist": "The Black Eyed Peas"
+  },
+  {
+    "title": "Where Is the Love?",
+    "artist": "The Black Eyed Peas"
+  },
+  {
+    "title": "Womanizer",
+    "artist": "Britney Spears"
+  },
+  {
+    "title": "Succès fou",
+    "artist": "Christophe"
+  },
+  {
+    "title": "Les paradis perdus",
+    "artist": "Christophe"
+  },
+  {
+    "title": "La bombe humaine",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "Cendrillon",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "Hygiaphone",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "Pas toi",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Il suffira d’un signe",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Je te donne",
+    "artist": "Goldman & Jones"
+  },
+  {
+    "title": "Là-bas",
+    "artist": "Goldman & Sirima"
+  },
+  {
+    "title": "Un long dimanche de fiançailles",
+    "artist": "Indochine"
+  },
+  {
+    "title": "Tes yeux noirs",
+    "artist": "Indochine"
+  },
+  {
+    "title": "Le vent nous portera",
+    "artist": "Noir Désir"
+  },
+  {
+    "title": "Aux sombres héros de l’amer",
+    "artist": "Noir Désir"
+  },
+  {
+    "title": "Comme elle vient",
+    "artist": "Noir Désir"
+  },
+  {
+    "title": "Je m’en vais",
+    "artist": "Vianney"
+  },
+  {
+    "title": "Beau-papa",
+    "artist": "Vianney"
+  },
+  {
+    "title": "Pas là",
+    "artist": "Vianney"
+  },
+  {
+    "title": "Dumbo",
+    "artist": "Vianney"
+  },
+  {
+    "title": "La même",
+    "artist": "Maître Gims & Vianney"
+  },
+  {
+    "title": "Dans mes rêves",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Reine",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Bob Marley",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Compliqué",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Roi",
+    "artist": "Bilal Hassani"
+  },
+  {
+    "title": "Jalousie",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Angela",
+    "artist": "Hatik"
+  },
+  {
+    "title": "La meilleure",
+    "artist": "Hatik"
+  },
+  {
+    "title": "Adieu mon amour",
+    "artist": "Hatik"
+  },
+  {
+    "title": "Y'a les mots",
+    "artist": "Keen'V"
+  },
+  {
+    "title": "Rien qu'une fois",
+    "artist": "Keen'V"
+  },
+  {
+    "title": "Tahiti",
+    "artist": "Keen'V"
+  },
+  {
+    "title": "Là c'est die",
+    "artist": "Keen'V"
+  },
+  {
+    "title": "Le prince Aladin",
+    "artist": "Keen'V ft. Rayane"
+  },
+  {
+    "title": "Ça fait mal",
+    "artist": "Christophe Maé"
+  },
+  {
+    "title": "Belle demoiselle",
+    "artist": "Christophe Maé"
+  },
+  {
+    "title": "On s'attache",
+    "artist": "Christophe Maé"
+  },
+  {
+    "title": "Il est où le bonheur",
+    "artist": "Christophe Maé"
+  },
+  {
+    "title": "Casting",
+    "artist": "Christophe Maé"
+  },
+  {
+    "title": "Tomber",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "Mirage",
+    "artist": "M. Pokora"
+  },
+  {
+    "title": "Corps",
+    "artist": "Yseult"
+  },
+  {
+    "title": "Bad Boy",
+    "artist": "Yseult"
+  },
+  {
+    "title": "Rien à prouver",
+    "artist": "Yseult"
+  },
+  {
+    "title": "Flash",
+    "artist": "Yseult"
+  },
+  {
+    "title": "Santé",
+    "artist": "Stromae"
+  },
+  {
+    "title": "Aujourd’hui",
+    "artist": "Bigflo & Oli"
+  },
+  {
+    "title": "Libre",
+    "artist": "Angèle"
+  },
+  {
+    "title": "Démons",
+    "artist": "Angèle & Damso"
+  },
+  {
+    "title": "La thune",
+    "artist": "Angèle"
+  },
+  {
+    "title": "Printemps",
+    "artist": "Vitaa & Slimane"
+  },
+  {
+    "title": "De l'or",
+    "artist": "Vitaa & Slimane"
+  },
+  {
+    "title": "Ça va ça vient",
+    "artist": "Vitaa & Slimane"
+  },
+  {
+    "title": "Hirondelle",
+    "artist": "Vitaa & Slimane"
+  },
+  {
+    "title": "Mourir sur scène",
+    "artist": "Dalida"
+  },
+  {
+    "title": "Gigi l'amoroso",
+    "artist": "Dalida"
+  },
+  {
+    "title": "Bambino",
+    "artist": "Dalida"
+  },
+  {
+    "title": "Laissez-moi danser",
+    "artist": "Dalida"
+  },
+  {
+    "title": "Monday, Tuesday… Laissez-moi danser",
+    "artist": "Dalida"
+  },
+  {
+    "title": "Vida Loca",
+    "artist": "Naps"
+  },
+  {
+    "title": "Sans limites",
+    "artist": "Naps"
+  },
+  {
+    "title": "Solaar pleure",
+    "artist": "MC Solaar"
+  },
+  {
+    "title": "Bouge de là",
+    "artist": "MC Solaar"
+  },
+  {
+    "title": "Caroline",
+    "artist": "MC Solaar"
+  },
+  {
+    "title": "Les temps changent",
+    "artist": "MC Solaar"
+  },
+  {
+    "title": "On se connaît",
+    "artist": "Youssoupha ft. Ayna"
+  },
+  {
+    "title": "Entourage",
+    "artist": "Youssoupha"
+  },
+  {
+    "title": "Menace de mort",
+    "artist": "Youssoupha"
+  },
+  {
+    "title": "Dreamin'",
+    "artist": "Youssoupha & Indila"
+  },
+  {
+    "title": "SOS",
+    "artist": "Indila"
+  },
+  {
+    "title": "Love Story",
+    "artist": "Indila"
+  },
+  {
+    "title": "Mini World",
+    "artist": "Indila"
+  },
+  {
+    "title": "J’me tire",
+    "artist": "Gims"
+  },
+  {
+    "title": "Est-ce que tu m'aimes ?",
+    "artist": "Gims"
+  },
+  {
+    "title": "La même",
+    "artist": "Gims & Vianney"
+  },
+  {
+    "title": "Si jamais j’oublie",
+    "artist": "Zaz"
+  },
+  {
+    "title": "À nos souvenirs",
+    "artist": "Trois Cafés Gourmands"
+  },
+  {
+    "title": "On t'emmène",
+    "artist": "Trois Cafés Gourmands"
+  },
+  {
+    "title": "Allez reste",
+    "artist": "Boulevard des Airs & Vianney"
+  },
+  {
+    "title": "Emmène-moi",
+    "artist": "Boulevard des Airs"
+  },
+  {
+    "title": "Freestyle du sale",
+    "artist": "Vald"
+  },
+  {
+    "title": "Désaccordé",
+    "artist": "Vald"
+  },
+  {
+    "title": "Gris",
+    "artist": "Vald"
+  },
+  {
+    "title": "La grenade",
+    "artist": "Clara Luciani"
+  },
+  {
+    "title": "Nue",
+    "artist": "Clara Luciani"
+  },
+  {
+    "title": "Le reste",
+    "artist": "Clara Luciani"
+  },
+  {
+    "title": "Dans l'univers",
+    "artist": "Nekfeu"
+  },
+  {
+    "title": "Ensemble",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "No Diggity",
+    "artist": "Blackstreet"
+  },
+  {
+    "title": "Pony",
+    "artist": "Ginuwine"
+  },
+  {
+    "title": "Read My Mind",
+    "artist": "The Killers"
+  },
+  {
+    "title": "Human",
+    "artist": "The Killers"
+  },
+  {
+    "title": "Better",
+    "artist": "Khalid"
+  },
+  {
+    "title": "Photograph",
+    "artist": "Ed Sheeran"
+  },
+  {
+    "title": "Waka Waka",
+    "artist": "Shakira"
+  },
+  {
+    "title": "J'ai 10 ans",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "La Ballade de Jim",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "Dure limite",
+    "artist": "Téléphone"
+  },
+  {
+    "title": "Puisque tu pars",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Elle a fait un bébé toute seule",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Nuit",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "La musique",
+    "artist": "Nicoletta"
+  },
+  {
+    "title": "Mamy Blue",
+    "artist": "Nicoletta"
+  },
+  {
+    "title": "Mourir d'aimer",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Il faut savoir",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Comme d'habitude",
+    "artist": "Claude François"
+  },
+  {
+    "title": "Cette année-là",
+    "artist": "Claude François"
+  },
+  {
+    "title": "Alexandrie Alexandra",
+    "artist": "Claude François"
+  },
+  {
+    "title": "Magnolias for Ever",
+    "artist": "Claude François"
+  },
+  {
+    "title": "Paroles, paroles",
+    "artist": "Dalida"
+  },
+  {
+    "title": "J'attendrai",
+    "artist": "Dalida"
+  },
+  {
+    "title": "Besame mucho",
+    "artist": "Dalida"
+  },
+  {
+    "title": "La bohème",
+    "artist": "Charles Aznavour"
+  },
+  {
+    "title": "Le pénitencier",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Quelque chose de Tennessee",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Requiem pour un fou",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Comme toi",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Il changeait la vie",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Confidentiel",
+    "artist": "Jean-Jacques Goldman"
+  },
+  {
+    "title": "Seras-tu là ?",
+    "artist": "Michel Berger"
+  },
+  {
+    "title": "L’envie d’aimer",
+    "artist": "Daniel Lévi"
+  },
+  {
+    "title": "Aimer",
+    "artist": "Roméo & Juliette"
+  },
+  {
+    "title": "J’suis malade",
+    "artist": "Serge Lama"
+  },
+  {
+    "title": "D’aventures en aventures",
+    "artist": "Serge Lama"
+  },
+  {
+    "title": "Tu es mon autre",
+    "artist": "Lara Fabian & Maurane"
+  },
+  {
+    "title": "Je suis malade",
+    "artist": "Lara Fabian"
+  },
+  {
+    "title": "Tout",
+    "artist": "Lara Fabian"
+  },
+  {
+    "title": "Immortelle",
+    "artist": "Lara Fabian"
+  },
+  {
+    "title": "Respire",
+    "artist": "Mickey 3D"
+  },
+  {
+    "title": "La mort dans les os",
+    "artist": "Mickey 3D"
+  },
+  {
+    "title": "Le sud",
+    "artist": "Nino Ferrer"
+  },
+  {
+    "title": "Mirza",
+    "artist": "Nino Ferrer"
+  },
+  {
+    "title": "Les cornichons",
+    "artist": "Nino Ferrer"
+  },
+  {
+    "title": "Le temps des cathédrales",
+    "artist": "Notre-Dame de Paris"
+  },
+  {
+    "title": "Vivre",
+    "artist": "Noa (Notre-Dame de Paris)"
+  },
+  {
+    "title": "J'entends le loup",
+    "artist": "Manau"
+  },
+  {
+    "title": "La vallée",
+    "artist": "Manau"
+  },
+  {
+    "title": "Emmenez-moi",
+    "artist": "Boulevard des Airs"
+  },
+  {
+    "title": "Ce gamin-là",
+    "artist": "Boulevard des Airs"
+  },
+  {
+    "title": "Jusqu’au dernier gramme",
+    "artist": "PNL"
+  },
+  {
+    "title": "Deux frères",
+    "artist": "PNL"
+  },
+  {
+    "title": "La fête de trop",
+    "artist": "Eddy de Pretto"
+  },
+  {
+    "title": "Kid",
+    "artist": "Eddy de Pretto"
+  },
+  {
+    "title": "Normal",
+    "artist": "Eddy de Pretto"
+  },
+  {
+    "title": "Fête de trop",
+    "artist": "Eddy de Pretto"
+  },
+  {
+    "title": "Gravité",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Mon soleil",
+    "artist": "Dadju & Anitta"
+  },
+  {
+    "title": "Lionne",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Bad boy",
+    "artist": "Yseult"
+  },
+  {
+    "title": "L’hymne de nos campagnes",
+    "artist": "Tryo"
+  },
+  {
+    "title": "Serre-moi",
+    "artist": "Tryo"
+  },
+  {
+    "title": "Amour toujours",
+    "artist": "Clara Luciani"
+  },
+  {
+    "title": "Respire encore",
+    "artist": "Clara Luciani"
+  },
+  {
+    "title": "La marcheuse",
+    "artist": "Christine and the Queens"
+  },
+  {
+    "title": "XXL",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "Rêver",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "L'Alizé",
+    "artist": "Alizée"
+  },
+  {
+    "title": "J'en ai marre",
+    "artist": "Alizée"
+  },
+  {
+    "title": "S.O.S",
+    "artist": "Indila"
+  },
+  {
+    "title": "BB",
+    "artist": "Booba"
+  },
+  {
+    "title": "DKR",
+    "artist": "Booba"
+  },
+  {
+    "title": "Validée",
+    "artist": "Booba"
+  },
+  {
+    "title": "G5",
+    "artist": "Booba"
+  },
+  {
+    "title": "Vréalité",
+    "artist": "Moha La Squale"
+  },
+  {
+    "title": "L’envie de vivre",
+    "artist": "Moha La Squale"
+  },
+  {
+    "title": "Jaloux",
+    "artist": "Dadju"
+  },
+  {
+    "title": "Versace",
+    "artist": "Migos"
+  },
+  {
+    "title": "Stir Fry",
+    "artist": "Migos"
+  },
+  {
+    "title": "Filthy",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "Suit & Tie",
+    "artist": "Justin Timberlake"
+  },
+  {
+    "title": "Versace on the Floor",
+    "artist": "Bruno Mars"
+  },
+  {
+    "title": "Instant Crush",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Break My Heart",
+    "artist": "Dua Lipa"
+  },
+  {
+    "title": "In The Night",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "The Hills",
+    "artist": "The Weeknd"
+  },
+  {
+    "title": "Sweet Child O’ Mine",
+    "artist": "Guns N’ Roses"
+  },
+  {
+    "title": "Paradise City",
+    "artist": "Guns N’ Roses"
+  },
+  {
+    "title": "Don’t Cry",
+    "artist": "Guns N’ Roses"
+  },
+  {
+    "title": "Adventure of a Lifetime",
+    "artist": "Coldplay"
+  },
+  {
+    "title": "La maladie d'amour",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "Musulmanes",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "Je vais t'aimer",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "Voyage au bout de la nuit",
+    "artist": "Chantal Goya"
+  },
+  {
+    "title": "Bécassine",
+    "artist": "Chantal Goya"
+  },
+  {
+    "title": "Pandi-Panda",
+    "artist": "Chantal Goya"
+  },
+  {
+    "title": "L'amour en héritage",
+    "artist": "Nana Mouskouri"
+  },
+  {
+    "title": "Une femme avec toi",
+    "artist": "Nicole Croisille"
+  },
+  {
+    "title": "Femmes je vous aime",
+    "artist": "Julien Clerc"
+  },
+  {
+    "title": "Ma préférence",
+    "artist": "Julien Clerc"
+  },
+  {
+    "title": "Ce n'est rien",
+    "artist": "Julien Clerc"
+  },
+  {
+    "title": "Laissons entrer le soleil",
+    "artist": "Julien Clerc"
+  },
+  {
+    "title": "Le lundi au soleil",
+    "artist": "Claude François"
+  },
+  {
+    "title": "Belles, belles, belles",
+    "artist": "Claude François"
+  },
+  {
+    "title": "Je viens du Sud",
+    "artist": "Michel Sardou"
+  },
+  {
+    "title": "L'encre de tes yeux",
+    "artist": "Francis Cabrel"
+  },
+  {
+    "title": "Petite Marie",
+    "artist": "Francis Cabrel"
+  },
+  {
+    "title": "Sarbacane",
+    "artist": "Francis Cabrel"
+  },
+  {
+    "title": "Là où je t'emmènerai",
+    "artist": "Zazie"
+  },
+  {
+    "title": "Je suis un homme",
+    "artist": "Zazie"
+  },
+  {
+    "title": "Zen",
+    "artist": "Zazie"
+  },
+  {
+    "title": "Rodéo",
+    "artist": "Zazie"
+  },
+  {
+    "title": "Rue de la paix",
+    "artist": "Zazie"
+  },
+  {
+    "title": "Je t'emmène",
+    "artist": "Boulevard des Airs"
+  },
+  {
+    "title": "Demain",
+    "artist": "Patrick Bruel"
+  },
+  {
+    "title": "Mon amant de Saint-Jean",
+    "artist": "Lucienne Delyle"
+  },
+  {
+    "title": "Les feuilles mortes",
+    "artist": "Yves Montand"
+  },
+  {
+    "title": "La bicyclette",
+    "artist": "Yves Montand"
+  },
+  {
+    "title": "Sous le ciel de Paris",
+    "artist": "Édith Piaf"
+  },
+  {
+    "title": "Padam Padam",
+    "artist": "Édith Piaf"
+  },
+  {
+    "title": "L'hymne à l'amour",
+    "artist": "Édith Piaf"
+  },
+  {
+    "title": "J'ai dix ans",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "Poulaillers' Song",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "Bidon",
+    "artist": "Alain Souchon"
+  },
+  {
+    "title": "Le pouvoir des fleurs",
+    "artist": "Laurent Voulzy"
+  },
+  {
+    "title": "Rockollection",
+    "artist": "Laurent Voulzy"
+  },
+  {
+    "title": "Belle-Île-en-Mer",
+    "artist": "Laurent Voulzy"
+  },
+  {
+    "title": "Le cœur grenadine",
+    "artist": "Laurent Voulzy"
+  },
+  {
+    "title": "J’ai vu",
+    "artist": "Niagara"
+  },
+  {
+    "title": "Pendant que les champs brûlent",
+    "artist": "Niagara"
+  },
+  {
+    "title": "L’Amour à la plage",
+    "artist": "Niagara"
+  },
+  {
+    "title": "Sentimentale",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "Stolen Car",
+    "artist": "Mylène Farmer & Sting"
+  },
+  {
+    "title": "Oui mais non",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "California",
+    "artist": "Mylène Farmer"
+  },
+  {
+    "title": "Avant toi",
+    "artist": "Slimane & Vitaa"
+  },
+  {
+    "title": "Je te le donne",
+    "artist": "Slimane & Vitaa"
+  },
+  {
+    "title": "VersuS",
+    "artist": "Slimane & Vitaa"
+  },
+  {
+    "title": "Confessions nocturnes",
+    "artist": "Vitaa & Diam's"
+  },
+  {
+    "title": "Bibi",
+    "artist": "Hatik"
+  },
+  {
+    "title": "Adieu les filles",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "Bonne meuf",
+    "artist": "Orelsan"
+  },
+  {
+    "title": "DjaDja",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Sucette",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Bobo",
+    "artist": "Aya Nakamura"
+  },
+  {
+    "title": "Nougat",
+    "artist": "Booba"
+  },
+  {
+    "title": "OKLM",
+    "artist": "Booba"
+  },
+  {
+    "title": "Mwaka Moon",
+    "artist": "Kalash ft. Damso"
+  },
+  {
+    "title": "Affranchis",
+    "artist": "Sofiane"
+  },
+  {
+    "title": "À contresens",
+    "artist": "Grégoire"
+  },
+  {
+    "title": "Le dîner",
+    "artist": "Bénabar"
+  },
+  {
+    "title": "L'effet papillon",
+    "artist": "Bénabar"
+  },
+  {
+    "title": "Maritie et Gilbert Carpentier",
+    "artist": "Bénabar"
+  },
+  {
+    "title": "College Boy",
+    "artist": "Indochine"
+  },
+  {
+    "title": "Le chant des sirènes",
+    "artist": "Fréro Delavega"
+  },
+  {
+    "title": "Sweet Darling",
+    "artist": "Fréro Delavega"
+  },
+  {
+    "title": "Toi et moi",
+    "artist": "Guillaume Grand"
+  },
+  {
+    "title": "Les nuits parisiennes",
+    "artist": "Louis Delort"
+  },
+  {
+    "title": "Sur le fil",
+    "artist": "Jenifer"
+  },
+  {
+    "title": "À nos héros du quotidien",
+    "artist": "Soprano"
+  },
+  {
+    "title": "Les yeux noirs",
+    "artist": "Johnny Hallyday"
+  },
+  {
+    "title": "Run to You",
+    "artist": "Bryan Adams"
+  },
+  {
+    "title": "Kiss",
+    "artist": "Prince"
+  },
+  {
+    "title": "Purple Rain",
+    "artist": "Prince"
+  },
+  {
+    "title": "Raspberry Beret",
+    "artist": "Prince"
+  },
+  {
+    "title": "U Can’t Touch This",
+    "artist": "MC Hammer"
+  },
+  {
+    "title": "Ice Ice Baby",
+    "artist": "Vanilla Ice"
+  },
+  {
+    "title": "Don't You Want Me",
+    "artist": "The Human League"
+  },
+  {
+    "title": "Footloose",
+    "artist": "Kenny Loggins"
+  },
+  {
+    "title": "True Colors",
+    "artist": "Cyndi Lauper"
+  },
+  {
+    "title": "I Want to Break Free",
+    "artist": "Queen"
+  },
+  {
+    "title": "Ironic",
+    "artist": "Alanis Morissette"
+  },
+  {
+    "title": "You Oughta Know",
+    "artist": "Alanis Morissette"
+  },
+  {
+    "title": "Thank U",
+    "artist": "Alanis Morissette"
+  },
+  {
+    "title": "By The Way",
+    "artist": "Red Hot Chili Peppers"
+  },
+  {
+    "title": "Snow (Hey Oh)",
+    "artist": "Red Hot Chili Peppers"
+  },
+  {
+    "title": "Use Somebody",
+    "artist": "Kings of Leon"
+  },
+  {
+    "title": "Sex on Fire",
+    "artist": "Kings of Leon"
+  },
+  {
+    "title": "All These Things That I've Done",
+    "artist": "The Killers"
+  },
+  {
+    "title": "Uprising",
+    "artist": "Muse"
+  },
+  {
+    "title": "Time Is Running Out",
+    "artist": "Muse"
+  },
+  {
+    "title": "Starlight",
+    "artist": "Muse"
+  },
+  {
+    "title": "Feel Good Inc.",
+    "artist": "Gorillaz"
+  },
+  {
+    "title": "Clint Eastwood",
+    "artist": "Gorillaz"
+  },
+  {
+    "title": "DARE",
+    "artist": "Gorillaz"
+  },
+  {
+    "title": "Rock With You",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "The Way You Make Me Feel",
+    "artist": "Michael Jackson"
+  },
+  {
+    "title": "I Wanna Dance with Somebody",
+    "artist": "Whitney Houston"
+  },
+  {
+    "title": "How Will I Know",
+    "artist": "Whitney Houston"
+  },
+  {
+    "title": "I Will Always Love You",
+    "artist": "Whitney Houston"
+  },
+  {
+    "title": "Like a Prayer",
+    "artist": "Madonna"
+  },
+  {
+    "title": "Hung Up",
+    "artist": "Madonna"
+  },
+  {
+    "title": "Living on a Prayer",
+    "artist": "Bon Jovi"
+  },
+  {
+    "title": "Cuts Like a Knife",
+    "artist": "Bryan Adams"
+  },
+  {
+    "title": "Any Way You Want It",
+    "artist": "Journey"
+  },
+  {
+    "title": "Burning Heart",
+    "artist": "Survivor"
+  },
+  {
+    "title": "Master of Puppets",
+    "artist": "Metallica"
+  },
+  {
+    "title": "Where Is The Love?",
+    "artist": "The Black Eyed Peas"
+  },
+  {
+    "title": "Boom Boom Pow",
+    "artist": "The Black Eyed Peas"
+  },
+  {
+    "title": "Don't Stop the Music",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Where Have You Been",
+    "artist": "Rihanna"
+  },
+  {
+    "title": "Hot N Cold",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "E.T.",
+    "artist": "Katy Perry"
+  },
+  {
+    "title": "IDGAF",
+    "artist": "Dua Lipa"
+  },
+  {
+    "title": "Titanium",
+    "artist": "David Guetta & Sia"
+  },
+  {
+    "title": "She Wolf",
+    "artist": "David Guetta"
+  },
+  {
+    "title": "Play Hard",
+    "artist": "David Guetta"
+  },
+  {
+    "title": "Memories",
+    "artist": "David Guetta"
+  },
+  {
+    "title": "Closer",
+    "artist": "The Chainsmokers"
+  },
+  {
+    "title": "Don't Let Me Down",
+    "artist": "The Chainsmokers"
+  },
+  {
+    "title": "Paris",
+    "artist": "The Chainsmokers"
+  },
+  {
+    "title": "Roses",
+    "artist": "The Chainsmokers"
+  },
+  {
+    "title": "Scared to Be Lonely",
+    "artist": "Martin Garrix"
+  },
+  {
+    "title": "In the Name of Love",
+    "artist": "Martin Garrix"
+  },
+  {
+    "title": "Industry Baby",
+    "artist": "Lil Nas X & Jack Harlow"
+  },
+  {
+    "title": "Montero (Call Me By Your Name)",
+    "artist": "Lil Nas X"
+  },
+  {
+    "title": "Old Town Road",
+    "artist": "Lil Nas X"
+  },
+  {
+    "title": "Antidote",
+    "artist": "Travis Scott"
+  },
+  {
+    "title": "Righteous",
+    "artist": "Juice WRLD"
+  },
+  {
+    "title": "In My Feelings",
+    "artist": "Drake"
+  },
+  {
+    "title": "Lose Yourself to Dance",
+    "artist": "Daft Punk"
+  },
+  {
+    "title": "Fell in Love With a Girl",
+    "artist": "The White Stripes"
+  },
+  {
+    "title": "Dare",
+    "artist": "Gorillaz"
+  },
+  {
+    "title": "Wake Me Up When September Ends",
+    "artist": "Green Day"
+  },
+  {
+    "title": "Beautiful",
+    "artist": "Christina Aguilera"
+  },
+  {
+    "title": "Bye Bye Bye",
+    "artist": "*NSYNC"
+  },
+  {
+    "title": "It's Gonna Be Me",
+    "artist": "*NSYNC"
+  },
+  {
+    "title": "Shape of My Heart",
+    "artist": "Backstreet Boys"
+  }
+]

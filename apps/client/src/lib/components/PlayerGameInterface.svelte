@@ -552,13 +552,15 @@
 		</div>
 	{/if}
 
-	<!-- Score Display (always visible) -->
-	<div class="score-display">
-		<div class="score-card">
-			<span class="score-label">Ton score</span>
-			<span class="score-value">{score}</span>
+	<!-- Score Display (hidden during loading) -->
+	{#if gameState.status !== 'loading'}
+		<div class="score-display">
+			<div class="score-card">
+				<span class="score-label">Ton score</span>
+				<span class="score-value">{score}</span>
+			</div>
 		</div>
-	</div>
+	{/if}
 
 	<!-- Feedback Message (always visible when set) -->
 	{#if feedbackMessage}
@@ -738,13 +740,13 @@
 
 	/* Loading Screen */
 	.loading-screen {
-		position: absolute;
+		position: fixed;
 		top: 0;
 		left: 0;
 		right: 0;
 		bottom: 0;
 		background: linear-gradient(135deg, #ef4c83, #f8c027);
-		border-radius: 32px;
+		border-radius: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;

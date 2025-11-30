@@ -32,7 +32,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
 
   defaultParams: ModeParams = {
     songDuration: DEFAULT_SONG_DURATION,
-    answerTimer: 5,
+    answerTimer: 6,
     numChoices: 4,
     pointsTitle: 1,
     pointsArtist: 1,
@@ -143,17 +143,16 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
           pointsAwarded: this.defaultParams.pointsArtist!,
           shouldShowTitleChoices: true,
           lockOutPlayer: false,
-          message: 'Correct artist! Now guess the title.',
+          message: 'Bonne réponse ! Devine maintenant le titre.',
         };
       } else {
-        // Wrong artist → ALWAYS show title choices (title is optional)
-        // Player will be locked out AFTER answering title question
+        // Wrong artist → lock out immediately, others can buzz
         return {
           isCorrect: false,
           pointsAwarded: this.defaultParams.penaltyEnabled! ? this.defaultParams.penaltyAmount! : 0,
-          shouldShowTitleChoices: true, // Show title choices even if artist is wrong
-          lockOutPlayer: false, // Don't lock out yet - wait for title answer
-          message: 'Wrong artist. You can still try the title question.',
+          shouldShowTitleChoices: false,
+          lockOutPlayer: true,
+          message: 'Mauvais artiste. Tu es éliminé.',
         };
       }
     }
@@ -171,7 +170,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
           pointsAwarded: this.defaultParams.pointsTitle!,
           shouldShowTitleChoices: false,
           lockOutPlayer: false,
-          message: 'Correct title! Bonus point earned.',
+          message: 'Bon titre ! Point bonus gagné.',
         };
       } else if (isCorrect && !artistWasCorrect) {
         // Correct title but artist was wrong → no points for title, lock out
@@ -180,7 +179,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
           pointsAwarded: 0, // But no points because artist was wrong
           shouldShowTitleChoices: false,
           lockOutPlayer: true,
-          message: 'Correct title, but no bonus points since artist was wrong.',
+          message: 'Bon titre, mais pas de bonus car l\'artiste était faux.',
         };
       } else if (!isCorrect && artistWasCorrect) {
         // Wrong title but artist was correct → lock out player (but keep artist points)
@@ -189,7 +188,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
           pointsAwarded: 0,
           shouldShowTitleChoices: false,
           lockOutPlayer: true,
-          message: 'Wrong title. You keep your artist point but are locked out.',
+          message: 'Mauvais titre. Tu gardes ton point artiste mais tu es éliminé.',
         };
       } else {
         // Wrong title AND artist was wrong → lock out player
@@ -198,7 +197,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
           pointsAwarded: 0,
           shouldShowTitleChoices: false,
           lockOutPlayer: true,
-          message: 'Wrong title. You are locked out.',
+          message: 'Mauvais titre. Tu es éliminé.',
         };
       }
     }
@@ -253,16 +252,26 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
    * Check if a player can buzz
    */
   canBuzz(playerId: string, song: RoundSong): boolean {
+    this.modeLogger.debug('canBuzz check', {
+      playerId,
+      songStatus: song.status,
+      activePlayerId: song.activePlayerId,
+      lockedOutPlayerIds: song.lockedOutPlayerIds,
+    });
+
     // Can't buzz if song isn't playing
     if (song.status !== 'playing') {
+      this.modeLogger.debug('canBuzz REJECTED - song not playing', { playerId, songStatus: song.status });
       return false;
     }
 
     // Can't buzz if locked out
     if (song.lockedOutPlayerIds.includes(playerId)) {
+      this.modeLogger.debug('canBuzz REJECTED - player locked out', { playerId });
       return false;
     }
 
+    this.modeLogger.debug('canBuzz ALLOWED', { playerId });
     return true;
   }
 
@@ -352,5 +361,13 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
    */
   shouldPauseOnBuzz(): boolean {
     return true;
+  }
+
+  /**
+   * Buzz and choice mode uses automatic validation
+   * Players click a choice, server validates automatically
+   */
+  requiresManualValidation(): boolean {
+    return false;
   }
 }

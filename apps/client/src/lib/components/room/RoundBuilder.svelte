@@ -799,6 +799,10 @@
 		cursor: not-allowed;
 	}
 
+	.remove-btn {
+		margin-left: 1rem;
+	}
+
 	/* Filter Controls */
 	.filter-controls {
 		display: flex;
@@ -850,7 +854,7 @@
 	}
 
 	.filter-checkbox {
-		justify-content: center;
+		justify-content: flex-end;
 	}
 
 	.filter-checkbox label {

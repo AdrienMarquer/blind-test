@@ -52,7 +52,7 @@ const quickGame: GamePreset = {
       },
       params: {
         songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 10,
+        answerTimer: 6,
         audioPlayback: 'master',
         numChoices: 4,
         pointsTitle: 1,
@@ -79,7 +79,7 @@ const classicGame: GamePreset = {
       },
       params: {
         songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 10,
+        answerTimer: 6,
         audioPlayback: 'master',
         numChoices: 4,
         pointsTitle: 1,

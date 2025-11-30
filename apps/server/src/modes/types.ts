@@ -127,6 +127,16 @@ export interface ModeHandler {
    * @returns true if song timer should pause on buzz, false otherwise
    */
   shouldPauseOnBuzz(): boolean;
+
+  /**
+   * Determine if the mode requires the master to manually validate answers
+   * - FastBuzz: returns true (master clicks correct/wrong)
+   * - BuzzAndChoice: returns false (player clicks choice, server validates automatically)
+   * - TextInput: returns false (server compares answer automatically)
+   *
+   * @returns true if master must validate answers, false for automatic validation
+   */
+  requiresManualValidation(): boolean;
 }
 
 /**
@@ -180,4 +190,5 @@ export abstract class BaseModeHandler implements ModeHandler {
   abstract shouldEndSong(song: RoundSong, activePlayerCount?: number): boolean;
   abstract getBuzzPayload(song: RoundSong): Record<string, any> | null;
   abstract shouldPauseOnBuzz(): boolean;
+  abstract requiresManualValidation(): boolean;
 }

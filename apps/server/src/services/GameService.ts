@@ -28,9 +28,19 @@ export class GameService {
   async startRound(roomId: string, sessionId: string, roundIndex: number): Promise<Round> {
     gameLogger.info('Starting round', { roomId, sessionId, roundIndex });
 
-    const session = await gameSessionRepository.findById(sessionId);
+    // CRITICAL FIX: Check if session exists in memory first
+    // to preserve round statuses from previous rounds.
+    // If we fetch from DB, all rounds come back as 'pending' which causes
+    // the game to cycle back to round 1 instead of advancing.
+    let session = gameStateManager.getActiveSession(roomId);
+    const isFirstRound = !session;
+
     if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
+      // First round - fetch from database
+      session = await gameSessionRepository.findById(sessionId);
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
     }
 
     const round = session.rounds[roundIndex];
@@ -55,8 +65,14 @@ export class GameService {
       round.scores = new Map<string, number>();
     }
 
-    // Register in state manager
-    gameStateManager.setActiveSession(roomId, session, round);
+    // Register or update in state manager
+    if (isFirstRound) {
+      // First round: register the full session
+      gameStateManager.setActiveSession(roomId, session, round);
+    } else {
+      // Subsequent rounds: just update the current round without overwriting session
+      gameStateManager.updateRound(roomId, round);
+    }
 
     // Start first song
     await this.startSong(roomId, round, 0);
@@ -260,8 +276,19 @@ export class GameService {
         song.lockedOutPlayerIds.push(playerId);
         song.activePlayerId = undefined;
         song.status = 'playing';
+        // Clear buzz timestamps so other players can buzz
+        if (song.buzzTimestamps) {
+          song.buzzTimestamps.clear();
+        }
 
         gameStateManager.updateRound(roomId, currentRound);
+
+        // Resume song timer if it was paused (for modes that pause on buzz)
+        const modeHandler = modeRegistry.get(currentRound.modeType);
+        if (modeHandler.shouldPauseOnBuzz()) {
+          timerManager.resumeSongTimer(roomId);
+          gameLogger.debug('Song timer resumed after answer timeout', { roomId, playerId });
+        }
 
         // Get player name for timeout notification
         const player = await playerRepository.findById(playerId);
@@ -283,7 +310,6 @@ export class GameService {
 
         // Check if we should end song (all players locked out)
         const activePlayerCount = await playerRepository.countConnected(roomId);
-        const modeHandler = modeRegistry.get(currentRound.modeType);
         if (modeHandler.shouldEndSong(song, activePlayerCount)) {
           await this.endSong(roomId, currentRound, songIndex);
         }
@@ -323,14 +349,18 @@ export class GameService {
     const accepted = await modeHandler.handleBuzz(playerId, song, timestamp);
 
     if (accepted) {
-      // Let the mode handler decide whether to pause the timer or start an answer timer
+      // Calculate answer timer (used for both timer start and broadcast)
+      const answerTime = getAnswerTimer(round, modeHandler);
+
+      // Pause song timer if mode requires it (player needs time to answer)
       if (modeHandler.shouldPauseOnBuzz()) {
-        // Manual validation mode - pause the song timer
         timerManager.pauseSongTimer(roomId);
-        gameLogger.debug('Song timer paused for manual validation', { roomId, playerId });
-      } else {
-        // Automatic validation mode - start answer timer
-        const answerTime = getAnswerTimer(round, modeHandler);
+        gameLogger.debug('Song timer paused for buzz', { roomId, playerId });
+      }
+
+      // Start answer timer for automatic validation modes (player has time limit to answer)
+      // Manual validation modes (fast_buzz) don't need this - master validates when ready
+      if (!modeHandler.requiresManualValidation()) {
         timerManager.startAnswerTimer(roomId, round, songIndex, playerId, answerTime, this.handleAnswerTimerExpired.bind(this));
         gameLogger.debug('Answer timer started (automatic validation)', { roomId, playerId, answerTime });
       }
@@ -377,7 +407,8 @@ export class GameService {
           playerName,
           songIndex,
           modeType: round.modeType,
-          manualValidation: modeHandler.shouldPauseOnBuzz(), // Mode determines validation strategy
+          manualValidation: modeHandler.requiresManualValidation(), // Mode determines if master validates
+          answerTimer: answerTime, // Initial timer value so client displays correct countdown immediately
           ...modePayload, // Mode-specific data (e.g., titleQuestion)
         },
       });
@@ -420,16 +451,36 @@ export class GameService {
 
     // Handle lockout if player answered incorrectly
     if (result.lockOutPlayer) {
+      const prevStatus = song.status;
+      const prevActivePlayer = song.activePlayerId;
+
       if (!song.lockedOutPlayerIds.includes(playerId)) {
         song.lockedOutPlayerIds.push(playerId);
       }
       // Reset song state to allow others to buzz
       song.activePlayerId = undefined;
       song.status = 'playing';
-      gameLogger.debug('Player locked out after wrong answer', {
+      // CRITICAL: Clear buzz timestamps so other players can buzz
+      // Without this, the race condition check would reject new buzzes
+      if (song.buzzTimestamps) {
+        song.buzzTimestamps.clear();
+      }
+
+      // Resume song timer if it was paused (for modes that pause on buzz)
+      if (modeHandler.shouldPauseOnBuzz()) {
+        timerManager.resumeSongTimer(roomId);
+        gameLogger.debug('Song timer resumed after lockout', { roomId, playerId });
+      }
+
+      gameLogger.info('Player locked out - SONG STATE RESET', {
         roomId,
         playerId,
-        lockedOutCount: song.lockedOutPlayerIds.length
+        prevStatus,
+        newStatus: song.status,
+        prevActivePlayer,
+        newActivePlayer: song.activePlayerId,
+        lockedOutPlayerIds: song.lockedOutPlayerIds,
+        buzzTimestampsCleared: true,
       });
     }
 
@@ -508,12 +559,17 @@ export class GameService {
         });
       }
 
+      // Reset answer timer for title question (player gets fresh 6 seconds)
+      const answerTime = getAnswerTimer(round, modeHandler);
+      timerManager.startAnswerTimer(roomId, round, round.currentSongIndex, playerId, answerTime, this.handleAnswerTimerExpired.bind(this));
+
       gameLogger.info('Sending title question after correct artist', {
         roomId,
         playerId,
         playerName,
         choicesCount: song.titleQuestion.choices.length,
-        correctTitle: song.song.title
+        correctTitle: song.song.title,
+        answerTime
       });
 
       broadcastToRoom(roomId, {
@@ -521,6 +577,7 @@ export class GameService {
         data: {
           playerId,
           titleQuestion: song.titleQuestion, // Send title choices as titleQuestion
+          answerTimer: answerTime, // Initial timer value for client display
         },
       });
     }
@@ -1102,6 +1159,10 @@ export class GameService {
           // Clear active player
           song.activePlayerId = undefined;
           song.status = 'playing';
+          // Clear buzz timestamps so other players can buzz
+          if (song.buzzTimestamps) {
+            song.buzzTimestamps.clear();
+          }
 
           gameStateManager.updateRound(roomId, round);
 

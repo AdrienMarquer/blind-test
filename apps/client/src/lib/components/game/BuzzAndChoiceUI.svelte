@@ -27,7 +27,14 @@
 	<!-- Multiple Choice Buttons -->
 	<div class="choices">
 		{#each currentChoices as choice}
-			<button class="choice-button" onclick={() => onAnswer(choice.displayText)}>
+			<button
+				class="choice-button"
+				onclick={(e) => {
+					// Blur button to reset focus before title choices appear
+					(e.currentTarget as HTMLButtonElement).blur();
+					onAnswer(choice.displayText);
+				}}
+			>
 				{choice.displayText}
 			</button>
 		{/each}

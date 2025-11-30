@@ -334,7 +334,7 @@ export const DEFAULT_SONG_DURATION = 30;
 
 export const SYSTEM_DEFAULTS: Required<ModeParams> = {
   songDuration: DEFAULT_SONG_DURATION,
-  answerTimer: 5,
+  answerTimer: 6,
   audioPlayback: 'master',     // Only master device plays audio by default
   numChoices: 4,
   pointsTitle: 1,

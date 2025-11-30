@@ -317,6 +317,10 @@ export class RoomSocket {
 
       // Gameplay - emit to reactive stream
       case 'player:buzzed':
+        // Initialize answer timer with value from server to avoid showing stale timer
+        if (message.data.answerTimer) {
+          this.answerTimeRemaining = message.data.answerTimer;
+        }
         this.events.playerBuzzed = message.data;
         break;
 
@@ -329,6 +333,10 @@ export class RoomSocket {
         break;
 
       case 'choices:title':
+        // Reset answer timer for title question (fresh 6 seconds)
+        if (message.data.answerTimer) {
+          this.answerTimeRemaining = message.data.answerTimer;
+        }
         this.events.titleChoices = message.data;
         break;
 

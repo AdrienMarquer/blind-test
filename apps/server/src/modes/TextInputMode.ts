@@ -189,4 +189,12 @@ export class TextInputMode extends BaseModeHandler {
   shouldPauseOnBuzz(): boolean {
     return false;
   }
+
+  /**
+   * Text input mode uses automatic validation
+   * Server compares player's text input to correct answer
+   */
+  requiresManualValidation(): boolean {
+    return false;
+  }
 }

@@ -41,7 +41,7 @@ const quickGamePreset: RoundConfig[] = [
     modeType: 'buzz_and_choice',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 10, numChoices: 4 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 6, numChoices: 4 },
   },
 ]
 
@@ -53,7 +53,7 @@ const classicGamePreset: RoundConfig[] = [
     modeType: 'buzz_and_choice',
     mediaType: 'music',
     songFilters: { songCount: 5 },
-    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 10, numChoices: 4 },
+    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 6, numChoices: 4 },
   },
   {
     modeType: 'fast_buzz',

@@ -186,4 +186,12 @@ export class FastBuzzMode extends BaseModeHandler {
   shouldPauseOnBuzz(): boolean {
     return true;
   }
+
+  /**
+   * Fast buzz mode requires manual validation
+   * Master must click correct/wrong to validate
+   */
+  requiresManualValidation(): boolean {
+    return true;
+  }
 }
