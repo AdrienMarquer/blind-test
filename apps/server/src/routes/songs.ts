@@ -652,7 +652,6 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         album: enrichmentResult.enriched.album,
         year: enrichmentResult.enriched.year || new Date().getFullYear(),
         genre: enrichmentResult.enriched.genre,
-        subgenre: enrichmentResult.enriched.subgenre,
         duration: body.spotify.duration,
         clipStart,
         clipDuration,
@@ -882,7 +881,6 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         withGenre: results.filter(r => r.enriched.genre).length,
         withAlbum: results.filter(r => r.enriched.album).length,
         withYear: results.filter(r => r.enriched.year).length,
-        withSubgenre: results.filter(r => r.enriched.subgenre).length,
         lowConfidence: results.filter(r => r.enriched.confidence < 70).length,
         averageConfidence: Math.round(
           results.reduce((sum, r) => sum + r.enriched.confidence, 0) / results.length

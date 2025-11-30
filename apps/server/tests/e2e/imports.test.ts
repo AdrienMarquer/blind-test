@@ -511,7 +511,6 @@ describe('E2E: Import Flows with Metadata Enrichment', () => {
 				album: 'Enriched Album',
 				year: 2024,
 				genre: 'Rock',
-				subgenre: 'Alternative Rock',
 				confidence: 95,
 			};
 

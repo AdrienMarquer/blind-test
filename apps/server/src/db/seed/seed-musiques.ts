@@ -67,7 +67,6 @@ interface EnrichedSong {
   album?: string;
   year?: number;
   genre?: string;
-  subgenre?: string;
   duration?: number; // Full track length in seconds
   albumArt?: string; // Spotify album cover URL
 
@@ -143,7 +142,6 @@ class SpotifyClient {
     album?: string;
     year?: number;
     genre?: string;
-    subgenre?: string;
     duration: number;
     albumArt?: string;
   } | null> {
@@ -177,14 +175,12 @@ class SpotifyClient {
 
       // Get genre from artist using GenreMapper (same as app)
       let genre: string | undefined;
-      let subgenre: string | undefined;
       if (track.artists.length > 0) {
         try {
           const artistData = await this.api.artists.get(track.artists[0].id);
           if (artistData.genres && artistData.genres.length > 0) {
-            const normalized = GenreMapper.normalizeWithSubgenre(artistData.genres);
-            genre = normalized.genre !== 'Unknown' ? normalized.genre : undefined;
-            subgenre = normalized.subgenre;
+            const normalized = GenreMapper.normalize(artistData.genres[0]);
+            genre = normalized !== 'Unknown' ? normalized : undefined;
           }
         } catch (e) {
           // Ignore - genre will be undefined
@@ -198,7 +194,6 @@ class SpotifyClient {
         album: track.album.name,
         year,
         genre,
-        subgenre,
         duration: Math.floor(track.duration_ms / 1000),
         albumArt: track.album.images[0]?.url,
       };
@@ -382,7 +377,6 @@ class DatabaseService {
       genre: song.genre || null,
       duration: song.duration,
       language: null,
-      subgenre: song.subgenre || null,
       niche: false,
       spotifyId: song.spotifyId || null,
       youtubeId: song.youtubeId || null,
@@ -521,14 +515,10 @@ async function main() {
         song.album = spotifyData.album;
         song.year = spotifyData.year;
         song.genre = spotifyData.genre;
-        song.subgenre = spotifyData.subgenre;
         song.duration = spotifyData.duration;
         song.albumArt = spotifyData.albumArt;
         song.status = 'spotify_done';
-        const genreInfo = spotifyData.subgenre
-          ? `${spotifyData.genre} (${spotifyData.subgenre})`
-          : spotifyData.genre || 'unknown genre';
-        console.log(`     ✓ Found: ${spotifyData.album} (${spotifyData.year}) - ${genreInfo}`);
+        console.log(`     ✓ Found: ${spotifyData.album} (${spotifyData.year}) - ${spotifyData.genre || 'unknown genre'}`);
       } else {
         console.log('     ✗ Not found on Spotify');
       }

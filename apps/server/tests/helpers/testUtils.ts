@@ -239,7 +239,6 @@ export class MockSongRepository {
       niche: song.niche ?? false,
       album: song.album,
       language: song.language,
-      subgenre: song.subgenre,
       spotifyId: song.spotifyId,
       youtubeId: song.youtubeId,
     }

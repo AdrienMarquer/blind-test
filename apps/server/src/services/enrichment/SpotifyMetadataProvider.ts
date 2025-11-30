@@ -40,7 +40,6 @@ export class SpotifyMetadataProvider implements IMetadataProvider {
 				album: track.album,
 				year: track.year,
 				genre: track.genre,
-				subgenre: track.subgenre,
 				duration: track.duration,
 				confidence,
 				providerId: track.spotifyId,
@@ -66,7 +65,6 @@ export class SpotifyMetadataProvider implements IMetadataProvider {
 			album: track.album,
 			year: track.year,
 			genre: track.genre,
-			subgenre: track.subgenre,
 			duration: track.duration,
 			confidence: 100, // Direct lookup = 100% confidence
 			providerId: track.spotifyId,

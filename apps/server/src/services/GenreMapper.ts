@@ -336,44 +336,6 @@ export class GenreMapper {
   }
 
   /**
-   * Normalize an array of genres, returning primary genre and optional subgenre
-   * Useful for providers that return multiple genres (like Spotify)
-   */
-  static normalizeWithSubgenre(
-    genres: string[] | undefined | null
-  ): { genre: CanonicalGenre | 'Unknown'; subgenre?: string } {
-    if (!genres || genres.length === 0) {
-      return { genre: 'Unknown' };
-    }
-
-    // Try to normalize each genre until we find a valid one
-    let primaryGenre: CanonicalGenre | 'Unknown' = 'Unknown';
-    let firstValidIndex = -1;
-
-    for (let i = 0; i < genres.length; i++) {
-      const normalized = this.normalize(genres[i]);
-      if (normalized !== 'Unknown') {
-        primaryGenre = normalized;
-        firstValidIndex = i;
-        break;
-      }
-    }
-
-    // If we found a valid genre, use the original string as subgenre
-    // If there are multiple genres, pick a different one as subgenre
-    let subgenre: string | undefined;
-    if (firstValidIndex !== -1 && genres.length > 1) {
-      // Pick the first genre that's different from the one we used for primary
-      subgenre = genres.find((g, idx) => idx !== firstValidIndex)?.trim();
-    } else if (firstValidIndex !== -1) {
-      // Only one genre - use it as subgenre too (preserves provider detail)
-      subgenre = genres[firstValidIndex].trim();
-    }
-
-    return { genre: primaryGenre, subgenre };
-  }
-
-  /**
    * Get all canonical genres
    */
   static getAllGenres(): readonly CanonicalGenre[] {

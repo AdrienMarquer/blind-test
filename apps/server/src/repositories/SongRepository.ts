@@ -22,7 +22,6 @@ interface SongUpdateDTO {
   clipStart?: number;
   clipDuration?: number;
   language?: string | null;
-  subgenre?: string | null;
   niche?: boolean;
   spotifyId?: string | null;
   youtubeId?: string | null;
@@ -50,7 +49,6 @@ export class SongRepository implements Repository<Song> {
       fileSize: dbSong.fileSize,
       format: dbSong.format,
       language: dbSong.language || undefined,
-      subgenre: dbSong.subgenre || undefined,
       niche: dbSong.niche,
       spotifyId: dbSong.spotifyId || undefined,
       youtubeId: dbSong.youtubeId || undefined,
@@ -229,7 +227,6 @@ export class SongRepository implements Repository<Song> {
       genre: data.genre || null,
       duration: data.duration,
       language: data.language || null,
-      subgenre: data.subgenre || null,
       niche: data.niche ?? false,
       spotifyId: data.spotifyId || null,
       youtubeId: data.youtubeId || null,
@@ -265,7 +262,6 @@ export class SongRepository implements Repository<Song> {
     if (data.clipStart !== undefined) updateData.clipStart = data.clipStart;
     if (data.clipDuration !== undefined) updateData.clipDuration = data.clipDuration;
     if (data.language !== undefined) updateData.language = data.language;
-    if (data.subgenre !== undefined) updateData.subgenre = data.subgenre;
     if (data.niche !== undefined) updateData.niche = data.niche;
     if (data.spotifyId !== undefined) updateData.spotifyId = data.spotifyId;
     if (data.youtubeId !== undefined) updateData.youtubeId = data.youtubeId;

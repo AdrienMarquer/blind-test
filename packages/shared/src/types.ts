@@ -175,7 +175,6 @@ export interface Song {
 
   // Enhanced metadata for answer generation
   language?: string;           // ISO 639-1 code (e.g., 'en', 'fr', 'es')
-  subgenre?: string;           // More specific genre (e.g., 'french-rap', 'synthwave')
   niche: boolean;              // Is this a niche/obscure song? (default: false)
 
   // Source tracking

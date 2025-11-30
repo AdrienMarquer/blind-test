@@ -15,6 +15,13 @@
       "when": 1764536752536,
       "tag": "0001_peaceful_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1764538390690,
+      "tag": "0002_motionless_nitro",
+      "breakpoints": true
     }
   ]
 }

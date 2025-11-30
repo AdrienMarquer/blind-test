@@ -279,46 +279,80 @@ export class GameService {
     if (currentRound && currentRound.currentSongIndex === songIndex) {
       const song = currentRound.songs[songIndex];
       if (song && song.activePlayerId === playerId) {
-        // Timer expired - lock out player and reset for others to buzz
-        song.lockedOutPlayerIds.push(playerId);
-        song.activePlayerId = undefined;
-        song.status = 'playing';
-        // Clear buzz timestamps so other players can buzz
-        if (song.buzzTimestamps) {
-          song.buzzTimestamps.clear();
-        }
-
-        gameStateManager.updateRound(roomId, currentRound);
-
-        // Resume song timer if it was paused (for modes that pause on buzz)
         const modeHandler = modeRegistry.get(currentRound.modeType);
-        if (modeHandler.shouldPauseOnBuzz()) {
-          timerManager.resumeSongTimer(roomId);
-          gameLogger.debug('Song timer resumed after answer timeout', { roomId, playerId });
-        }
 
-        // Get player name for timeout notification
+        // Check if player had already answered artist correctly
+        // If so, they've won the song - title is just bonus points
+        const artistAnswer = song.answers.find(a => a.playerId === playerId && a.type === 'artist');
+        const artistWasCorrect = artistAnswer?.isCorrect || false;
+
+        // Get player name for notifications
         const player = await playerRepository.findById(playerId);
         const playerName = player?.name || 'Unknown Player';
 
-        // Notify timeout
-        broadcastToRoom(roomId, {
-          type: 'answer:result',
-          data: {
+        if (artistWasCorrect) {
+          // Artist was correct - player wins, title timeout just means no bonus
+          gameLogger.info('Title timer expired but artist was correct - player wins', {
+            roomId,
             playerId,
             playerName,
-            answerType: 'title' as const,
-            isCorrect: false,
-            pointsAwarded: 0,
-            shouldShowTitleChoices: false,
-            lockOutPlayer: true,
-          },
-        });
+            artistPoints: artistAnswer?.pointsAwarded || 0
+          });
 
-        // Check if we should end song (all players locked out)
-        const activePlayerCount = await playerRepository.countConnected(roomId);
-        if (modeHandler.shouldEndSong(song, activePlayerCount)) {
+          // Notify about title timeout (no bonus points)
+          broadcastToRoom(roomId, {
+            type: 'answer:result',
+            data: {
+              playerId,
+              playerName,
+              answerType: 'title' as const,
+              isCorrect: false,
+              pointsAwarded: 0,
+              shouldShowTitleChoices: false,
+              lockOutPlayer: false, // Not locked out - they won!
+              message: 'Temps écoulé ! Tu gardes ton point artiste.',
+            },
+          });
+
+          // End the song - this player won with artist points
           await this.endSong(roomId, currentRound, songIndex);
+        } else {
+          // Artist was wrong or not answered - lock out and let others buzz
+          song.lockedOutPlayerIds.push(playerId);
+          song.activePlayerId = undefined;
+          song.status = 'playing';
+          // Clear buzz timestamps so other players can buzz
+          if (song.buzzTimestamps) {
+            song.buzzTimestamps.clear();
+          }
+
+          gameStateManager.updateRound(roomId, currentRound);
+
+          // Resume song timer if it was paused (for modes that pause on buzz)
+          if (modeHandler.shouldPauseOnBuzz()) {
+            timerManager.resumeSongTimer(roomId);
+            gameLogger.debug('Song timer resumed after answer timeout', { roomId, playerId });
+          }
+
+          // Notify timeout
+          broadcastToRoom(roomId, {
+            type: 'answer:result',
+            data: {
+              playerId,
+              playerName,
+              answerType: 'title' as const,
+              isCorrect: false,
+              pointsAwarded: 0,
+              shouldShowTitleChoices: false,
+              lockOutPlayer: true,
+            },
+          });
+
+          // Check if we should end song (all players locked out)
+          const activePlayerCount = await playerRepository.countConnected(roomId);
+          if (modeHandler.shouldEndSong(song, activePlayerCount)) {
+            await this.endSong(roomId, currentRound, songIndex);
+          }
         }
       }
     }

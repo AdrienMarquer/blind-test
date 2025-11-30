@@ -9,7 +9,6 @@ export interface SpotifyTrack {
   album?: string;
   year?: number;
   genre?: CanonicalGenre | 'Unknown';
-  subgenre?: string;
   duration: number; // seconds
   albumArt?: string;
   previewUrl?: string; // 30s preview MP3 URL
@@ -70,15 +69,12 @@ export class SpotifyService {
 
           // Get genres from first artist and normalize
           let genre: CanonicalGenre | 'Unknown' | undefined = undefined;
-          let subgenre: string | undefined = undefined;
 
           if (track.artists.length > 0) {
             const artistId = track.artists[0].id;
             const artist = await this.getArtist(artistId);
             if (artist && artist.genres.length > 0) {
-              const normalized = GenreMapper.normalizeWithSubgenre(artist.genres);
-              genre = normalized.genre;
-              subgenre = normalized.subgenre;
+              genre = GenreMapper.normalize(artist.genres);
             }
           }
 
@@ -89,7 +85,6 @@ export class SpotifyService {
             album: track.album.name,
             year,
             genre,
-            subgenre,
             duration: Math.floor(track.duration_ms / 1000),
             albumArt: track.album.images[0]?.url,
             previewUrl: track.preview_url || undefined,
@@ -120,15 +115,12 @@ export class SpotifyService {
 
       // Get genres from first artist and normalize
       let genre: CanonicalGenre | 'Unknown' | undefined = undefined;
-      let subgenre: string | undefined = undefined;
 
       if (track.artists.length > 0) {
         const artistId = track.artists[0].id;
         const artist = await this.getArtist(artistId);
         if (artist && artist.genres.length > 0) {
-          const normalized = GenreMapper.normalizeWithSubgenre(artist.genres);
-          genre = normalized.genre;
-          subgenre = normalized.subgenre;
+          genre = GenreMapper.normalize(artist.genres);
         }
       }
 
@@ -139,7 +131,6 @@ export class SpotifyService {
         album: track.album.name,
         year,
         genre,
-        subgenre,
         duration: Math.floor(track.duration_ms / 1000),
         albumArt: track.album.images[0]?.url,
         previewUrl: track.preview_url || undefined,

@@ -87,7 +87,6 @@ Respond with a JSON object containing:
   "album": "Album name (if known)",
   "year": 2024,
   "genre": "Primary genre",
-  "subgenre": "Subgenre (optional)",
   "confidence": 95
 }
 
@@ -118,7 +117,6 @@ For each song, provide metadata in JSON format. Respond with a JSON array:
     "album": "Album name (if known)",
     "year": 2024,
     "genre": "Primary genre",
-    "subgenre": "Subgenre (optional)",
     "confidence": 95
   },
   ...
@@ -283,7 +281,6 @@ JSON array response:`;
 				album: parsed.album,
 				year: parsed.year,
 				genre: normalizedGenre,
-				subgenre: parsed.subgenre || parsed.genre, // Keep AI's original genre as subgenre
 				confidence: parsed.confidence || 50
 			};
 		} catch (error) {
@@ -320,7 +317,6 @@ JSON array response:`;
 					album: item.album,
 					year: item.year,
 					genre: normalizedGenre,
-					subgenre: item.subgenre || item.genre, // Keep AI's original genre as subgenre
 					confidence: item.confidence || 50
 				};
 			});

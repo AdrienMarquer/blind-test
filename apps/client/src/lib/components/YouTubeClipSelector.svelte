@@ -30,8 +30,7 @@
 		artist: '',
 		year: null as number | null,
 		album: '',
-		genre: '',
-		subgenre: ''
+		genre: ''
 	});
 	let enriching = $state(false);
 	let enrichmentConfidence = $state(0);
@@ -107,8 +106,7 @@
 					artist: result.enriched.artist,
 					year: result.enriched.year || null,
 					album: result.enriched.album || '',
-					genre: result.enriched.genre || '',
-					subgenre: result.enriched.subgenre || ''
+					genre: result.enriched.genre || ''
 				};
 			} else {
 				// Show for review if medium confidence (50-89%)
@@ -117,8 +115,7 @@
 					artist: result.enriched.artist || currentVideo.uploader || '',
 					year: result.enriched.year || null,
 					album: result.enriched.album || '',
-					genre: result.enriched.genre || '',
-					subgenre: result.enriched.subgenre || ''
+					genre: result.enriched.genre || ''
 				};
 			}
 
@@ -133,8 +130,7 @@
 				artist: currentVideo.uploader || '',
 				year: null,
 				album: '',
-				genre: '',
-				subgenre: ''
+				genre: ''
 			};
 			enrichmentConfidence = 0;
 		} finally {
@@ -204,8 +200,7 @@
 				artist: metadata.artist,
 				year: metadata.year!,
 				album: metadata.album || undefined,
-				genre: metadata.genre || undefined,
-				subgenre: metadata.subgenre || undefined
+				genre: metadata.genre || undefined
 			}
 		});
 
@@ -245,8 +240,7 @@
 				artist: metadata.artist,
 				year: metadata.year!,
 				album: metadata.album || undefined,
-				genre: metadata.genre || undefined,
-				subgenre: metadata.subgenre || undefined
+				genre: metadata.genre || undefined
 			}
 		});
 
@@ -393,17 +387,6 @@
 								type="text"
 								placeholder="Genre musical (optionnel)"
 								bind:value={metadata.genre}
-								disabled={enriching}
-							/>
-						</div>
-
-						<div class="control-group">
-							<label for="song-subgenre">Sous-genre</label>
-							<input
-								id="song-subgenre"
-								type="text"
-								placeholder="Sous-genre (optionnel)"
-								bind:value={metadata.subgenre}
 								disabled={enriching}
 							/>
 						</div>

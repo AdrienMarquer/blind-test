@@ -32,7 +32,6 @@ export interface MergedSongMetadata {
 	album?: string;
 	year: number;
 	genre?: string;
-	subgenre?: string;
 	spotifyId?: string;
 	language?: string;
 }
@@ -110,9 +109,6 @@ export function mergeMetadata(
 	// Genre: enriched > provided > extracted
 	const finalGenre = enriched?.genre || provided?.genre || extracted.genre;
 
-	// Subgenre: enriched only (not in extracted/provided metadata)
-	const finalSubgenre = enriched?.subgenre;
-
 	// Spotify ID: enriched only (from Spotify provider)
 	const finalSpotifyId = enriched?.providerId;
 
@@ -159,7 +155,6 @@ export function mergeMetadata(
 		album: finalAlbum,
 		year: finalYear,
 		genre: finalGenre,
-		subgenre: finalSubgenre,
 		spotifyId: finalSpotifyId,
 	};
 }
@@ -186,7 +181,6 @@ export function logEnrichmentStats(
 		confidence: enriched.confidence,
 		hasGenre: !!merged.genre,
 		hasAlbum: !!merged.album,
-		hasSubgenre: !!merged.subgenre,
 		hasSpotifyId: !!merged.spotifyId
 	});
 }

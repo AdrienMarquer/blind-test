@@ -68,7 +68,6 @@ export const songs = sqliteTable('songs', {
 
   // Enhanced metadata for answer generation
   language: text('language'), // ISO 639-1 code (e.g., 'en', 'fr', 'es')
-  subgenre: text('subgenre'), // More specific genre (e.g., 'french-rap', 'synthwave')
   niche: integer('niche', { mode: 'boolean' }).notNull().default(false), // Is this a niche/obscure song?
 
   // Source tracking

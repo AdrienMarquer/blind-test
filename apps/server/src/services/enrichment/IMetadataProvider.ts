@@ -9,7 +9,6 @@ export interface EnrichedTrackMetadata {
 	album?: string;
 	year?: number;
 	genre?: string;
-	subgenre?: string;
 	duration?: number; // seconds
 	confidence: number; // 0-100
 	providerId?: string; // Provider-specific ID (e.g., Spotify ID)

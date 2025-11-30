@@ -534,11 +534,6 @@ export class AnswerGenerationService {
 				score += 8;
 			}
 
-			// Subgenre match
-			if (correct.subgenre && candidate.subgenre === correct.subgenre) {
-				score += 6;
-			}
-
 			// Artist similarity (same first word)
 			if (correct.artist && candidate.artist) {
 				const correctFirstWord = correct.artist.split(' ')[0].toLowerCase();

@@ -25,7 +25,6 @@ export interface EnrichedMetadata {
 	album?: string;
 	year?: number;
 	genre?: string;
-	subgenre?: string;
 	providerId?: string; // Provider-specific ID (e.g., Spotify ID)
 	confidence: number; // 0-100
 }
@@ -137,7 +136,6 @@ export class MetadataEnrichmentService {
 			album: primary.album || fallback.album,
 			year: finalYear,
 			genre: finalGenre,
-			subgenre: fallback.subgenre || primary.subgenre, // Prefer AI subgenre
 
 			// Duration and confidence
 			duration: primary.duration || fallback.duration,
@@ -186,7 +184,6 @@ export class MetadataEnrichmentService {
 							album: bestFallback.album,
 							year: bestFallback.year,
 							genre: bestFallback.genre,
-							subgenre: bestFallback.subgenre,
 							providerId: bestFallback.providerId,
 							confidence: bestFallback.confidence
 						},
@@ -277,7 +274,6 @@ export class MetadataEnrichmentService {
 				album: finalMatch.album,
 				year: finalMatch.year,
 				genre: finalMatch.genre,
-				subgenre: finalMatch.subgenre,
 				providerId: finalMatch.providerId,
 				confidence: finalMatch.confidence
 			},
@@ -361,7 +357,6 @@ export class MetadataEnrichmentService {
 						album: finalMetadata.album,
 						year: finalMetadata.year,
 						genre: finalMetadata.genre,
-						subgenre: finalMetadata.subgenre,
 						providerId: finalMetadata.providerId,
 						confidence: finalMetadata.confidence
 					},
@@ -474,7 +469,6 @@ export class MetadataEnrichmentService {
 							album: merged.album,
 							year: merged.year,
 							genre: merged.genre,
-							subgenre: merged.subgenre,
 							providerId: merged.providerId,
 							confidence: merged.confidence
 						},
@@ -505,7 +499,6 @@ export class MetadataEnrichmentService {
 				album: spotifyResult.album,
 				year: spotifyResult.year,
 				genre: spotifyResult.genre,
-				subgenre: spotifyResult.subgenre,
 				providerId: spotifyResult.providerId,
 				confidence: spotifyResult.confidence
 			},
