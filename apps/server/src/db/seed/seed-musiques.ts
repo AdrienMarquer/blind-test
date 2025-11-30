@@ -69,6 +69,7 @@ interface EnrichedSong {
   genre?: string;
   subgenre?: string;
   duration?: number; // Full track length in seconds
+  albumArt?: string; // Spotify album cover URL
 
   // From YouTube
   youtubeId?: string;
@@ -144,6 +145,7 @@ class SpotifyClient {
     genre?: string;
     subgenre?: string;
     duration: number;
+    albumArt?: string;
   } | null> {
     if (!this.api) return null;
 
@@ -198,6 +200,7 @@ class SpotifyClient {
         genre,
         subgenre,
         duration: Math.floor(track.duration_ms / 1000),
+        albumArt: track.album.images[0]?.url,
       };
     } catch (error) {
       console.error(`  ⚠️ Spotify search failed: ${error}`);
@@ -383,6 +386,7 @@ class DatabaseService {
       niche: false,
       spotifyId: song.spotifyId || null,
       youtubeId: song.youtubeId || null,
+      albumArt: song.albumArt || null,
       source: 'seed',
       clipStart: song.clipStart ?? 0,
       clipDuration: song.clipDuration ?? 60,
@@ -519,6 +523,7 @@ async function main() {
         song.genre = spotifyData.genre;
         song.subgenre = spotifyData.subgenre;
         song.duration = spotifyData.duration;
+        song.albumArt = spotifyData.albumArt;
         song.status = 'spotify_done';
         const genreInfo = spotifyData.subgenre
           ? `${spotifyData.genre} (${spotifyData.subgenre})`

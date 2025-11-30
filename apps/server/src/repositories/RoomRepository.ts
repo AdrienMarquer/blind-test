@@ -4,9 +4,9 @@
 
 import { eq, and, lt } from 'drizzle-orm';
 import type { Room, Repository, PlayerStats } from '@blind-test/shared';
-import { generateId, generateRoomCode, generateRoomJoinURL, ROOM_CONFIG } from '@blind-test/shared';
+import { generateId, generateRoomCode, ROOM_CONFIG } from '@blind-test/shared';
 import { db, schema } from '../db';
-import { getLocalNetworkIP, generateQRCodeDataURL } from '../utils/network';
+import { getLocalNetworkIP, generateQRCodeDataURL, generateRoomJoinURL } from '../utils/network';
 import { AuthService } from '../services/AuthService';
 import { logger } from '../utils/logger';
 

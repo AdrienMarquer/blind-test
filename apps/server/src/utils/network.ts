@@ -59,12 +59,27 @@ export async function generateQRCodeDataURL(url: string): Promise<string> {
 }
 
 /**
+ * Get the base URL for the client application
+ * Uses PUBLIC_URL in production, falls back to local IP for development
+ */
+export function getClientBaseUrl(localIP?: string): string {
+  const publicUrl = process.env.PUBLIC_URL;
+  if (publicUrl) {
+    return publicUrl.replace(/\/$/, ''); // Remove trailing slash
+  }
+  // Development: use local IP
+  const ip = localIP || getLocalNetworkIP();
+  const port = process.env.CLIENT_PORT || 5173;
+  return `http://${ip}:${port}`;
+}
+
+/**
  * Generate a room join URL
  * @param roomId - The room UUID
- * @param localIP - The local network IP address
- * @param port - The client port (default: 5173 for dev)
+ * @param localIP - The local network IP address (used only in dev when PUBLIC_URL not set)
  * @returns The complete join URL
  */
-export function generateRoomJoinURL(roomId: string, localIP: string, port: number = 5173): string {
-  return `http://${localIP}:${port}/room/${roomId}`;
+export function generateRoomJoinURL(roomId: string, localIP?: string): string {
+  const baseUrl = getClientBaseUrl(localIP);
+  return `${baseUrl}/room/${roomId}`;
 }

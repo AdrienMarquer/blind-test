@@ -74,6 +74,7 @@ export const songs = sqliteTable('songs', {
   // Source tracking
   spotifyId: text('spotify_id'), // Spotify track ID
   youtubeId: text('youtube_id'), // YouTube video ID
+  albumArt: text('album_art'), // Spotify album cover URL
   source: text('source').notNull().default('upload'), // 'upload' | 'spotify-youtube' | 'manual'
 
   // Playback configuration
