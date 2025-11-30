@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api } from '$lib/api';
+	import { api, getApiUrl } from '$lib/api';
 	import type { Song } from '@blind-test/shared';
 	import { SONG_CONFIG, CANONICAL_GENRES } from '@blind-test/shared';
 	import AudioClipSelector from '$lib/components/AudioClipSelector.svelte';
@@ -91,7 +91,7 @@
 			searchingSpotify = true;
 			error = null;
 
-			const response = await fetch(`http://localhost:3007/api/songs/search-spotify?q=${encodeURIComponent(spotifyQuery)}`);
+			const response = await fetch(`${getApiUrl()}/api/songs/search-spotify?q=${encodeURIComponent(spotifyQuery)}`);
 			const data = await response.json();
 
 			if (response.ok) {
@@ -116,7 +116,7 @@
 			error = null;
 
 			// Step 1: Download full song to temp file (with optional force flag)
-			const response = await fetch('http://localhost:3007/api/songs/spotify-download-temp', {
+			const response = await fetch(`${getApiUrl()}/api/songs/spotify-download-temp`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ spotifyId, force })
@@ -141,7 +141,7 @@
 			}
 
 			// Step 2: Fetch the temp file as a blob
-			const audioResponse = await fetch(`http://localhost:3007/api/songs/${data.tempFileId}/stream`);
+			const audioResponse = await fetch(`${getApiUrl()}/api/songs/${data.tempFileId}/stream`);
 			if (!audioResponse.ok) {
 				throw new Error('Impossible de charger le fichier audio');
 			}
@@ -208,7 +208,7 @@
 			error = null;
 
 			// Step 4: Finalize with selected clip
-			const response = await fetch('http://localhost:3007/api/songs/spotify-finalize', {
+			const response = await fetch(`${getApiUrl()}/api/songs/spotify-finalize`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -258,7 +258,7 @@
 			error = null;
 
 			// Send raw video data to backend - enrichment is handled automatically
-			const response = await fetch('http://localhost:3007/api/songs/youtube-import-batch', {
+			const response = await fetch(`${getApiUrl()}/api/songs/youtube-import-batch`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -369,8 +369,8 @@
 
 			// Add force query parameter if needed
 			const url = force
-				? `${import.meta.env.VITE_API_URL || 'http://localhost:3007'}/api/songs/upload?force=true`
-				: `${import.meta.env.VITE_API_URL || 'http://localhost:3007'}/api/songs/upload`;
+				? `${getApiUrl()}/api/songs/upload?force=true`
+				: `${getApiUrl()}/api/songs/upload`;
 
 			const response = await fetch(url, {
 				method: 'POST',

@@ -4,7 +4,7 @@
 	 * Shows real-time progress for background import jobs via WebSocket
 	 */
 	import { onMount, onDestroy } from 'svelte';
-	import { api } from '$lib/api';
+	import { api, getWsUrl } from '$lib/api';
 
 	interface Job {
 		jobId: string;
@@ -34,7 +34,7 @@
 	function connectWebSocket() {
 		// Connect to a WebSocket endpoint (using a dummy room for global events)
 		// In a real implementation, you might want a dedicated WebSocket for job updates
-		ws = new WebSocket('ws://localhost:3007/ws/rooms/global-job-updates');
+		ws = new WebSocket(`${getWsUrl()}/ws/rooms/global-job-updates`);
 
 		ws.onopen = () => {
 			wsConnected = true;

@@ -6,6 +6,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { SONG_CONFIG } from '@blind-test/shared';
+	import { getApiUrl } from '$lib/api';
 	import Button from './ui/Button.svelte';
 
 	interface Props {
@@ -82,7 +83,7 @@
 			// Parse duration string (e.g., "3:45" -> 225 seconds)
 			const durationSeconds = parseDuration(currentVideo.duration || '0:00');
 
-			const response = await fetch('http://localhost:3007/api/songs/enrich-metadata', {
+			const response = await fetch(`${getApiUrl()}/api/songs/enrich-metadata`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({

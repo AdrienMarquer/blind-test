@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Song } from '@blind-test/shared';
 	import { CANONICAL_GENRES } from '@blind-test/shared';
+	import { getApiUrl } from '$lib/api';
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
 
@@ -68,7 +69,7 @@
 		try {
 			discovering = true;
 
-			const response = await fetch(`http://localhost:3007/api/songs/${song.id}/auto-discover`, {
+			const response = await fetch(`${getApiUrl()}/api/songs/${song.id}/auto-discover`, {
 				method: 'POST'
 			});
 

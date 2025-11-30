@@ -5,29 +5,9 @@
 
 import type { Room, Player, ServerMessage, ClientMessage, MediaQuestion } from '@blind-test/shared';
 import { writable, type Writable, get } from 'svelte/store';
+import { getWsUrl } from '$lib/api';
 
-// Auto-detect server URL based on current host
-const getServerUrl = () => {
-  if (typeof window === 'undefined') return 'ws://localhost:3007';
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.hostname;
-  const port = window.location.port;
-
-  // Production: no port needed, goes through reverse proxy
-  if (host !== 'localhost' && host !== '127.0.0.1' && !port) {
-    return `${protocol}//${host}`;
-  }
-
-  // Local network with custom port (e.g., 192.168.x.x:5173)
-  if (host !== 'localhost' && host !== '127.0.0.1') {
-    return `${protocol}//${host}:3007`;
-  }
-
-  return 'ws://localhost:3007';
-};
-
-const SERVER_URL = getServerUrl();
+const SERVER_URL = getWsUrl();
 
 /**
  * Reactive event stream - components subscribe to specific events using $effect()

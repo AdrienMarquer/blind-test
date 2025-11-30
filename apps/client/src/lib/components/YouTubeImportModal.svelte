@@ -4,6 +4,7 @@
 	 * Allows importing songs from YouTube videos or playlists
 	 */
 	import { SONG_CONFIG } from '@blind-test/shared';
+	import { getApiUrl } from '$lib/api';
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
 
@@ -36,7 +37,7 @@
 			loading = true;
 			error = null;
 
-			const response = await fetch('http://localhost:3007/api/songs/youtube-playlist-info', {
+			const response = await fetch(`${getApiUrl()}/api/songs/youtube-playlist-info`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ url: youtubeUrl })
@@ -73,7 +74,7 @@
 		try {
 			checkingDuplicates = true;
 
-			const response = await fetch('http://localhost:3007/api/songs/youtube-check-duplicates', {
+			const response = await fetch(`${getApiUrl()}/api/songs/youtube-check-duplicates`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
