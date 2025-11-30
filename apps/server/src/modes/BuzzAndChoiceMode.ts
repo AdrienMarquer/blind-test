@@ -182,13 +182,14 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
           message: 'Bon titre, mais pas de bonus car l\'artiste était faux.',
         };
       } else if (!isCorrect && artistWasCorrect) {
-        // Wrong title but artist was correct → lock out player (but keep artist points)
+        // Wrong title but artist was correct → player already won, song ends
+        // Don't lock out - they keep their artist point and the song ends
         return {
           isCorrect: false,
           pointsAwarded: 0,
           shouldShowTitleChoices: false,
-          lockOutPlayer: true,
-          message: 'Mauvais titre. Tu gardes ton point artiste mais tu es éliminé.',
+          lockOutPlayer: false, // Don't lock out - they won with artist!
+          message: 'Mauvais titre, mais tu gardes ton point artiste !',
         };
       } else {
         // Wrong title AND artist was wrong → lock out player
