@@ -8,6 +8,8 @@ import { songRepository } from '../repositories';
 import { logger } from '../utils/logger';
 
 const serviceLogger = logger.child({ module: 'AnswerGeneration' });
+const REQUIRED_CHOICE_COUNT = 4;
+const REQUIRED_WRONG_ANSWERS = REQUIRED_CHOICE_COUNT - 1;
 
 export interface WrongAnswer {
 	title: string;
@@ -22,6 +24,190 @@ export class AnswerGenerationService {
 	constructor(repository?: { findAll: () => Promise<Song[]> }) {
 		// Allow dependency injection for testing, default to real songRepository
 		this.repository = repository || songRepository;
+	}
+
+	private async getArtistDistractors(correctSong: Song, desiredCount: number): Promise<WrongAnswer[]> {
+		const allSongs = await this.repository.findAll();
+		if (!allSongs.length) {
+			return [];
+		}
+
+		const targetGenre = correctSong.genre?.toLowerCase();
+		const targetYear = Number.isFinite(correctSong.year) ? correctSong.year : undefined;
+		const normalizedCorrectArtist = (correctSong.artist || 'Unknown Artist').toLowerCase();
+
+		type ArtistCandidate = {
+			normalizedArtist: string;
+			artist: string;
+			totalCount: number;
+			sameGenreCount: number;
+			closestYearDiff: number;
+			referenceSong: Song;
+		};
+
+		const candidateMap = new Map<string, ArtistCandidate>();
+
+		for (const candidateSong of allSongs) {
+			if (candidateSong.id === correctSong.id) continue;
+			const candidateArtist = candidateSong.artist || 'Unknown Artist';
+			const normalizedArtist = candidateArtist.toLowerCase();
+			if (normalizedArtist === normalizedCorrectArtist) continue;
+
+			let candidate = candidateMap.get(normalizedArtist);
+			if (!candidate) {
+				candidate = {
+					normalizedArtist,
+					artist: candidateArtist,
+					totalCount: 0,
+					sameGenreCount: 0,
+					closestYearDiff: Number.POSITIVE_INFINITY,
+					referenceSong: candidateSong,
+				};
+				candidateMap.set(normalizedArtist, candidate);
+			}
+
+			candidate.totalCount += 1;
+
+			const candidateGenre = candidateSong.genre?.toLowerCase();
+			const sameGenre = targetGenre && candidateGenre === targetGenre;
+			if (sameGenre) {
+				candidate.sameGenreCount += 1;
+				if (candidate.referenceSong.genre?.toLowerCase() !== targetGenre) {
+					candidate.referenceSong = candidateSong;
+				}
+			}
+
+			const candidateYear = typeof candidateSong.year === 'number' ? candidateSong.year : undefined;
+			if (targetYear !== undefined && candidateYear !== undefined) {
+				const yearDiff = Math.abs(candidateYear - targetYear);
+				if (yearDiff < candidate.closestYearDiff) {
+					candidate.closestYearDiff = yearDiff;
+					candidate.referenceSong = candidateSong;
+				}
+			}
+		}
+
+		const candidates = Array.from(candidateMap.values());
+		if (!candidates.length) {
+			return [];
+		}
+
+		candidates.sort((a, b) => {
+			if (a.sameGenreCount !== b.sameGenreCount) {
+				return b.sameGenreCount - a.sameGenreCount;
+			}
+			const aYearDiff = Number.isFinite(a.closestYearDiff) ? a.closestYearDiff : Number.MAX_SAFE_INTEGER;
+			const bYearDiff = Number.isFinite(b.closestYearDiff) ? b.closestYearDiff : Number.MAX_SAFE_INTEGER;
+			if (aYearDiff !== bYearDiff) {
+				return aYearDiff - bYearDiff;
+			}
+			if (a.totalCount !== b.totalCount) {
+				return b.totalCount - a.totalCount;
+			}
+			return a.artist.localeCompare(b.artist);
+		});
+
+		return candidates.slice(0, desiredCount).map(candidate => ({
+			title: candidate.referenceSong.title,
+			artist: candidate.artist,
+			isInLibrary: true,
+		}));
+	}
+
+	private collectUniqueArtistAnswers(candidateGroups: WrongAnswer[][], correctArtist: string): WrongAnswer[] {
+		const normalizedCorrect = (correctArtist || 'Unknown Artist').toLowerCase();
+		const seen = new Set<string>([normalizedCorrect]);
+		const unique: WrongAnswer[] = [];
+
+		for (const group of candidateGroups) {
+			for (const candidate of group) {
+				if (!candidate) continue;
+				const normalized = (candidate.artist || 'Unknown Artist').toLowerCase();
+				if (seen.has(normalized)) {
+					continue;
+				}
+				seen.add(normalized);
+				unique.push({
+					title: candidate.title,
+					artist: candidate.artist || 'Unknown Artist',
+					isInLibrary: candidate.isInLibrary,
+					score: candidate.score,
+				});
+
+				if (unique.length === REQUIRED_WRONG_ANSWERS) {
+					return unique;
+				}
+			}
+		}
+
+		return unique;
+	}
+
+	private async buildRandomArtistPool(correctSong: Song): Promise<WrongAnswer[]> {
+		try {
+			const exclusionIds = new Set<string>();
+			exclusionIds.add(correctSong.id);
+			const randomSongs = await this.getRandomSongs(correctSong, REQUIRED_WRONG_ANSWERS * 3, exclusionIds);
+			return randomSongs.map(song => ({
+				title: song.title,
+				artist: song.artist || 'Unknown Artist',
+				isInLibrary: true,
+			}));
+		} catch (error) {
+			serviceLogger.error('Failed to build random artist pool', { error });
+			return [];
+		}
+	}
+
+	private ensureUniqueChoiceDisplayTexts(choices: AnswerChoice[], placeholderPrefix: string): AnswerChoice[] {
+		const orderedChoices = [...choices].sort((a, b) => {
+			if (a.correct === b.correct) return 0;
+			return a.correct ? -1 : 1;
+		});
+
+		const seen = new Set<string>();
+		const filtered: AnswerChoice[] = [];
+
+		for (const choice of orderedChoices) {
+			const key = choice.displayText.trim().toLowerCase();
+			if (seen.has(key)) {
+				serviceLogger.warn('Removing duplicate choice', {
+					placeholderPrefix,
+					displayText: choice.displayText,
+				});
+				continue;
+			}
+			seen.add(key);
+			filtered.push(choice);
+		}
+
+		let placeholderIndex = 1;
+		let addedPlaceholder = false;
+		while (filtered.length < REQUIRED_CHOICE_COUNT) {
+			const placeholderText = `Fallback ${placeholderPrefix} ${placeholderIndex}`;
+			const key = placeholderText.toLowerCase();
+			if (seen.has(key)) {
+				placeholderIndex += 1;
+				continue;
+			}
+			filtered.push({
+				id: `choice-fallback-${placeholderPrefix.toLowerCase()}-${placeholderIndex}`,
+				correct: false,
+				displayText: placeholderText,
+			});
+			seen.add(key);
+			addedPlaceholder = true;
+			placeholderIndex += 1;
+		}
+
+		if (addedPlaceholder) {
+			serviceLogger.warn('Added fallback choices to maintain required choice count', {
+				placeholderPrefix,
+				choiceCount: filtered.length,
+			});
+		}
+
+		return filtered.slice(0, REQUIRED_CHOICE_COUNT);
 	}
 
 	/**
@@ -49,9 +235,9 @@ export class AnswerGenerationService {
 			serviceLogger.debug('Library candidates found', { count: libraryCandidates.length });
 
 			// 2. If we have enough from library, use them
-			if (libraryCandidates.length >= 3) {
+			if (libraryCandidates.length >= REQUIRED_WRONG_ANSWERS) {
 				const ranked = this.rankBySimilarity(normalizedCorrectSong, libraryCandidates);
-				return ranked.slice(0, 3).map(song => ({
+				return ranked.slice(0, REQUIRED_WRONG_ANSWERS).map(song => ({
 					title: song.title,
 					artist: song.artist || 'Unknown Artist',
 					isInLibrary: true,
@@ -67,8 +253,8 @@ export class AnswerGenerationService {
 			}));
 
 			// 4. Still need more? Use random songs from entire library as fallback
-			if (wrongAnswers.length < 3) {
-				const stillNeeded = 3 - wrongAnswers.length;
+			if (wrongAnswers.length < REQUIRED_WRONG_ANSWERS) {
+				const stillNeeded = REQUIRED_WRONG_ANSWERS - wrongAnswers.length;
 				serviceLogger.warn('Insufficient similar songs, using random fallback', {
 					have: wrongAnswers.length,
 					need: stillNeeded
@@ -83,7 +269,7 @@ export class AnswerGenerationService {
 
 				// Add unique random songs
 				for (const song of randomSongs) {
-					if (wrongAnswers.length >= 3) break;
+					if (wrongAnswers.length >= REQUIRED_WRONG_ANSWERS) break;
 					// Check if this song is already in our answers (by title/artist combo)
 					const isDuplicate = wrongAnswers.some(
 						wa => wa.title === song.title && wa.artist === (song.artist || 'Unknown Artist')
@@ -104,12 +290,12 @@ export class AnswerGenerationService {
 			});
 
 			// GUARANTEE: Always return exactly 3 answers
-			if (wrongAnswers.length < 3) {
+			if (wrongAnswers.length < REQUIRED_WRONG_ANSWERS) {
 				// Emergency fallback - generate placeholder answers
 				serviceLogger.error('CRITICAL: Could not generate 3 wrong answers, using placeholders', {
 					generated: wrongAnswers.length
 				});
-				while (wrongAnswers.length < 3) {
+				while (wrongAnswers.length < REQUIRED_WRONG_ANSWERS) {
 					wrongAnswers.push({
 						title: `Song ${wrongAnswers.length + 1}`,
 						artist: 'Various Artists',
@@ -118,7 +304,7 @@ export class AnswerGenerationService {
 				}
 			}
 
-			return wrongAnswers.slice(0, 3);
+			return wrongAnswers.slice(0, REQUIRED_WRONG_ANSWERS);
 		} catch (error) {
 			serviceLogger.error('CRITICAL: generateWrongAnswers failed completely', { error });
 			// Emergency fallback - return placeholder answers
@@ -165,7 +351,8 @@ export class AnswerGenerationService {
 			];
 
 			// Shuffle choices
-			const shuffledChoices = this.shuffleArray(choices);
+			const uniqueChoices = this.ensureUniqueChoiceDisplayTexts(choices, 'Title');
+			const shuffledChoices = this.shuffleArray(uniqueChoices);
 
 			serviceLogger.debug('Generated title question', {
 				songTitle: normalizedCorrectSong.title,
@@ -200,11 +387,16 @@ export class AnswerGenerationService {
 	 */
 	async generateArtistQuestion(correctSong: Song, mediaType: MediaType = 'music'): Promise<MediaQuestion> {
 		try {
-			const wrongAnswers = await this.generateWrongAnswers(correctSong);
 			const normalizedCorrectSong = {
 				...correctSong,
 				artist: correctSong.artist || 'Unknown Artist'
 			};
+
+			const prioritizedArtists = await this.getArtistDistractors(normalizedCorrectSong, REQUIRED_WRONG_ANSWERS);
+			const fallbackPool = await this.generateWrongAnswers(normalizedCorrectSong);
+			const randomFillPool = await this.buildRandomArtistPool(normalizedCorrectSong);
+			const combinedCandidates = [prioritizedArtists, fallbackPool, randomFillPool];
+			const wrongArtists = this.collectUniqueArtistAnswers(combinedCandidates, normalizedCorrectSong.artist);
 
 			// Create answer choices with artist as displayText
 			const choices: AnswerChoice[] = [
@@ -218,7 +410,7 @@ export class AnswerGenerationService {
 						genre: normalizedCorrectSong.genre
 					}
 				},
-				...wrongAnswers.map((wa, idx) => ({
+				...wrongArtists.map((wa, idx) => ({
 					id: `choice-wrong-${idx}`,
 					correct: false,
 					displayText: wa.artist,
@@ -229,7 +421,8 @@ export class AnswerGenerationService {
 			];
 
 			// Shuffle choices
-			const shuffledChoices = this.shuffleArray(choices);
+			const uniqueChoices = this.ensureUniqueChoiceDisplayTexts(choices, 'Artist');
+			const shuffledChoices = this.shuffleArray(uniqueChoices);
 
 			serviceLogger.debug('Generated artist question', {
 				songArtist: normalizedCorrectSong.artist,

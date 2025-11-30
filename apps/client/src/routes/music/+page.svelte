@@ -12,6 +12,7 @@
 	import Card from '$lib/components/ui/Card.svelte';
 	import InputField from '$lib/components/ui/InputField.svelte';
 	import EditableSongCard from '$lib/components/EditableSongCard.svelte';
+	import SongStatsCharts from '$lib/components/SongStatsCharts.svelte';
 
 	let songs = $state<Song[]>([]);
 	let loading = $state(true);
@@ -57,6 +58,12 @@
 	let showYouTubeClipSelector = $state(false);
 	let importingFromYouTube = $state(false);
 
+	// Import tabs
+	let activeImportTab = $state<'upload' | 'spotify' | 'youtube'>('spotify');
+
+	// Stats modal
+	let showStatsModal = $state(false);
+
 	const filteredSongs = $derived(
 		songs.filter((song) => {
 			// Text search filter
@@ -73,8 +80,6 @@
 			return matchesSearch && matchesGenre;
 		})
 	);
-
-	const totalDuration = $derived(songs.reduce((acc, song) => acc + song.duration, 0));
 
 	function isTrackInLibrary(spotifyId: string, title: string, artist: string): boolean {
 		return songs.some(
@@ -456,92 +461,108 @@
 	});
 </script>
 
-	<div class="music-hero aq-hero-card">
-	<div>
-		<h1>🎵 Bibliothèque AdriQuiz</h1>
-		<p>Ajoute tes extraits préférés, découpe les meilleurs moments et garde un œil sur ta collection.</p>
+<header class="music-header">
+	<div class="header-title">🎵 Bibliothèque</div>
+	<div class="header-stats">
+		<span class="stat">{songs.length} morceaux</span>
 	</div>
-	<div class="hero-highlights">
-		<div>
-			<p class="stat-label">Total morceaux</p>
-			<strong>{songs.length}</strong>
-		</div>
-		<div>
-			<p class="stat-label">Durée cumulée</p>
-			<strong>{formatDuration(totalDuration)}</strong>
-		</div>
-	</div>
-	<div class="hero-links">
-		<Button variant="ghost" onclick={() => (window.location.href = '/')}>← Retour lobby</Button>
-	</div>
-</div>
+	<button class="header-stats-btn" onclick={() => showStatsModal = true} type="button" title="Statistiques">
+		📊
+	</button>
+	<a href="/" class="header-back">← Retour</a>
+</header>
 
-<section class="tools-grid">
-	<Card title="Uploader un extrait" subtitle="Formats MP3, M4A, WAV, FLAC - 50 Mo max" icon="⬆️">
-		<div class="upload-stack">
-			<label class={`file-drop ${uploading ? 'disabled' : ''}`}>
-				<input type="file" accept=".mp3,.m4a,.wav,.flac" onchange={handleFileSelect} disabled={uploading} />
-				<div>
-					<strong>{selectedFile ? selectedFile.name : 'Glisse un fichier ou clique ici'}</strong>
-					<p>{uploading ? 'Upload en cours...' : 'Tu pourras choisir le meilleur extrait juste après.'}</p>
+<section class="import-tabs-container">
+	<div class="import-tabs">
+		<button
+			class="tab"
+			class:active={activeImportTab === 'upload'}
+			onclick={() => activeImportTab = 'upload'}
+			type="button"
+		>
+			⬆️ Upload
+		</button>
+		<button
+			class="tab"
+			class:active={activeImportTab === 'spotify'}
+			onclick={() => activeImportTab = 'spotify'}
+			type="button"
+		>
+			🎧 Spotify
+		</button>
+		<button
+			class="tab"
+			class:active={activeImportTab === 'youtube'}
+			onclick={() => activeImportTab = 'youtube'}
+			type="button"
+		>
+			🎬 YouTube
+		</button>
+	</div>
+
+	<div class="tab-content">
+		{#if activeImportTab === 'upload'}
+			<div class="upload-stack">
+				<label class={`file-drop ${uploading ? 'disabled' : ''}`}>
+					<input type="file" accept=".mp3,.m4a,.wav,.flac" onchange={handleFileSelect} disabled={uploading} />
+					<div>
+						<strong>{selectedFile ? selectedFile.name : 'Glisse un fichier ou clique ici'}</strong>
+						<p>{uploading ? 'Upload en cours...' : 'Tu pourras choisir le meilleur extrait juste après.'}</p>
+					</div>
+				</label>
+				<div class="tips">
+					<span>✨ Astuce : coupe entre {SONG_CONFIG.DEFAULT_CLIP_START}s et {SONG_CONFIG.DEFAULT_CLIP_START + SONG_CONFIG.DEFAULT_CLIP_DURATION}s pour un démarrage punchy.</span>
 				</div>
-			</label>
-			<div class="tips">
-				<span>✨ Astuce : coupe entre {SONG_CONFIG.DEFAULT_CLIP_START}s et {SONG_CONFIG.DEFAULT_CLIP_START + SONG_CONFIG.DEFAULT_CLIP_DURATION}s pour un démarrage punchy.</span>
 			</div>
-		</div>
-	</Card>
+		{:else if activeImportTab === 'spotify'}
+			<form class="spotify-form" onsubmit={(e) => { e.preventDefault(); searchSpotify(); }}>
+				<InputField placeholder="Artiste, titre, album..." bind:value={spotifyQuery} />
+				<Button type="submit" variant="secondary" disabled={searchingSpotify || !spotifyQuery.trim()}>
+					{searchingSpotify ? 'Recherche...' : 'Chercher'}
+				</Button>
+			</form>
 
-	<Card title="Ajouter via Spotify" subtitle="Recherche et import auto" icon="🎧">
-		<form class="spotify-form" onsubmit={(e) => { e.preventDefault(); searchSpotify(); }}>
-			<InputField placeholder="Artiste, titre, album..." bind:value={spotifyQuery} />
-			<Button type="submit" variant="secondary" disabled={searchingSpotify || !spotifyQuery.trim()}>
-				{searchingSpotify ? 'Recherche...' : 'Chercher'}
-			</Button>
-		</form>
-
-		{#if spotifyResults.length > 0}
-			<div class="spotify-results">
-				{#each spotifyResults as track (track.spotifyId)}
-					<div class="spotify-card">
-						{#if track.albumArt}
-							<img src={track.albumArt} alt={track.title} />
-						{/if}
-						<div>
-							<h4>{track.title}</h4>
-							<p>{track.artist}</p>
-							<div class="meta">
-								<span>{track.album}</span>
-								<span>{track.year}</span>
-								<span>{formatDuration(track.duration)}</span>
+			{#if spotifyResults.length > 0}
+				<div class="spotify-results">
+					{#each spotifyResults as track (track.spotifyId)}
+						<div class="spotify-card">
+							{#if track.albumArt}
+								<img src={track.albumArt} alt={track.title} />
+							{/if}
+							<div>
+								<h4>{track.title}</h4>
+								<p>{track.artist}</p>
+								<div class="meta">
+									<span>{track.album}</span>
+									<span>{track.year}</span>
+									<span>{formatDuration(track.duration)}</span>
+								</div>
 							</div>
-						</div>
-						{#if isTrackInLibrary(track.spotifyId, track.title, track.artist)}
-							<span class="in-library">✓ Ajouté</span>
-						{:else}
+							{#if isTrackInLibrary(track.spotifyId, track.title, track.artist)}
+								<span class="in-library">✓ Ajouté</span>
+							{:else}
 								<Button
 									variant="primary"
 									size="sm"
 									onclick={() => addFromSpotify(track.spotifyId, track.title, track.artist)}
 									disabled={addingFromSpotify}
 								>
-								{addingFromSpotify && selectedSpotifyId === track.spotifyId ? 'Téléchargement...' : 'Importer'}
-							</Button>
-						{/if}
-					</div>
-				{/each}
+									{addingFromSpotify && selectedSpotifyId === track.spotifyId ? 'Téléchargement...' : 'Importer'}
+								</Button>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{:else if activeImportTab === 'youtube'}
+			<div class="youtube-import">
+				<p>Importe des morceaux directement depuis YouTube. Tu peux ajouter une vidéo unique ou une playlist entière !</p>
+				<Button variant="primary" onclick={() => showYouTubeModal = true} disabled={importingFromYouTube}>
+					{importingFromYouTube ? 'Import en cours...' : 'Ouvrir l\'import YouTube'}
+				</Button>
 			</div>
 		{/if}
-	</Card>
-
-	<Card title="Importer depuis YouTube" subtitle="Vidéo ou playlist complète" icon="🎬">
-		<div class="youtube-import">
-			<p>Importe des morceaux directement depuis YouTube. Tu peux ajouter une vidéo unique ou une playlist entière !</p>
-			<Button variant="primary" onclick={() => showYouTubeModal = true} disabled={importingFromYouTube}>
-				{importingFromYouTube ? 'Import en cours...' : 'Ouvrir l\'import YouTube'}
-			</Button>
-		</div>
-	</Card>
+	</div>
 </section>
 
 {#if error}
@@ -669,37 +690,126 @@
 <!-- Floating progress indicator for background imports -->
 <ImportProgressIndicator />
 
+<!-- Stats Modal -->
+{#if showStatsModal}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div class="modal-overlay" onclick={() => showStatsModal = false} role="presentation">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="stats-modal-title" tabindex="-1">
+			<div class="modal-header">
+				<h2 id="stats-modal-title">📊 Statistiques</h2>
+				<button class="modal-close" onclick={() => showStatsModal = false} type="button" aria-label="Fermer">✕</button>
+			</div>
+			<div class="modal-body">
+				<SongStatsCharts autoExpand={true} />
+			</div>
+		</div>
+	</div>
+{/if}
+
 <style>
-	.music-hero {
-		margin-bottom: 2rem;
-	}
-
-	.hero-highlights {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: 1rem;
-		margin-top: 1.5rem;
-	}
-
-	.hero-highlights .stat-label {
-		font-size: 0.85rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-	}
-
-	.hero-highlights strong {
-		font-size: 2rem;
-	}
-
-	.hero-links {
-		margin-top: 1.5rem;
-	}
-
-	.tools-grid {
-		display: grid;
+	.music-header {
+		display: flex;
+		align-items: center;
 		gap: 1.5rem;
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-		margin-bottom: 2rem;
+		padding: 1rem 1.5rem;
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		border-radius: var(--aq-radius-lg);
+		color: white;
+		margin-bottom: 1.5rem;
+		flex-wrap: wrap;
+	}
+
+	.header-title {
+		font-size: 1.25rem;
+		font-weight: 700;
+	}
+
+	.header-stats {
+		display: flex;
+		gap: 0.75rem;
+		flex: 1;
+	}
+
+	.header-stats .stat {
+		padding: 0.35rem 0.75rem;
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 999px;
+		font-size: 0.9rem;
+		font-weight: 600;
+	}
+
+	/* Header stats button */
+	.header-stats-btn {
+		padding: 0.35rem 0.6rem;
+		background: rgba(255, 255, 255, 0.2);
+		border: none;
+		border-radius: 999px;
+		font-size: 1rem;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.header-stats-btn:hover {
+		background: rgba(255, 255, 255, 0.35);
+	}
+
+	/* Header back button */
+	.header-back {
+		padding: 0.35rem 0.75rem;
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 999px;
+		font-size: 0.9rem;
+		font-weight: 600;
+		text-decoration: none;
+		color: white;
+		transition: background 0.15s ease;
+	}
+
+	.header-back:hover {
+		background: rgba(255, 255, 255, 0.35);
+	}
+
+	/* Import tabs */
+	.import-tabs-container {
+		background: white;
+		border-radius: var(--aq-radius-lg);
+		padding: 1rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.import-tabs {
+		display: flex;
+		gap: 0.5rem;
+		border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+		padding-bottom: 0.75rem;
+		margin-bottom: 1rem;
+	}
+
+	.tab {
+		padding: 0.5rem 1rem;
+		border: none;
+		background: transparent;
+		border-radius: var(--aq-radius-md);
+		font-weight: 600;
+		font-size: 1rem;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.tab:hover {
+		background: rgba(0, 0, 0, 0.05);
+	}
+
+	.tab.active {
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		color: white;
+	}
+
+	.tab-content {
+		min-height: 120px;
 	}
 
 	.upload-stack {
@@ -887,5 +997,75 @@
 		background: linear-gradient(90deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.4));
 		background-size: 200% 100%;
 		animation: shimmer 1.4s infinite;
+	}
+
+	/* Stats Modal */
+	.modal-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		animation: fadeIn 0.2s ease;
+	}
+
+	@keyframes fadeIn {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+
+	.modal-content {
+		background: white;
+		border-radius: var(--aq-radius-lg);
+		max-width: 800px;
+		width: 90%;
+		max-height: 85vh;
+		overflow-y: auto;
+		animation: slideUp 0.25s ease;
+	}
+
+	@keyframes slideUp {
+		from {
+			opacity: 0;
+			transform: translateY(20px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1rem 1.5rem;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+	}
+
+	.modal-header h2 {
+		margin: 0;
+		font-size: 1.25rem;
+		color: var(--aq-color-deep);
+	}
+
+	.modal-close {
+		background: transparent;
+		border: none;
+		font-size: 1.5rem;
+		cursor: pointer;
+		padding: 0.25rem;
+		color: var(--aq-color-muted);
+		transition: color 0.15s ease;
+	}
+
+	.modal-close:hover {
+		color: var(--aq-color-deep);
+	}
+
+	.modal-body {
+		padding: 1.5rem;
 	}
 </style>

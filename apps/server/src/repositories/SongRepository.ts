@@ -465,4 +465,102 @@ export class SongRepository implements Repository<Song> {
 
     return songs;
   }
+
+  /**
+   * Get aggregated statistics for the song library
+   * Used for dashboard charts and analytics
+   * @param includeNiche - If false (default), excludes niche songs from statistics
+   */
+  async getStats(includeNiche: boolean = false): Promise<{
+    total: number;
+    totalDuration: number;
+    byGenre: Array<{ genre: string; count: number }>;
+    byDecade: Array<{ decade: string; count: number }>;
+    byArtist: Array<{ artist: string; count: number }>;
+    byLanguage: Array<{ language: string; count: number }>;
+    bySource: Array<{ source: string; count: number }>;
+  }> {
+    songLogger.debug('Fetching song statistics', { includeNiche });
+
+    // Base filter: exclude niche songs unless includeNiche is true
+    const nicheFilter = includeNiche ? sql`1=1` : eq(schema.songs.niche, false);
+
+    // 1. Total count and duration
+    const totals = await db
+      .select({
+        total: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        totalDuration: sql<number>`COALESCE(SUM(${schema.songs.duration}), 0)`,
+      })
+      .from(schema.songs)
+      .where(nicheFilter);
+
+    // 2. By Genre (excluding nulls)
+    const byGenre = await db
+      .select({
+        genre: schema.songs.genre,
+        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+      })
+      .from(schema.songs)
+      .where(sql`${schema.songs.genre} IS NOT NULL AND ${nicheFilter}`)
+      .groupBy(schema.songs.genre)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    // 3. By Decade (computed from year)
+    const byDecade = await db
+      .select({
+        decade: sql<string>`CAST((${schema.songs.year} / 10 * 10) AS TEXT) || 's'`,
+        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+      })
+      .from(schema.songs)
+      .where(nicheFilter)
+      .groupBy(sql`${schema.songs.year} / 10`)
+      .orderBy(sql`${schema.songs.year} / 10`);
+
+    // 4. By Artist (Top 15)
+    const byArtist = await db
+      .select({
+        artist: schema.songs.artist,
+        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+      })
+      .from(schema.songs)
+      .where(nicheFilter)
+      .groupBy(schema.songs.artist)
+      .orderBy(sql`COUNT(*) DESC`)
+      .limit(15);
+
+    // 5. By Language (with 'unknown' fallback for nulls)
+    const byLanguage = await db
+      .select({
+        language: sql<string>`COALESCE(${schema.songs.language}, 'unknown')`,
+        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+      })
+      .from(schema.songs)
+      .where(nicheFilter)
+      .groupBy(schema.songs.language)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    // 6. By Source
+    const bySource = await db
+      .select({
+        source: schema.songs.source,
+        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+      })
+      .from(schema.songs)
+      .where(nicheFilter)
+      .groupBy(schema.songs.source)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    const stats = {
+      total: Number(totals[0]?.total ?? 0),
+      totalDuration: Number(totals[0]?.totalDuration ?? 0),
+      byGenre: byGenre.map((r) => ({ genre: r.genre || 'Unknown', count: Number(r.count) })),
+      byDecade: byDecade.map((r) => ({ decade: r.decade, count: Number(r.count) })),
+      byArtist: byArtist.map((r) => ({ artist: r.artist, count: Number(r.count) })),
+      byLanguage: byLanguage.map((r) => ({ language: r.language, count: Number(r.count) })),
+      bySource: bySource.map((r) => ({ source: r.source, count: Number(r.count) })),
+    };
+
+    songLogger.debug('Song statistics computed', { total: stats.total });
+    return stats;
+  }
 }

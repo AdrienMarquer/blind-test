@@ -4,6 +4,7 @@
 	import type { Room } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import { api } from '$lib/api';
+	import VolumeControl from './VolumeControl.svelte';
 
 	// Props
 	const { room, socket }: { room: Room; socket: RoomSocket } = $props();
@@ -504,6 +505,11 @@
 
 	<!-- Audio player (hidden) -->
 	<audio bind:this={audioElement} style="display: none;"></audio>
+
+	<!-- Volume control (floating) -->
+	{#if !showLoadingScreen}
+		<VolumeControl {audioElement} />
+	{/if}
 </div>
 
 <style>

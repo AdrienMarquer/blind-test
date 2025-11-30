@@ -6,6 +6,7 @@
 	import BuzzAndChoiceUI from './game/BuzzAndChoiceUI.svelte';
 	import FastBuzzUI from './game/FastBuzzUI.svelte';
 	import TextInputUI from './game/TextInputUI.svelte';
+	import VolumeControl from './VolumeControl.svelte';
 
 	// ========================================================================
 	// State Machine Type Definition
@@ -49,6 +50,12 @@
 	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
 	let countdownInterval: number | null = null;
 
+	// Smooth timer animation
+	let timerAnimationKey = $state(0); // Key to restart CSS animation
+	let timerStartTimestamp = $state(0);
+	let timerRafId: number | null = null;
+	let smoothProgress = $state(100); // 0-100 percentage
+
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
 	const answerTimeRemaining = $derived(socket.answerTimeRemaining);
@@ -59,6 +66,36 @@
 		}
 		return label === 'title' ? 'titre' : 'artiste';
 	}
+
+	// Smooth timer animation functions
+	function startSmoothTimer(durationSeconds: number) {
+		stopSmoothTimer();
+		timerStartTimestamp = performance.now();
+		smoothProgress = 100;
+		timerAnimationKey++; // Trigger re-render
+
+		function tick() {
+			const elapsed = (performance.now() - timerStartTimestamp) / 1000;
+			const remaining = Math.max(0, durationSeconds - elapsed);
+			smoothProgress = (remaining / durationSeconds) * 100;
+
+			if (remaining > 0 && gameState.status === 'ready_to_buzz') {
+				timerRafId = requestAnimationFrame(tick);
+			}
+		}
+
+		timerRafId = requestAnimationFrame(tick);
+	}
+
+	function stopSmoothTimer() {
+		if (timerRafId !== null) {
+			cancelAnimationFrame(timerRafId);
+			timerRafId = null;
+		}
+	}
+
+	// Derive smooth time display from progress
+	const smoothTimeRemaining = $derived(Math.ceil((smoothProgress / 100) * maxSongDuration));
 
 	// Player score
 	let score = $state(player.score);
@@ -202,6 +239,9 @@
 			// Update song info
 			currentSongIndex = event.songIndex;
 			maxSongDuration = event.duration;
+
+			// Start smooth timer animation
+			startSmoothTimer(event.duration);
 
 			console.log('[Player] ✅ State reset complete - Ready to buzz');
 
@@ -521,6 +561,9 @@
 			feedbackTimeout = null;
 		}
 
+		// Stop smooth timer animation
+		stopSmoothTimer();
+
 		// Stop and clean up audio element
 		if (audioElement) {
 			audioElement.pause();
@@ -577,9 +620,9 @@
 		<div class="game-status">
 			<p class="status-text">🎵 Écoute et buzze dès que tu as la réponse !</p>
 			<div class="timer-bar">
-				<div class="timer-fill" style="width: {(timeRemaining / maxSongDuration) * 100}%"></div>
+				<div class="timer-fill" style="width: {smoothProgress}%"></div>
 			</div>
-			<div class="timer-text">{timeRemaining}s</div>
+			<div class="timer-text">{smoothTimeRemaining}s</div>
 		</div>
 		<button class="buzz-button" onclick={handleBuzz}>
 			<span class="buzz-text">BUZZ&nbsp;!</span>
@@ -652,6 +695,11 @@
 
 	<!-- Audio player (hidden, for player-side audio playback) -->
 	<audio bind:this={audioElement} style="display: none;"></audio>
+
+	<!-- Volume control (floating) -->
+	{#if gameState.status !== 'loading'}
+		<VolumeControl {audioElement} />
+	{/if}
 </div>
 
 <style>

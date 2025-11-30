@@ -68,6 +68,23 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     })
   })
 
+  // Get song statistics for charts
+  .get('/stats', async ({ query }) => {
+    const includeNiche = query.includeNiche === 'true';
+    apiLogger.debug('Fetching song statistics', { includeNiche });
+    try {
+      const stats = await songRepository.getStats(includeNiche);
+      return stats;
+    } catch (err) {
+      apiLogger.error('Failed to fetch song statistics', err);
+      return { error: 'Failed to fetch statistics' };
+    }
+  }, {
+    query: t.Object({
+      includeNiche: t.Optional(t.String()),
+    }),
+  })
+
   // Search songs (must come before /:songId to avoid conflict)
   .get('/search/:query', async ({ params: { query } }) => {
     apiLogger.debug('Searching songs', { query });

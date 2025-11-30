@@ -20,8 +20,9 @@
     "vite": "^5.0.0"
   },
   "dependencies": {
+    "@blind-test/shared": "workspace:*",
     "@elysiajs/eden": "^1.0.0",
-    "@blind-test/shared": "workspace:*"
+    "chart.js": "^4.5.1"
   },
   "type": "module"
 }

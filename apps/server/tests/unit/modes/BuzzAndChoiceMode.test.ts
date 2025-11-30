@@ -140,6 +140,76 @@ describe('BuzzAndChoiceMode - Choice Generation', () => {
     expect(titleTexts).toContain(fewSongs[0].title)
     expect(artistTexts).toContain(fewSongs[0].artist)
   })
+
+  test('prioritizes artist choices by genre frequency and closest year', async () => {
+    const electroSongs = [
+      createMockSong({ id: 'target', title: 'Digital Love', artist: 'Daft Punk', year: 2001, genre: 'electro' }),
+      createMockSong({ id: 'phoenix-1', title: '1901', artist: 'Phoenix', year: 2009, genre: 'electro' }),
+      createMockSong({ id: 'phoenix-2', title: 'Lisztomania', artist: 'Phoenix', year: 2010, genre: 'electro' }),
+      createMockSong({ id: 'justice-1', title: 'D.A.N.C.E.', artist: 'Justice', year: 2007, genre: 'electro' }),
+      createMockSong({ id: 'justice-2', title: 'Audio, Video, Disco', artist: 'Justice', year: 2011, genre: 'electro' }),
+      createMockSong({ id: 'air-1', title: 'Sexy Boy', artist: 'Air', year: 1998, genre: 'electro' }),
+      createMockSong({ id: 'air-2', title: 'All I Need', artist: 'Air', year: 1998, genre: 'electro' }),
+      createMockSong({ id: 'metallica', title: 'One', artist: 'Metallica', year: 1988, genre: 'metal' }),
+    ]
+
+    const repo = new MockSongRepository(electroSongs)
+    const answerService = new AnswerGenerationService(repo)
+    const customMode = new BuzzAndChoiceMode(answerService)
+
+    const testSong: RoundSong = {
+      songId: electroSongs[0].id,
+      song: electroSongs[0],
+      index: 0,
+      status: 'playing',
+      lockedOutPlayerIds: [],
+      answers: [],
+      params: customMode.defaultParams,
+    }
+
+    await customMode.startSong(testSong, electroSongs, 'music')
+
+    const artistChoices = testSong.artistQuestion!.choices
+    expect(artistChoices.length).toBe(4)
+
+    const wrongArtists = artistChoices.filter(choice => !choice.correct).map(choice => choice.displayText)
+    expect(new Set(wrongArtists)).toEqual(new Set(['Phoenix', 'Justice', 'Air']))
+  })
+
+  test('deduplicates artist names even when library has repeated artists', async () => {
+    const duplicateArtists = [
+      createMockSong({ id: 'target', title: 'Voyage', artist: 'Daft Punk', year: 2001, genre: 'electro' }),
+      createMockSong({ id: 'phoenix-1', title: '1901', artist: 'Phoenix', year: 2009, genre: 'electro' }),
+      createMockSong({ id: 'phoenix-2', title: 'Lisztomania', artist: 'Phoenix', year: 2014, genre: 'electro' }),
+      createMockSong({ id: 'air-1', title: 'Sexy Boy', artist: 'Air', year: 1998, genre: 'electro' }),
+      createMockSong({ id: 'air-2', title: 'Cherry Blossom Girl', artist: 'Air', year: 2004, genre: 'electro' }),
+      createMockSong({ id: 'justice', title: 'D.A.N.C.E.', artist: 'Justice', year: 2007, genre: 'electro' }),
+    ]
+
+    const repo = new MockSongRepository(duplicateArtists)
+    const answerService = new AnswerGenerationService(repo)
+    const customMode = new BuzzAndChoiceMode(answerService)
+
+    const testSong: RoundSong = {
+      songId: duplicateArtists[0].id,
+      song: duplicateArtists[0],
+      index: 0,
+      status: 'playing',
+      lockedOutPlayerIds: [],
+      answers: [],
+      params: customMode.defaultParams,
+    }
+
+    await customMode.startSong(testSong, duplicateArtists, 'music')
+
+    const artists = testSong.artistQuestion!.choices.map(choice => choice.displayText)
+    expect(new Set(artists).size).toBe(4)
+
+    const wrongArtists = artists.filter(name => name !== 'Daft Punk')
+    expect(wrongArtists.filter(name => name === 'Phoenix').length).toBe(1)
+    expect(wrongArtists.filter(name => name === 'Air').length).toBe(1)
+    expect(wrongArtists.filter(name => name === 'Justice').length).toBe(1)
+  })
 })
 
 describe('BuzzAndChoiceMode - Buzzing', () => {
@@ -283,6 +353,19 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
   })
 
   test('validates correct title choice', async () => {
+    song.answers.push({
+      id: 'artist-answer',
+      playerId: 'player-1',
+      roundId: 'round-1',
+      songId: testSong.id,
+      type: 'artist',
+      value: 'Queen',
+      submittedAt: new Date(),
+      timeToAnswer: 800,
+      isCorrect: true,
+      pointsAwarded: 1,
+    })
+
     const answer: Answer = {
       id: 'answer-1',
       playerId: 'player-1',
@@ -300,7 +383,7 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
 
     expect(result.isCorrect).toBe(true)
     expect(result.pointsAwarded).toBe(1)
-    expect(result.shouldShowTitleChoices).toBe(true)
+    expect(result.shouldShowTitleChoices).toBe(false)
     expect(result.lockOutPlayer).toBe(false)
   })
 
@@ -326,21 +409,21 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
     expect(result.lockOutPlayer).toBe(true)
   })
 
-  test('shows artist choices after correct title', async () => {
-    const titleAnswer: Answer = {
+  test('shows title choices after correct artist', async () => {
+    const artistAnswer: Answer = {
       id: 'answer-1',
       playerId: 'player-1',
       roundId: 'round-1',
       songId: testSong.id,
-      type: 'title',
-      value: 'Bohemian Rhapsody',
+      type: 'artist',
+      value: 'Queen',
       submittedAt: new Date(),
       timeToAnswer: 1000,
       isCorrect: false,
       pointsAwarded: 0,
     }
 
-    const result = await mode.handleAnswer(titleAnswer, song)
+    const result = await mode.handleAnswer(artistAnswer, song)
 
     expect(result.shouldShowTitleChoices).toBe(true)
   })
@@ -363,7 +446,7 @@ describe('BuzzAndChoiceMode - Answer Validation', () => {
 
     expect(result.isCorrect).toBe(true)
     expect(result.pointsAwarded).toBe(1)
-    expect(result.shouldShowTitleChoices).toBe(false)
+    expect(result.shouldShowTitleChoices).toBe(true)
     expect(result.lockOutPlayer).toBe(false)
   })
 
@@ -430,22 +513,6 @@ describe('BuzzAndChoiceMode - Scoring', () => {
   })
 
   test('awards points correctly for title and artist', async () => {
-    const titleAnswer: Answer = {
-      id: 'answer-1',
-      playerId: 'player-1',
-      roundId: 'round-1',
-      songId: song.songId,
-      type: 'title',
-      value: 'Test Song',
-      submittedAt: new Date(),
-      timeToAnswer: 1000,
-      isCorrect: false,
-      pointsAwarded: 0,
-    }
-
-    const titleResult = await mode.handleAnswer(titleAnswer, song)
-    expect(titleResult.pointsAwarded).toBe(1)
-
     const artistAnswer: Answer = {
       id: 'answer-2',
       playerId: 'player-1',
@@ -461,6 +528,28 @@ describe('BuzzAndChoiceMode - Scoring', () => {
 
     const artistResult = await mode.handleAnswer(artistAnswer, song)
     expect(artistResult.pointsAwarded).toBe(1)
+
+    song.answers.push({
+      ...artistAnswer,
+      isCorrect: artistResult.isCorrect,
+      pointsAwarded: artistResult.pointsAwarded,
+    })
+
+    const titleAnswer: Answer = {
+      id: 'answer-1',
+      playerId: 'player-1',
+      roundId: 'round-1',
+      songId: song.songId,
+      type: 'title',
+      value: 'Test Song',
+      submittedAt: new Date(),
+      timeToAnswer: 1000,
+      isCorrect: false,
+      pointsAwarded: 0,
+    }
+
+    const titleResult = await mode.handleAnswer(titleAnswer, song)
+    expect(titleResult.pointsAwarded).toBe(1)
   })
 
   test('applies penalty when enabled', async () => {
@@ -472,8 +561,8 @@ describe('BuzzAndChoiceMode - Scoring', () => {
       playerId: 'player-1',
       roundId: 'round-1',
       songId: song.songId,
-      type: 'title',
-      value: 'Wrong Title',
+      type: 'artist',
+      value: 'Wrong Artist',
       submittedAt: new Date(),
       timeToAnswer: 1000,
       isCorrect: false,
@@ -569,6 +658,7 @@ describe('BuzzAndChoiceMode - Song Ending', () => {
   })
 
   test('ends song when both title and artist correct', () => {
+    song.activePlayerId = 'player-1'
     song.answers = [
       {
         id: 'answer-1',
@@ -601,6 +691,7 @@ describe('BuzzAndChoiceMode - Song Ending', () => {
   })
 
   test('continues song with only title correct', () => {
+    song.activePlayerId = 'player-1'
     song.answers = [
       {
         id: 'answer-1',
