@@ -207,14 +207,8 @@
 						audioElement.play().catch(err => {
 							console.error('[Master Audio] Failed to play:', err);
 						});
-
-						// Stop after duration seconds
-						setTimeout(() => {
-							if (audioElement) {
-								audioElement.pause();
-								console.log(`[Master Audio] Stopped after ${event.duration}s`);
-							}
-						}, event.duration * 1000);
+						// Audio stop is now controlled by server via song:ended event
+						// This ensures audio continues playing during answer phase (artist → title questions)
 					}
 				};
 			} else {
@@ -313,6 +307,12 @@
 				correctArtist: event.correctArtist,
 				winners: event.winners
 			});
+
+			// Stop audio playback (server controls when song ends)
+			if (audioElement && !audioElement.paused) {
+				audioElement.pause();
+				console.log('[Master Audio] Stopped by server song:ended event');
+			}
 
 			// Clear any pending validation
 			pendingValidation = null;
