@@ -39,5 +39,24 @@ export const getWsUrl = (): string => {
   return 'ws://localhost:3007';
 };
 
-// Create the type-safe API client
+/**
+ * Get admin auth headers from localStorage
+ */
+export const getAdminHeaders = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  const password = localStorage.getItem('admin_auth');
+  return password ? { 'X-Admin-Password': password } : {};
+};
+
+// Create the type-safe API client (unauthenticated, for public endpoints)
 export const api = treaty<App>(getApiUrl());
+
+/**
+ * Create an authenticated API client with admin headers
+ * Use this for admin-protected endpoints (PATCH, DELETE, POST on songs)
+ */
+export const getAuthenticatedApi = () => {
+  return treaty<App>(getApiUrl(), {
+    headers: getAdminHeaders()
+  });
+};

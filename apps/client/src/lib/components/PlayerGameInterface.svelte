@@ -8,6 +8,22 @@
 	import TextInputUI from './game/TextInputUI.svelte';
 	import VolumeControl from './VolumeControl.svelte';
 
+	// Get players from socket store for leaderboard display (reactive subscription)
+	let allPlayers = $state<Player[]>([]);
+	$effect(() => {
+		const unsubscribe = socket.players.subscribe((players) => {
+			allPlayers = players;
+		});
+		return unsubscribe;
+	});
+
+	// Sorted leaderboard (all players, sorted by score)
+	let leaderboard = $derived(
+		allPlayers
+			.filter((p) => p.role === 'player')
+			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+	);
+
 	// ========================================================================
 	// State Machine Type Definition
 	// ========================================================================
@@ -112,7 +128,7 @@
 	let score = $state(player.score);
 
 	// Feedback messages
-	let feedbackMessage = $state<{ type: 'success' | 'error' | 'info'; text: string; winnerText?: string } | null>(null);
+	let feedbackMessage = $state<{ type: 'success' | 'error' | 'info' | 'warning'; text: string; winnerText?: string } | null>(null);
 	let feedbackTimeout: number | null = null; // NOT a $state - just a regular variable for timer ID
 
 	// Audio player (for when audio plays on player devices)
@@ -423,6 +439,12 @@
 						type: 'info',
 						text: `🏆 ${event.playerName} a trouvé ${answerTypeText} !`
 					};
+				} else {
+					// Another player answered wrong
+					feedbackMessage = {
+						type: 'warning',
+						text: `❌ ${event.playerName} s'est trompé !`
+					};
 				}
 
 				// If someone else answered wrong and was locked out, allow others to buzz again
@@ -606,6 +628,21 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- Mini leaderboard during loading -->
+			{#if leaderboard.length > 0}
+				<div class="loading-leaderboard">
+					<div class="loading-leaderboard-list">
+						{#each leaderboard as p, index}
+							<div class="loading-leaderboard-item" class:is-me={p.id === player.id}>
+								<span class="leaderboard-rank">{index + 1}</span>
+								<span class="leaderboard-name">{p.name}</span>
+								<span class="leaderboard-score">{p.score ?? 0}</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 
@@ -756,6 +793,7 @@
 	.feedback-message.success { background: rgba(248,192,39,0.2); color: var(--aq-color-secondary); }
 	.feedback-message.error { background: rgba(239,76,131,0.15); color: var(--aq-color-primary); }
 	.feedback-message.info { background: rgba(18,43,59,0.08); color: var(--aq-color-deep); }
+	.feedback-message.warning { background: rgba(255,140,0,0.15); color: #d35400; }
 
 	.answer-text {
 		font-size: 0.95rem;
@@ -810,10 +848,14 @@
 		background: linear-gradient(135deg, #ef4c83, #f8c027);
 		border-radius: 0;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		gap: 2rem;
 		z-index: 100;
 		animation: fadeIn 0.3s ease-in-out;
+		padding: 1rem;
+		overflow-y: auto;
 	}
 
 	@keyframes fadeIn {
@@ -896,6 +938,70 @@
 
 	.info-badge.year {
 		border: 2px solid rgba(255, 255, 255, 0.3);
+	}
+
+	/* Loading Leaderboard */
+	.loading-leaderboard {
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 16px;
+		padding: 1rem;
+		width: 100%;
+		max-width: 320px;
+		backdrop-filter: blur(8px);
+	}
+
+	.loading-leaderboard-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.loading-leaderboard-item {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 10px;
+	}
+
+	.loading-leaderboard-item.is-me {
+		background: rgba(255, 255, 255, 0.25);
+		border: 1px solid rgba(255, 255, 255, 0.4);
+	}
+
+	.loading-leaderboard-item.is-me .leaderboard-name {
+		font-weight: 700;
+	}
+
+	.leaderboard-rank {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.2);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: #fff;
+		flex-shrink: 0;
+	}
+
+	.leaderboard-name {
+		flex: 1;
+		font-size: 0.95rem;
+		font-weight: 500;
+		color: #fff;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.leaderboard-score {
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #fff;
 	}
 
 </style>

@@ -1,8 +1,47 @@
-import youtubedl from 'youtube-dl-exec';
+import youtubedlDefault from 'youtube-dl-exec';
 import YoutubeSearch from 'youtube-search-api';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { execSync } from 'child_process';
+
+// Use system yt-dlp binary instead of bundled one (bundled binary doesn't work with Bun)
+// Try to find yt-dlp in common locations or use 'which' to locate it
+function findYtDlpBinary(): string {
+	// Check environment variable first
+	if (process.env.YTDLP_PATH) {
+		return process.env.YTDLP_PATH;
+	}
+
+	// Common paths to check
+	const commonPaths = [
+		'/opt/homebrew/bin/yt-dlp', // macOS (Homebrew ARM)
+		'/usr/local/bin/yt-dlp', // macOS (Homebrew Intel) / Linux
+		'/usr/bin/yt-dlp', // Linux system install
+	];
+
+	for (const p of commonPaths) {
+		try {
+			execSync(`test -x "${p}"`, { stdio: 'ignore' });
+			return p;
+		} catch {
+			// Path doesn't exist or isn't executable
+		}
+	}
+
+	// Fallback: use 'which' to find it in PATH
+	try {
+		const result = execSync('which yt-dlp', { encoding: 'utf-8' }).trim();
+		if (result) return result;
+	} catch {
+		// which failed
+	}
+
+	// Last resort: hope it's in PATH
+	return 'yt-dlp';
+}
+
+const youtubedl = youtubedlDefault.create(findYtDlpBinary());
 
 export interface YouTubeVideo {
 	videoId: string;

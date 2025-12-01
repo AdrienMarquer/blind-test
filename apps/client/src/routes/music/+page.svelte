@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api, getApiUrl } from '$lib/api';
+	import { api, getApiUrl, getAdminHeaders, getAuthenticatedApi } from '$lib/api';
+	// Note: getAdminHeaders is used for file upload (FormData) which Eden Treaty doesn't handle well
 	import type { Song } from '@blind-test/shared';
 	import { SONG_CONFIG, CANONICAL_GENRES } from '@blind-test/shared';
 	import AudioClipSelector from '$lib/components/AudioClipSelector.svelte';
@@ -15,11 +16,6 @@
 	import SongStatsCharts from '$lib/components/SongStatsCharts.svelte';
 	import AdminGate from '$lib/components/AdminGate.svelte';
 
-	// Helper to get admin auth headers for API calls
-	function getAdminHeaders(): HeadersInit {
-		const password = localStorage.getItem('admin_auth');
-		return password ? { 'X-Admin-Password': password } : {};
-	}
 
 	let songs = $state<Song[]>([]);
 	let loading = $state(true);
@@ -27,7 +23,7 @@
 	let uploading = $state(false);
 	let searchQuery = $state('');
 	let selectedGenre = $state('');
-	let metadataFilter = $state<'all' | 'incomplete-metadata'>('all');
+	let metadataFilter = $state<'all' | 'incomplete-metadata' | 'missing-file'>('all');
 	let selectedFile = $state<File | null>(null);
 	let showClipSelector = $state(false);
 	let clipStart = $state<number>(SONG_CONFIG.DEFAULT_CLIP_START);
@@ -103,13 +99,12 @@
 			searchingSpotify = true;
 			error = null;
 
-			const response = await fetch(`${getApiUrl()}/api/songs/search-spotify?q=${encodeURIComponent(spotifyQuery)}`);
-			const data = await response.json();
+			const response = await (api.api.songs as any)['search-spotify'].get({ query: { q: spotifyQuery } });
 
-			if (response.ok) {
-				spotifyResults = data.results || [];
+			if (response.error) {
+				error = response.error.value?.error || 'Recherche Spotify impossible';
 			} else {
-				error = data.error || 'Recherche Spotify impossible';
+				spotifyResults = response.data.results || [];
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Recherche Spotify impossible';
@@ -128,17 +123,14 @@
 			error = null;
 
 			// Step 1: Download full song to temp file (with optional force flag)
-			const response = await fetch(`${getApiUrl()}/api/songs/spotify-download-temp`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
-				body: JSON.stringify({ spotifyId, force })
-			});
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)['spotify-download-temp'].post({ spotifyId, force });
 
-			const data = await response.json();
-
-			if (!response.ok) {
-				throw new Error(data.error || 'Téléchargement impossible');
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Téléchargement impossible');
 			}
+
+			const data = response.data;
 
 			// Check if duplicates were found
 			if (data.duplicates && data.duplicates.length > 0) {
@@ -152,13 +144,13 @@
 				return;
 			}
 
-			// Step 2: Fetch the temp file as a blob
-			const audioResponse = await fetch(`${getApiUrl()}/api/songs/${data.tempFileId}/stream`);
-			if (!audioResponse.ok) {
+			// Step 2: Fetch the temp file as a blob (keep as fetch for blob handling)
+			const audioResponse = await (api.api.songs as any)[data.tempFileId].stream.get();
+			if (audioResponse.error) {
 				throw new Error('Impossible de charger le fichier audio');
 			}
 
-			const audioBlob = await audioResponse.blob();
+			const audioBlob = await audioResponse.response.blob();
 			const audioFile = new File([audioBlob], data.spotify.title + '.mp3', { type: 'audio/mpeg' });
 
 			// Step 3: Show clip selector
@@ -220,31 +212,26 @@
 			error = null;
 
 			// Step 4: Finalize with selected clip
-			const response = await fetch(`${getApiUrl()}/api/songs/spotify-finalize`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
-				body: JSON.stringify({
-					tempFileId: spotifyTempFileId,
-					clipStart: start,
-					clipDuration: duration,
-					metadata: spotifyTempMetadata
-				})
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)['spotify-finalize'].post({
+				tempFileId: spotifyTempFileId,
+				clipStart: start,
+				clipDuration: duration,
+				metadata: spotifyTempMetadata
 			});
 
-			const data = await response.json();
-
-			if (response.ok) {
-				// Clear Spotify search results and reload library
-				spotifyResults = [];
-				spotifyQuery = '';
-				showSpotifyClipSelector = false;
-				spotifyTempFile = null;
-				spotifyTempFileId = null;
-				spotifyTempMetadata = null;
-				await loadSongs();
-			} else {
-				throw new Error(data.error || 'Finalisation impossible');
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Finalisation impossible');
 			}
+
+			// Clear Spotify search results and reload library
+			spotifyResults = [];
+			spotifyQuery = '';
+			showSpotifyClipSelector = false;
+			spotifyTempFile = null;
+			spotifyTempFileId = null;
+			spotifyTempMetadata = null;
+			await loadSongs();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Finalisation impossible';
 			console.error('Spotify finalize error:', err);
@@ -270,26 +257,23 @@
 			error = null;
 
 			// Send raw video data to backend - enrichment is handled automatically
-			const response = await fetch(`${getApiUrl()}/api/songs/youtube-import-batch`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
-				body: JSON.stringify({
-					videos: videos.map(v => ({
-						videoId: v.videoId,
-						title: v.title,
-						clipStart: v.clipStart,
-						clipDuration: v.clipDuration,
-						force: v.force,
-						artist: v.artist || v.uploader
-					}))
-				})
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)['youtube-import-batch'].post({
+				videos: videos.map(v => ({
+					videoId: v.videoId,
+					title: v.title,
+					clipStart: v.clipStart,
+					clipDuration: v.clipDuration,
+					force: v.force,
+					artist: v.artist || v.uploader
+				}))
 			});
 
-			const data = await response.json();
-
-			if (!response.ok) {
-				throw new Error(data.error || 'Import failed');
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Import failed');
 			}
+
+			const data = response.data;
 
 			// Close modal
 			showYouTubeModal = false;
@@ -386,6 +370,7 @@
 
 			const response = await fetch(url, {
 				method: 'POST',
+				headers: getAdminHeaders(),
 				body: formData
 			});
 
@@ -424,7 +409,13 @@
 	async function updateSong(songId: string, updates: Partial<Song>) {
 		try {
 			error = null;
-			await songsApi[songId].patch(updates);
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)[songId].patch(updates);
+
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Mise à jour impossible');
+			}
+
 			await loadSongs();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Mise à jour impossible';
@@ -437,7 +428,13 @@
 
 		try {
 			error = null;
-			await songsApi[songId].delete();
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)[songId].delete();
+
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Suppression impossible');
+			}
+
 			await loadSongs();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Suppression impossible';
@@ -591,6 +588,7 @@
 		<select class="metadata-filter" bind:value={metadataFilter}>
 			<option value="all">Toutes les musiques</option>
 			<option value="incomplete-metadata">🔍 Métadonnées incomplètes</option>
+			<option value="missing-file">📁 Fichier MP3 manquant</option>
 		</select>
 
 		<Button variant="primary" onclick={loadSongs} disabled={loading}>

@@ -102,6 +102,9 @@ export function handleMessage(
       case 'game:resume':
         handleGameResume(ws, roomId);
         break;
+      case 'game:restart':
+        handleGameRestart(ws, roomId);
+        break;
       default:
         // Type exhaustiveness check - TypeScript will error if we miss a case
         const _exhaustive: never = parsed;
@@ -616,6 +619,78 @@ async function handleGameResume(
     broadcastToRoom(roomId, {
       type: 'game:resumed',
       data: { timestamp: Date.now() }
+    });
+  }
+}
+
+async function handleGameRestart(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  roomId: string
+) {
+  // Verify master authorization
+  if (!await isMaster(ws, roomId)) {
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'Unauthorized: Only the room master can restart the game' }
+    });
+    return;
+  }
+
+  wsLogger.info('Game restart requested', { roomId });
+
+  try {
+    // Clear any active timers
+    timerManager.clearAllTimers(roomId);
+
+    // Remove game session from state manager
+    gameStateManager.removeSession(roomId);
+
+    // Reset room status to lobby
+    await roomRepository.update(roomId, { status: 'lobby' });
+
+    // Reset all player scores
+    const players = await playerRepository.findByRoom(roomId);
+    for (const player of players) {
+      if (player.role === 'player') {
+        await playerRepository.update(player.id, {
+          score: 0,
+          roundScore: 0,
+          isLockedOut: false
+        });
+      }
+    }
+
+    // Get updated room and players
+    const updatedRoom = await roomRepository.findById(roomId);
+    const updatedPlayers = await playerRepository.findByRoom(roomId);
+
+    if (!updatedRoom) {
+      wsLogger.error('Room not found after restart', { roomId });
+      sendMessage(ws, {
+        type: 'error',
+        data: { message: 'Room not found after restart' }
+      });
+      return;
+    }
+
+    wsLogger.info('Game restarted - returning to lobby', {
+      roomId,
+      playerCount: updatedPlayers.length
+    });
+
+    // Broadcast to all clients to return to lobby
+    broadcastToRoom(roomId, {
+      type: 'game:restarted',
+      data: {
+        room: updatedRoom,
+        players: updatedPlayers
+      }
+    });
+  } catch (error) {
+    wsLogger.error('Failed to restart game', error, { roomId });
+    sendMessage(ws, {
+      type: 'error',
+      data: { message: 'Failed to restart game' }
     });
   }
 }

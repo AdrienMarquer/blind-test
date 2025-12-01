@@ -11,7 +11,7 @@
  */
 
 import { $ } from 'bun';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, writeFileSync, statSync, unlinkSync } from 'fs';
 
 // Configuration
 const VPS_HOST = process.env.VPS_HOST || 'dani@51.178.37.88';
@@ -185,26 +185,39 @@ ${colors.bold}${colors.yellow}========================================
         } else {
           log(`  ${newFiles.length} new files to sync (${existingFiles.size} already exist)`, colors.gray);
 
-          // Use rsync to VPS temp directory (only new files)
-          log('  Rsync new files to VPS...', colors.gray);
-          await $`rsync -avz --progress ${LOCAL_UPLOADS_DIR}/ ${VPS_HOST}:/tmp/blindtest-uploads/`;
+          // Create tar archive of only new files
+          log('  Creating tar archive of new files...', colors.gray);
+          const tarFile = '/tmp/blindtest-uploads.tar.gz';
 
-          // Copy only new files from VPS to pod
-          log('  Copying new files to pod...', colors.gray);
+          // Write file list to temp file for tar
+          const fileListPath = '/tmp/blindtest-filelist.txt';
+          writeFileSync(fileListPath, newFiles.join('\n'));
 
-          const batchSize = 20;
-          for (let i = 0; i < newFiles.length; i += batchSize) {
-            const batch = newFiles.slice(i, i + batchSize);
-            const progress = Math.min(i + batchSize, newFiles.length);
-            log(`    Progress: ${progress}/${newFiles.length} new files...`, colors.gray);
+          // Create tar with only new files
+          await $`tar -czf ${tarFile} -C ${LOCAL_UPLOADS_DIR} -T ${fileListPath}`;
+          unlinkSync(fileListPath);
 
-            for (const file of batch) {
-              await sshCmd(`kubectl cp /tmp/blindtest-uploads/${file} ${K8S_NAMESPACE}/${podName}:${REMOTE_UPLOADS_PATH}/${file}`);
-            }
-          }
+          // Get tar size for progress info
+          const tarStats = statSync(tarFile);
+          const tarSizeMB = (tarStats.size / (1024 * 1024)).toFixed(2);
+          log(`    Archive created: ${tarSizeMB} MB (${newFiles.length} files)`, colors.gray);
 
-          // Cleanup VPS temp
-          await sshCmd('rm -rf /tmp/blindtest-uploads');
+          // Transfer tar to VPS (with progress)
+          log('  Transferring archive to VPS...', colors.gray);
+          await $`rsync -avz --progress ${tarFile} ${VPS_HOST}:/tmp/blindtest-uploads.tar.gz`.quiet(false);
+
+          // Copy tar to pod and extract
+          log('  Copying archive to pod...', colors.gray);
+          await sshCmd(`kubectl cp /tmp/blindtest-uploads.tar.gz ${K8S_NAMESPACE}/${podName}:/tmp/blindtest-uploads.tar.gz`);
+
+          log('  Extracting archive in pod...', colors.gray);
+          await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- tar -xzf /tmp/blindtest-uploads.tar.gz -C ${REMOTE_UPLOADS_PATH}/`);
+
+          // Cleanup
+          log('  Cleaning up...', colors.gray);
+          await $`rm ${tarFile}`;
+          await sshCmd('rm /tmp/blindtest-uploads.tar.gz');
+          await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm -f /tmp/blindtest-uploads.tar.gz`);
 
           log(`  ${colors.green}${newFiles.length} new files synced!${colors.reset}`);
         }

@@ -7,6 +7,8 @@ import type { Song, Repository } from '@blind-test/shared';
 import { generateId, shuffle, SONG_CONFIG } from '@blind-test/shared';
 import { db, schema } from '../db';
 import { logger } from '../utils/logger';
+import { existsSync } from 'fs';
+import path from 'path';
 
 const songLogger = logger.child({ module: 'SongRepository' });
 
@@ -182,6 +184,31 @@ export class SongRepository implements Repository<Song> {
 
     songLogger.debug('Found songs with incomplete metadata', { count: results.length });
     return results.map(s => this.toSong(s));
+  }
+
+  /**
+   * Find songs where the MP3 file is missing from disk
+   * Useful for identifying songs that need re-downloading
+   */
+  async findWithMissingFile(): Promise<Song[]> {
+    const allSongs = await this.findAll();
+    const uploadsDir = path.resolve(process.cwd(), 'uploads');
+
+    const songsWithMissingFiles = allSongs.filter(song => {
+      // Resolve the file path - could be absolute or relative
+      const filePath = path.isAbsolute(song.filePath)
+        ? song.filePath
+        : path.resolve(process.cwd(), song.filePath);
+
+      // Also check if file is in uploads directory by filename
+      const uploadsPath = path.join(uploadsDir, song.fileName);
+
+      const exists = existsSync(filePath) || existsSync(uploadsPath);
+      return !exists;
+    });
+
+    songLogger.debug('Found songs with missing files', { count: songsWithMissingFiles.length });
+    return songsWithMissingFiles;
   }
 
   /**

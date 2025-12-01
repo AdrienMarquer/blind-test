@@ -4,15 +4,9 @@
 	 * Allows importing songs from YouTube videos or playlists
 	 */
 	import { SONG_CONFIG } from '@blind-test/shared';
-	import { getApiUrl } from '$lib/api';
+	import { getAuthenticatedApi } from '$lib/api';
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
-
-	// Helper to get admin auth headers for API calls
-	function getAdminHeaders(): HeadersInit {
-		const password = localStorage.getItem('admin_auth');
-		return password ? { 'X-Admin-Password': password } : {};
-	}
 
 	interface Props {
 		onImport: (videos: Array<{ videoId: string; title: string; clipStart?: number; clipDuration?: number; artist?: string; uploader?: string; durationInSeconds?: number; force?: boolean }>) => void;
@@ -43,25 +37,20 @@
 			loading = true;
 			error = null;
 
-			const response = await fetch(`${getApiUrl()}/api/songs/youtube-playlist-info`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
-				body: JSON.stringify({ url: youtubeUrl })
-			});
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)['youtube-playlist-info'].post({ url: youtubeUrl });
 
-			const data = await response.json();
-
-			if (!response.ok) {
-				throw new Error(data.error || 'Impossible de récupérer les informations');
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Impossible de récupérer les informations');
 			}
 
-			playlistInfo = data;
+			playlistInfo = response.data;
 
 			// Check for duplicates
-			await checkForDuplicates(data.videos);
+			await checkForDuplicates(playlistInfo.videos);
 
 			// Select all non-duplicate videos by default (or all if not excluding duplicates)
-			const videoIds = data.videos.map((v: any) => v.videoId);
+			const videoIds = playlistInfo.videos.map((v: any) => v.videoId);
 			const nonDuplicateIds = videoIds.filter((id: string) => {
 				const duplicate = duplicateResults.get(id);
 				return !duplicate || !duplicate.isDuplicate;
@@ -80,29 +69,24 @@
 		try {
 			checkingDuplicates = true;
 
-			const response = await fetch(`${getApiUrl()}/api/songs/youtube-check-duplicates`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
-				body: JSON.stringify({
-					videos: videos.map(v => ({
-						videoId: v.videoId,
-						title: v.title,
-						uploader: v.uploader,
-						durationInSeconds: v.durationSeconds
-					}))
-				})
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)['youtube-check-duplicates'].post({
+				videos: videos.map(v => ({
+					videoId: v.videoId,
+					title: v.title,
+					uploader: v.uploader,
+					durationInSeconds: v.durationSeconds
+				}))
 			});
 
-			const data = await response.json();
-
-			if (!response.ok) {
-				console.error('Failed to check duplicates:', data.error);
+			if (response.error) {
+				console.error('Failed to check duplicates:', response.error.value?.error);
 				return;
 			}
 
 			// Store duplicate results in a Map for easy lookup
 			const resultsMap = new Map();
-			data.results.forEach((result: any) => {
+			response.data.results.forEach((result: any) => {
 				resultsMap.set(result.videoId, result);
 			});
 			duplicateResults = resultsMap;

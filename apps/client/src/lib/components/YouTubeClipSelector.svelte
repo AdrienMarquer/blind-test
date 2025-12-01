@@ -6,14 +6,8 @@
 	 */
 	import { onMount } from 'svelte';
 	import { SONG_CONFIG } from '@blind-test/shared';
-	import { getApiUrl } from '$lib/api';
+	import { getAuthenticatedApi } from '$lib/api';
 	import Button from './ui/Button.svelte';
-
-	// Helper to get admin auth headers for API calls
-	function getAdminHeaders(): HeadersInit {
-		const password = localStorage.getItem('admin_auth');
-		return password ? { 'X-Admin-Password': password } : {};
-	}
 
 	interface Props {
 		videos: Array<{ videoId: string; title: string; uploader?: string; duration?: string }>;
@@ -88,22 +82,19 @@
 			// Parse duration string (e.g., "3:45" -> 225 seconds)
 			const durationSeconds = parseDuration(currentVideo.duration || '0:00');
 
-			const response = await fetch(`${getApiUrl()}/api/songs/enrich-metadata`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
-				body: JSON.stringify({
-					youtubeTitle: currentVideo.title,
-					uploader: currentVideo.uploader || 'Unknown',
-					duration: durationSeconds,
-					youtubeId: currentVideo.videoId
-				})
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)['enrich-metadata'].post({
+				youtubeTitle: currentVideo.title,
+				uploader: currentVideo.uploader || 'Unknown',
+				duration: durationSeconds,
+				youtubeId: currentVideo.videoId
 			});
 
-			if (!response.ok) {
+			if (response.error) {
 				throw new Error('Failed to enrich metadata');
 			}
 
-			const result = await response.json();
+			const result = response.data;
 
 			// Auto-apply if high confidence (≥90%)
 			if (result.enriched.confidence >= 90) {

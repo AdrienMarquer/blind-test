@@ -54,6 +54,7 @@ export class GameEvents {
     scores: Array<{ playerId: string; playerName: string; score: number; rank: number }>;
   } | null>(null);
   gameEnded = $state<{ finalScores: import('@blind-test/shared').FinalScore[] } | null>(null);
+  gameRestarted = $state<{ room: import('@blind-test/shared').Room; players: import('@blind-test/shared').Player[] } | null>(null);
 
   // Game control events
   gamePaused = $state<{ timestamp: number } | null>(null);
@@ -286,6 +287,18 @@ export class RoomSocket {
         this.events.gameEnded = message.data;
         break;
 
+      case 'game:restarted':
+        console.log('[WS] Received game:restarted event - returning to lobby', {
+          roomStatus: message.data.room?.status,
+          playerCount: message.data.players?.length
+        });
+        // Update room and players stores
+        this.room.set(message.data.room);
+        this.players.set(message.data.players);
+        // Emit event for UI to handle
+        this.events.gameRestarted = message.data;
+        break;
+
       // Song Events - emit to reactive stream
       case 'song:preparing':
         this.events.songPreparing = message.data;
@@ -424,6 +437,10 @@ export class RoomSocket {
 
   resumeGame() {
     this.send({ type: 'game:resume' });
+  }
+
+  restartGame() {
+    this.send({ type: 'game:restart' });
   }
 
   // ========================================================================

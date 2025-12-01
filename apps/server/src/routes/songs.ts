@@ -69,6 +69,9 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     if (filter === 'incomplete-metadata') {
       apiLogger.debug('Fetching songs with incomplete metadata');
       songs = await songRepository.findWithIncompleteMetadata();
+    } else if (filter === 'missing-file') {
+      apiLogger.debug('Fetching songs with missing files');
+      songs = await songRepository.findWithMissingFile();
     } else {
       apiLogger.debug('Fetching all songs');
       songs = await songRepository.findAll();
@@ -83,6 +86,7 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     query: t.Object({
       filter: t.Optional(t.Union([
         t.Literal('incomplete-metadata'),
+        t.Literal('missing-file'),
         t.Literal('all')
       ]))
     })

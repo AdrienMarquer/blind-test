@@ -11,7 +11,7 @@
 		DoughnutController,
 		BarController
 	} from 'chart.js';
-	import { getApiUrl } from '$lib/api';
+	import { api } from '$lib/api';
 	import Card from '$lib/components/ui/Card.svelte';
 
 	// Register Chart.js components
@@ -83,9 +83,9 @@
 		try {
 			loading = true;
 			error = null;
-			const response = await fetch(`${getApiUrl()}/api/songs/stats?includeNiche=${includeNiche}`);
-			if (!response.ok) throw new Error('Failed to fetch statistics');
-			stats = await response.json();
+			const response = await (api.api.songs as any).stats.get({ query: { includeNiche: includeNiche.toString() } });
+			if (response.error) throw new Error('Failed to fetch statistics');
+			stats = response.data;
 			hasLoadedOnce = true;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load statistics';

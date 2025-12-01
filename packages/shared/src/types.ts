@@ -391,6 +391,7 @@ export type ServerMessage =
       scores: Array<{ playerId: string; playerName: string; score: number; rank: number }>;
     } }
   | { type: 'game:ended'; data: { finalScores: FinalScore[] } }
+  | { type: 'game:restarted'; data: { room: Room; players: Player[] } }
 
   // Song Events
   | { type: 'song:preparing'; data: {
@@ -471,7 +472,8 @@ export type ClientMessage =
 
   // Master Controls
   | { type: 'game:pause' }
-  | { type: 'game:resume' };
+  | { type: 'game:resume' }
+  | { type: 'game:restart' };
 
 /**
  * Extract data type for a specific message type

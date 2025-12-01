@@ -1,15 +1,9 @@
 <script lang="ts">
 	import type { Song } from '@blind-test/shared';
 	import { CANONICAL_GENRES } from '@blind-test/shared';
-	import { getApiUrl } from '$lib/api';
+	import { getAuthenticatedApi } from '$lib/api';
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
-
-	// Helper to get admin auth headers for API calls
-	function getAdminHeaders(): HeadersInit {
-		const password = localStorage.getItem('admin_auth');
-		return password ? { 'X-Admin-Password': password } : {};
-	}
 
 	interface Props {
 		song: Song;
@@ -75,18 +69,14 @@
 		try {
 			discovering = true;
 
-			const response = await fetch(`${getApiUrl()}/api/songs/${song.id}/auto-discover`, {
-				method: 'POST',
-				headers: getAdminHeaders()
-			});
+			const authApi = getAuthenticatedApi();
+			const response = await (authApi.api.songs as any)[song.id]['auto-discover'].post();
 
-			const data = await response.json();
-
-			if (!response.ok) {
-				throw new Error(data.error || 'Auto-discovery failed');
+			if (response.error) {
+				throw new Error(response.error.value?.error || 'Auto-discovery failed');
 			}
 
-			discoveredMetadata = data;
+			discoveredMetadata = response.data;
 			showDiscoveryResult = true;
 		} catch (err) {
 			alert(err instanceof Error ? err.message : 'Auto-discovery failed');

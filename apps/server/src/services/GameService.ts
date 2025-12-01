@@ -894,6 +894,7 @@ export class GameService {
             playerName: fs.playerName,
             score: fs.totalScore,
             rank: fs.rank,
+            averageAnswerTime: fs.averageAnswerTime,
           })),
         },
       });

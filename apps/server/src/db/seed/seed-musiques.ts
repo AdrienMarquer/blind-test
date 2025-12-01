@@ -106,7 +106,7 @@ const CONFIG = {
   defaultClipStart: 0,    // Start at beginning (matches app default)
   defaultClipDuration: 60, // Download 60 seconds
   audioFormat: 'mp3' as const,
-  audioQuality: '192',
+  audioQuality: '128k',
 };
 
 // ============================================================================
@@ -291,9 +291,11 @@ class YouTubeClient {
 
       console.log(`     🔗 Downloading: https://www.youtube.com/watch?v=${videoId}`);
       console.log(`     📁 Output: ${absoluteOutputPath}`);
+      console.log(`     ✂️  Clipping: ${clipStart}s to ${clipStart + clipDuration}s (${clipDuration}s)`);
 
-      // Use yt-dlp directly via exec (more reliable than youtube-dl-exec library)
-      const cmd = `yt-dlp --extract-audio --audio-format ${format} --audio-quality ${quality} --no-playlist -o "${absoluteOutputPath}" "https://www.youtube.com/watch?v=${videoId}"`;
+      // Use yt-dlp with ffmpeg postprocessor for clipping, quality control, and loudness normalization
+      const ffmpegArgs = `-ss ${clipStart} -t ${clipDuration} -b:a ${quality} -af loudnorm=I=-16:LRA=11:TP=-1.5`;
+      const cmd = `yt-dlp --extract-audio --audio-format ${format} --postprocessor-args "ffmpeg:${ffmpegArgs}" --no-playlist -o "${absoluteOutputPath}" "https://www.youtube.com/watch?v=${videoId}"`;
 
       await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 });
 

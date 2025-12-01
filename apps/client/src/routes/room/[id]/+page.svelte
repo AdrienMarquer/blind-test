@@ -395,16 +395,17 @@
 	}
 
 	function handleBackToLobby() {
-		showFinalScores = false;
-		finalScores = [];
-		// Could also navigate to home page: window.location.href = '/';
+		// Send restart request to server - this will reset everyone to lobby
+		if (roomSocket) {
+			roomSocket.restartGame();
+		}
 	}
 
 	function handlePlayAgain() {
-		showFinalScores = false;
-		finalScores = [];
-		showConfig = true;
-		loadSongs();
+		// Same as back to lobby - server will reset everyone
+		if (roomSocket) {
+			roomSocket.restartGame();
+		}
 	}
 
 	onMount(() => {
@@ -512,6 +513,23 @@
 				});
 				betweenRoundsData = null;
 				roomSocket.events.clear('roundStarted');
+			}
+		});
+
+		// Listen for game:restarted event - return to lobby
+		$effect(() => {
+			if (roomSocket?.events.gameRestarted) {
+				console.log('[Room] Game restarted - returning to lobby', roomSocket.events.gameRestarted);
+				// Clear game-related state
+				showFinalScores = false;
+				finalScores = [];
+				betweenRoundsData = null;
+				// Show config for master to start new game
+				if (isMaster) {
+					showConfig = true;
+					loadSongs();
+				}
+				roomSocket.events.clear('gameRestarted');
 			}
 		});
 	});
@@ -690,7 +708,6 @@
 			<div class="final-wrapper">
 				<FinalScores
 					{finalScores}
-					onBackToLobby={isMaster ? handleBackToLobby : undefined}
 					onPlayAgain={isMaster ? handlePlayAgain : undefined}
 				/>
 			</div>

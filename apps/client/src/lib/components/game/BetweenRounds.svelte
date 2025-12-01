@@ -11,6 +11,7 @@
 		playerName: string;
 		score: number;
 		rank: number;
+		averageAnswerTime?: number;
 	}
 
 	interface Props {
@@ -36,6 +37,16 @@
 	// Sort scores by rank
 	let sortedScores = $derived(scores.slice().sort((a, b) => a.rank - b.rank));
 
+	// Detect if there are any tiebreakers (players with same score but different ranks)
+	let hasTiebreaker = $derived(() => {
+		for (let i = 0; i < sortedScores.length - 1; i++) {
+			if (sortedScores[i].score === sortedScores[i + 1].score) {
+				return true;
+			}
+		}
+		return false;
+	});
+
 	// Loading state for starting next round
 	let isStartingRound = $state(false);
 
@@ -57,6 +68,9 @@
 			<h3>Résultats manche {completedRoundIndex + 1}</h3>
 			<div class="leaderboard">
 				{#each sortedScores as score, index}
+					{@const prevScore = index > 0 ? sortedScores[index - 1] : null}
+					{@const nextScore = index < sortedScores.length - 1 ? sortedScores[index + 1] : null}
+					{@const isTied = (prevScore && prevScore.score === score.score) || (nextScore && nextScore.score === score.score)}
 					<div class="leaderboard-item" class:winner={index === 0}>
 						<div class="rank-badge">
 							{#if index === 0}
@@ -71,11 +85,17 @@
 						</div>
 						<div class="player-info">
 							<span class="player-name">{score.playerName}</span>
+							{#if isTied && score.averageAnswerTime !== undefined}
+								<span class="player-time">⏱ {(score.averageAnswerTime / 1000).toFixed(1)}s</span>
+							{/if}
 						</div>
 						<div class="player-score">{score.score} pts</div>
 					</div>
 				{/each}
 			</div>
+			{#if hasTiebreaker()}
+				<p class="tiebreaker-note">⏱ En cas d'égalité, le temps de réponse moyen départage les joueurs.</p>
+			{/if}
 		</div>
 
 		<!-- Next Round Preview -->
@@ -280,6 +300,22 @@
 		font-weight: 600;
 		font-size: 1.05rem;
 		color: var(--aq-color-deep);
+	}
+
+	.player-time {
+		font-size: 0.85rem;
+		color: var(--aq-color-muted);
+		margin-left: 0.5rem;
+	}
+
+	.tiebreaker-note {
+		margin: 1rem 0 0 0;
+		padding: 0.75rem 1rem;
+		font-size: 0.9rem;
+		color: var(--aq-color-muted);
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 12px;
+		text-align: center;
 	}
 
 	.player-score {
