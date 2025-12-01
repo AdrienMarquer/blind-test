@@ -22,6 +22,26 @@ import { jobQueue } from '../services/JobQueue';
 
 const apiLogger = logger.child({ module: 'API:Songs' });
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+/**
+ * Check admin authentication via header
+ * Returns error response if not authenticated, null if OK
+ */
+function checkAdminAuth(headers: Record<string, string | undefined>): { status: number; body: { error: string } } | null {
+  if (!ADMIN_PASSWORD) {
+    return { status: 503, body: { error: 'Admin authentication not configured' } };
+  }
+
+  const providedPassword = headers['x-admin-password'];
+
+  if (!providedPassword || providedPassword !== ADMIN_PASSWORD) {
+    return { status: 401, body: { error: 'Admin authentication required' } };
+  }
+
+  return null; // Auth passed
+}
+
 /**
  * Get content type header for audio format
  */
@@ -201,7 +221,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Upload new song
-  .post('/upload', async ({ body, set, query }) => {
+  .post('/upload', async ({ body, set, query, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     apiLogger.info('Uploading song', { force: query.force || false });
 
     // Validate file
@@ -286,7 +313,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Update song metadata
-  .patch('/:songId', async ({ params: { songId }, body, error }) => {
+  .patch('/:songId', async ({ params: { songId }, body, error, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     const song = await songRepository.findById(songId);
 
     if (!song) {
@@ -314,7 +348,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Auto-discover metadata for existing song
-  .post('/:songId/auto-discover', async ({ params: { songId }, error }) => {
+  .post('/:songId/auto-discover', async ({ params: { songId }, error, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     const song = await songRepository.findById(songId);
 
     if (!song) {
@@ -357,7 +398,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Delete song
-  .delete('/:songId', async ({ params: { songId }, error }) => {
+  .delete('/:songId', async ({ params: { songId }, error, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     const song = await songRepository.findById(songId);
 
     if (!song) {
@@ -416,7 +464,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Check for duplicate songs
-  .post('/check-duplicate', async ({ body, set }) => {
+  .post('/check-duplicate', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Checking for duplicates', { title: body.title, artist: body.artist });
 
@@ -470,7 +525,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Download full song from Spotify to temp directory (for clip selection)
-  .post('/spotify-download-temp', async ({ body, set }) => {
+  .post('/spotify-download-temp', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Downloading temp song from Spotify', {
         spotifyId: body.spotifyId,
@@ -575,7 +637,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Finalize Spotify import after clip selection
-  .post('/spotify-finalize', async ({ body, set }) => {
+  .post('/spotify-finalize', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Finalizing Spotify import', {
         tempFileId: body.tempFileId,
@@ -711,7 +780,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   // ========================================================================
 
   // Get YouTube playlist or video info
-  .post('/youtube-playlist-info', async ({ body, set }) => {
+  .post('/youtube-playlist-info', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Fetching YouTube playlist/video info', { url: body.url });
 
@@ -732,7 +808,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Check YouTube videos for duplicates
-  .post('/youtube-check-duplicates', async ({ body, set }) => {
+  .post('/youtube-check-duplicates', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Checking YouTube videos for duplicates', {
         videoCount: body.videos.length
@@ -799,7 +882,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Enrich YouTube video metadata with Spotify data
-  .post('/enrich-metadata', async ({ body, set }) => {
+  .post('/enrich-metadata', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Enriching YouTube metadata', {
         title: body.youtubeTitle,
@@ -831,7 +921,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Batch enrich YouTube videos metadata
-  .post('/youtube-enrich-batch', async ({ body, set }) => {
+  .post('/youtube-enrich-batch', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Batch enriching YouTube metadata', {
         videoCount: body.videos.length
@@ -932,7 +1029,14 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Start batch YouTube import job
-  .post('/youtube-import-batch', async ({ body, set }) => {
+  .post('/youtube-import-batch', async ({ body, set, headers }) => {
+    // Check admin auth
+    const authError = checkAdminAuth(headers as Record<string, string | undefined>);
+    if (authError) {
+      set.status = authError.status;
+      return authError.body;
+    }
+
     try {
       apiLogger.info('Starting YouTube batch import', {
         videoCount: body.videos.length

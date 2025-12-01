@@ -20,9 +20,11 @@ import { songRoutes } from './routes/songs';
 import { modeRoutes } from './routes/modes';
 import { mediaRoutes } from './routes/media';
 import { jobRoutes } from './routes/jobs';
+import { authRoutes } from './routes/auth';
 import { jobWorker } from './services/JobWorker';
 import { jobQueue } from './services/JobQueue';
 import { broadcastJobEvent } from './websocket/handler';
+import { roomCleanupService } from './services/RoomCleanupService';
 
 // Run database migrations
 try {
@@ -93,6 +95,9 @@ jobQueue.on((event) => {
 jobWorker.start();
 logger.info('Job worker started', jobWorker.getStatus());
 
+// Start room cleanup service (runs at midnight daily)
+roomCleanupService.start();
+
 // Create child logger for WebSocket
 const wsLogger = logger.child({ module: 'WebSocket' });
 
@@ -145,6 +150,7 @@ const app = new Elysia()
   })
 
   // API routes (must come before static files to take precedence)
+  .use(authRoutes)
   .use(roomRoutes)
   .use(playerRoutes)
   .use(gameRoutes)
@@ -260,6 +266,9 @@ const shutdown = async (signal: string) => {
     // Stop job worker first to prevent new jobs
     jobWorker.stop();
     logger.info('Job worker stopped');
+
+    // Stop room cleanup service
+    roomCleanupService.stop();
 
     // Close database connections
     const { closeDatabase } = await import('./db');

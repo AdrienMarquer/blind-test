@@ -253,4 +253,29 @@ export class RoomRepository implements Repository<Room> {
     // This would need to be implemented with a SELECT COUNT before delete if needed
     return 0; // Placeholder - implement if count is needed
   }
+
+  /**
+   * Delete all rooms created more than N days ago
+   * @param days - Number of days after which rooms should be deleted
+   * @returns Number of deleted rooms
+   */
+  async deleteOlderThan(days: number): Promise<number> {
+    const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    // Count rooms to be deleted first
+    const toDelete = await db
+      .select()
+      .from(schema.rooms)
+      .where(lt(schema.rooms.createdAt, cutoffDate));
+
+    const count = toDelete.length;
+
+    if (count > 0) {
+      await db
+        .delete(schema.rooms)
+        .where(lt(schema.rooms.createdAt, cutoffDate));
+    }
+
+    return count;
+  }
 }

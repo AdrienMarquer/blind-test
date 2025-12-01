@@ -13,6 +13,13 @@
 	import InputField from '$lib/components/ui/InputField.svelte';
 	import EditableSongCard from '$lib/components/EditableSongCard.svelte';
 	import SongStatsCharts from '$lib/components/SongStatsCharts.svelte';
+	import AdminGate from '$lib/components/AdminGate.svelte';
+
+	// Helper to get admin auth headers for API calls
+	function getAdminHeaders(): HeadersInit {
+		const password = localStorage.getItem('admin_auth');
+		return password ? { 'X-Admin-Password': password } : {};
+	}
 
 	let songs = $state<Song[]>([]);
 	let loading = $state(true);
@@ -123,7 +130,7 @@
 			// Step 1: Download full song to temp file (with optional force flag)
 			const response = await fetch(`${getApiUrl()}/api/songs/spotify-download-temp`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
 				body: JSON.stringify({ spotifyId, force })
 			});
 
@@ -215,7 +222,7 @@
 			// Step 4: Finalize with selected clip
 			const response = await fetch(`${getApiUrl()}/api/songs/spotify-finalize`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
 				body: JSON.stringify({
 					tempFileId: spotifyTempFileId,
 					clipStart: start,
@@ -265,7 +272,7 @@
 			// Send raw video data to backend - enrichment is handled automatically
 			const response = await fetch(`${getApiUrl()}/api/songs/youtube-import-batch`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
 				body: JSON.stringify({
 					videos: videos.map(v => ({
 						videoId: v.videoId,
@@ -461,6 +468,7 @@
 	});
 </script>
 
+<AdminGate>
 <header class="music-header">
 	<div class="header-title">🎵 Bibliothèque</div>
 	<div class="header-stats">
@@ -708,6 +716,7 @@
 		</div>
 	</div>
 {/if}
+</AdminGate>
 
 <style>
 	.music-header {

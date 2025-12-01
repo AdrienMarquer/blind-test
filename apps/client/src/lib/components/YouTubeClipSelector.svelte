@@ -9,6 +9,12 @@
 	import { getApiUrl } from '$lib/api';
 	import Button from './ui/Button.svelte';
 
+	// Helper to get admin auth headers for API calls
+	function getAdminHeaders(): HeadersInit {
+		const password = localStorage.getItem('admin_auth');
+		return password ? { 'X-Admin-Password': password } : {};
+	}
+
 	interface Props {
 		videos: Array<{ videoId: string; title: string; uploader?: string; duration?: string }>;
 		onComplete: (selections: Array<{ videoId: string; clipStart: number; clipDuration: number }>) => void;
@@ -84,7 +90,7 @@
 
 			const response = await fetch(`${getApiUrl()}/api/songs/enrich-metadata`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
 				body: JSON.stringify({
 					youtubeTitle: currentVideo.title,
 					uploader: currentVideo.uploader || 'Unknown',

@@ -8,6 +8,12 @@
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
 
+	// Helper to get admin auth headers for API calls
+	function getAdminHeaders(): HeadersInit {
+		const password = localStorage.getItem('admin_auth');
+		return password ? { 'X-Admin-Password': password } : {};
+	}
+
 	interface Props {
 		onImport: (videos: Array<{ videoId: string; title: string; clipStart?: number; clipDuration?: number; artist?: string; uploader?: string; durationInSeconds?: number; force?: boolean }>) => void;
 		onSelectClips: (videos: Array<{ videoId: string; title: string; uploader?: string; duration?: string }>) => void;
@@ -39,7 +45,7 @@
 
 			const response = await fetch(`${getApiUrl()}/api/songs/youtube-playlist-info`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
 				body: JSON.stringify({ url: youtubeUrl })
 			});
 
@@ -76,7 +82,7 @@
 
 			const response = await fetch(`${getApiUrl()}/api/songs/youtube-check-duplicates`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
 				body: JSON.stringify({
 					videos: videos.map(v => ({
 						videoId: v.videoId,

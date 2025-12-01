@@ -5,6 +5,12 @@
 	import Button from './ui/Button.svelte';
 	import InputField from './ui/InputField.svelte';
 
+	// Helper to get admin auth headers for API calls
+	function getAdminHeaders(): HeadersInit {
+		const password = localStorage.getItem('admin_auth');
+		return password ? { 'X-Admin-Password': password } : {};
+	}
+
 	interface Props {
 		song: Song;
 		onUpdate: (songId: string, updates: Partial<Song>) => Promise<void>;
@@ -70,7 +76,8 @@
 			discovering = true;
 
 			const response = await fetch(`${getApiUrl()}/api/songs/${song.id}/auto-discover`, {
-				method: 'POST'
+				method: 'POST',
+				headers: getAdminHeaders()
 			});
 
 			const data = await response.json();
