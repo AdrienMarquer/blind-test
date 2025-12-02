@@ -1,6 +1,11 @@
 /**
  * Game Control Routes
  * Handles game start, pause, end, and round management
+ *
+ * Route structure for Eden Treaty type inference:
+ * - POST /api/game/:roomId/start - start game
+ * - POST /api/game/:roomId/end - end game
+ * - POST /api/game/:roomId/next-round - start next round
  */
 
 import { Elysia, t } from 'elysia';
@@ -13,40 +18,50 @@ import { logger } from '../utils/logger';
 
 const apiLogger = logger.child({ module: 'API:Game' });
 
-export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
-  // Start game
-  .post('/start', async ({ params: { roomId }, body, error }) => {
+export const gameRoutes = new Elysia({ prefix: '/api/game' })
+  // ============================================
+  // Game routes (nested under /:roomId)
+  // ============================================
+  .group('/:roomId', (app) => app
+    // Start game
+    .post('/start', async ({ params: { roomId }, body, set }) => {
     const room = await roomRepository.findById(roomId);
 
     if (!room) {
-      return error(404, { error: 'Room not found' });
+      set.status = 404;
+      return { error: 'Room not found' };
     }
 
     if (room.status !== 'lobby') {
-      return error(409, { error: 'Game already started' });
+      set.status = 409;
+      return { error: 'Game already started' };
     }
 
     const playerCount = await playerRepository.countConnected(roomId);
     if (playerCount < 2) {
-      return error(400, { error: 'Need at least 2 players to start' });
+      set.status = 400;
+      return { error: 'Need at least 2 players to start' };
     }
 
     try {
       // Validate rounds array is provided
       if (!body.rounds || body.rounds.length === 0) {
-        return error(400, { error: 'At least one round is required. Use the round configuration system.' });
+        set.status = 400;
+        return { error: 'At least one round is required. Use the round configuration system.' };
       }
 
       // Validate maximum 5 rounds
       if (body.rounds.length > 5) {
-        return error(400, { error: 'Maximum 5 rounds allowed' });
+        set.status = 400;
+        return { error: 'Maximum 5 rounds allowed' };
       }
 
       // Validate song count per round (max 30)
       for (let i = 0; i < body.rounds.length; i++) {
         const round = body.rounds[i];
         if (round.songFilters?.songCount && round.songFilters.songCount > 30) {
-          return error(400, { error: `Round ${i + 1}: Maximum 30 songs per round allowed` });
+          set.status = 400;
+          return { error: `Round ${i + 1}: Maximum 30 songs per round allowed` };
         }
       }
 
@@ -84,7 +99,8 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
           });
           if (testSongs.length === 0) {
             await gameSessionRepository.delete(session.id);
-            return error(400, { error: `No songs match filters for round ${i + 1}` });
+            set.status = 400;
+            return { error: `No songs match filters for round ${i + 1}` };
           }
         }
 
@@ -141,7 +157,8 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
       };
     } catch (err) {
       apiLogger.error('Failed to start game', err, { roomId });
-      return error(500, { error: 'Failed to start game' });
+      set.status = 500;
+      return { error: 'Failed to start game' };
     }
   }, {
     body: t.Object({
@@ -183,15 +200,17 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
   })
 
   // End game manually
-  .post('/end', async ({ params: { roomId }, error }) => {
+  .post('/end', async ({ params: { roomId }, set }) => {
     const room = await roomRepository.findById(roomId);
 
     if (!room) {
-      return error(404, { error: 'Room not found' });
+      set.status = 404;
+      return { error: 'Room not found' };
     }
 
     if (room.status !== 'playing') {
-      return error(409, { error: 'No active game to end' });
+      set.status = 409;
+      return { error: 'No active game to end' };
     }
 
     try {
@@ -207,20 +226,23 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
       };
     } catch (err) {
       apiLogger.error('Failed to end game', err, { roomId });
-      return error(500, { error: 'Failed to end game' });
+      set.status = 500;
+      return { error: 'Failed to end game' };
     }
   })
 
   // Start next round (from between_rounds state)
-  .post('/next-round', async ({ params: { roomId }, error }) => {
+  .post('/next-round', async ({ params: { roomId }, set }) => {
     const room = await roomRepository.findById(roomId);
 
     if (!room) {
-      return error(404, { error: 'Room not found' });
+      set.status = 404;
+      return { error: 'Room not found' };
     }
 
     if (room.status !== 'between_rounds') {
-      return error(409, { error: 'Room is not in between_rounds state' });
+      set.status = 409;
+      return { error: 'Room is not in between_rounds state' };
     }
 
     try {
@@ -235,6 +257,8 @@ export const gameRoutes = new Elysia({ prefix: '/api/game/:roomId' })
       };
     } catch (err) {
       apiLogger.error('Failed to start next round', err, { roomId });
-      return error(500, { error: 'Failed to start next round' });
+      set.status = 500;
+      return { error: 'Failed to start next round' };
     }
-  });
+  })
+  );

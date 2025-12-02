@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api, getApiUrl, getAdminHeaders, getAuthenticatedApi } from '$lib/api';
+	import { getApiUrl, getAdminHeaders } from '$lib/api';
+	import { songApi } from '$lib/api-helpers';
 	// Note: getAdminHeaders is used for file upload (FormData) which Eden Treaty doesn't handle well
 	import type { Song } from '@blind-test/shared';
 	import { SONG_CONFIG, CANONICAL_GENRES } from '@blind-test/shared';
@@ -29,7 +30,6 @@
 	let showClipSelector = $state(false);
 	let clipStart = $state<number>(SONG_CONFIG.DEFAULT_CLIP_START);
 	let clipDuration = $state<number>(SONG_CONFIG.DEFAULT_CLIP_DURATION);
-	const songsApi = api.api.songs as Record<string, any>;
 
 	let spotifyQuery = $state('');
 	let spotifyResults = $state<any[]>([]);
@@ -105,12 +105,12 @@
 			searchingSpotify = true;
 			error = null;
 
-			const response = await (api.api.songs as any)['search-spotify'].get({ query: { q: spotifyQuery } });
+			const response = await songApi.searchSpotify(spotifyQuery);
 
 			if (response.error) {
-				error = response.error.value?.error || 'Recherche Spotify impossible';
+				error = (response.error as any).value?.error || 'Recherche Spotify impossible';
 			} else {
-				spotifyResults = response.data.results || [];
+				spotifyResults = response.data?.results || [];
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Recherche Spotify impossible';
@@ -129,8 +129,7 @@
 			error = null;
 
 			// Step 1: Download full song to temp file (with optional force flag)
-			const authApi = getAuthenticatedApi();
-			const response = await (authApi.api.songs as any)['spotify-download-temp'].post({ spotifyId, force });
+			const response = await songApi.spotifyDownloadTemp(spotifyId, force);
 
 			if (response.error) {
 				throw new Error(response.error.value?.error || 'Téléchargement impossible');
@@ -150,8 +149,8 @@
 				return;
 			}
 
-			// Step 2: Fetch the temp file as a blob (keep as fetch for blob handling)
-			const audioResponse = await (api.api.songs as any)[data.tempFileId].stream.get();
+			// Step 2: Fetch the temp file as a blob
+			const audioResponse = await songApi.streamTemp(data.tempFileId);
 			if (audioResponse.error) {
 				throw new Error('Impossible de charger le fichier audio');
 			}
@@ -218,13 +217,12 @@
 			error = null;
 
 			// Step 4: Finalize with selected clip
-			const authApi = getAuthenticatedApi();
-			const response = await (authApi.api.songs as any)['spotify-finalize'].post({
-				tempFileId: spotifyTempFileId,
-				clipStart: start,
-				clipDuration: duration,
-				metadata: spotifyTempMetadata
-			});
+			const response = await songApi.spotifyFinalize(
+				spotifyTempFileId!,
+				start,
+				duration,
+				spotifyTempMetadata
+			);
 
 			if (response.error) {
 				throw new Error(response.error.value?.error || 'Finalisation impossible');
@@ -263,9 +261,8 @@
 			error = null;
 
 			// Send raw video data to backend - enrichment is handled automatically
-			const authApi = getAuthenticatedApi();
-			const response = await (authApi.api.songs as any)['youtube-import-batch'].post({
-				videos: videos.map(v => ({
+			const response = await songApi.youtubeImportBatch(
+				videos.map(v => ({
 					videoId: v.videoId,
 					title: v.title,
 					clipStart: v.clipStart,
@@ -273,7 +270,7 @@
 					force: v.force,
 					artist: v.artist || v.uploader
 				}))
-			});
+			);
 
 			if (response.error) {
 				throw new Error(response.error.value?.error || 'Import failed');
@@ -319,8 +316,8 @@
 			error = null;
 
 			// Pass metadata filter as query parameter
-			const queryParams = metadataFilter !== 'all' ? { query: { filter: metadataFilter } } : undefined;
-			const response = await songsApi.get(queryParams);
+			const filter = metadataFilter !== 'all' ? metadataFilter : undefined;
+			const response = await songApi.list(filter);
 
 			if (response.data) {
 				songs = response.data.songs || [];
@@ -415,8 +412,7 @@
 	async function updateSong(songId: string, updates: Partial<Song>) {
 		try {
 			error = null;
-			const authApi = getAuthenticatedApi();
-			const response = await (authApi.api.songs as any)[songId].patch(updates);
+			const response = await songApi.update(songId, updates);
 
 			if (response.error) {
 				throw new Error(response.error.value?.error || 'Mise à jour impossible');
@@ -434,8 +430,7 @@
 
 		try {
 			error = null;
-			const authApi = getAuthenticatedApi();
-			const response = await (authApi.api.songs as any)[songId].delete();
+			const response = await songApi.delete(songId);
 
 			if (response.error) {
 				throw new Error(response.error.value?.error || 'Suppression impossible');

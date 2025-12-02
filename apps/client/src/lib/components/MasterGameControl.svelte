@@ -3,12 +3,11 @@
 	import { get } from 'svelte/store';
 	import type { Room } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
-	import { api } from '$lib/api';
+	import { gameApi } from '$lib/api-helpers';
 	import VolumeControl from './VolumeControl.svelte';
 
 	// Props
 	const { room, socket }: { room: Room; socket: RoomSocket } = $props();
-	const gameApi = api.api.game as Record<string, any>;
 
 	// Game state
 	let currentSong = $state(0);
@@ -70,13 +69,13 @@
 		try {
 			console.log('[Master] Ending game...', { roomId: room.id });
 
-			const response = await gameApi[room.id].end.post();
+			const response = await gameApi.end(room.id);
 
 			if (response.data) {
 				console.log('[Master] Game ended successfully', response.data);
 			} else if (response.error) {
 				console.error('[Master] Failed to end game:', response.error);
-				alert(`Impossible de terminer la partie : ${response.error.value}`);
+				alert(`Impossible de terminer la partie : ${(response.error as any).value}`);
 			}
 		} catch (err) {
 			console.error('[Master] Error ending game:', err);

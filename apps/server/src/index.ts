@@ -14,7 +14,6 @@ import path from 'path';
 
 // Import route modules
 import { roomRoutes } from './routes/rooms';
-import { playerRoutes } from './routes/players';
 import { gameRoutes } from './routes/game';
 import { songRoutes } from './routes/songs';
 import { modeRoutes } from './routes/modes';
@@ -152,7 +151,6 @@ const app = new Elysia()
   // API routes (must come before static files to take precedence)
   .use(authRoutes)
   .use(roomRoutes)
-  .use(playerRoutes)
   .use(gameRoutes)
   .use(songRoutes)
   .use(modeRoutes)

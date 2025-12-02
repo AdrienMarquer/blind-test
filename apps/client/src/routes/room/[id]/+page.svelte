@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
-	import { api } from '$lib/api';
+	import { roomApi, playerApi, gameApi, songApi } from '$lib/api-helpers';
 	import { createRoomSocket } from '$lib/stores/socket.svelte';
 	import type { Room, Player } from '@blind-test/shared';
 	import { validatePlayerName, PLAYER_CONFIG } from '@blind-test/shared';
@@ -113,9 +113,6 @@
 		}
 	});
 
-	const roomsApi = api.api.rooms as Record<string, any>;
-	const songsApi = api.api.songs as Record<string, any>;
-	const gameApi = api.api.game as Record<string, any>;
 
 	type StatusTone = 'primary' | 'success' | 'warning' | 'neutral';
 	const statusMeta: Record<Room['status'], { label: string; tone: StatusTone; icon: string; blurb: string }> = {
@@ -179,7 +176,7 @@
 
 		try {
 			error = null;
-			const response = await roomsApi[roomId].get();
+			const response = await roomApi.get(roomId);
 
 			if (response.data) {
 				initialRoom = response.data;
@@ -242,16 +239,14 @@
 			error = null;
 			playerNameError = null;
 
-			const response = await roomsApi[roomId].players.post({
-				name: playerName.trim()
-			});
+			const response = await playerApi.add(roomId, playerName.trim());
 
 			if (response.data) {
 				console.log('Joined room as:', response.data);
 
 				// Store player info and token in memory
 				currentPlayer = response.data;
-				authToken = (response.data as any).token;
+				authToken = response.data.token;
 
 				// Save to localStorage for reconnection
 				const storageKey = `room_${roomId}_auth`;
@@ -294,7 +289,7 @@
 
 		try {
 			error = null;
-			await roomsApi[room.id].players[playerId].delete();
+			await playerApi.remove(room.id, playerId);
 			console.log('Player removed successfully');
 			// Player removal will be broadcast via WebSocket
 		} catch (err) {
@@ -328,7 +323,7 @@
 
 	async function loadSongs() {
 		try {
-			const response = await songsApi.get();
+			const response = await songApi.list();
 			if (response.data) {
 				songs = response.data.songs || [];
 			}
@@ -366,7 +361,7 @@
 				}))
 			});
 
-			const response = await gameApi[room.id].start.post(body);
+			const response = await gameApi.start(room.id, body.rounds);
 
 			if (response.data) {
 				console.log('Game started:', response.data);
@@ -397,7 +392,7 @@
 
 		try {
 			error = null;
-			const response = await gameApi[room.id]['next-round'].post({});
+			const response = await gameApi.nextRound(room.id);
 
 			console.log('[startNextRound] Response received:', {
 				hasData: !!response.data,

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api';
+	import { roomApi } from '$lib/api-helpers';
 	import Logo from '$lib/components/Logo.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import InputField from '$lib/components/ui/InputField.svelte';
@@ -10,7 +10,6 @@
 	let error = $state<string | null>(null);
 	let creating = $state(false);
 	let joiningByCode = $state(false);
-	const roomsApi = api.api.rooms as Record<string, any>;
 
 	async function createRoom() {
 		if (!newRoomName.trim()) return;
@@ -19,13 +18,11 @@
 			creating = true;
 			error = null;
 
-			const response = await api.api.rooms.post({
-				name: newRoomName.trim()
-			});
+			const response = await roomApi.create(newRoomName.trim());
 
 			if (response.data) {
 				const roomId = response.data.id;
-				const masterToken = (response.data as any).masterToken;
+				const masterToken = response.data.masterToken;
 
 				if (masterToken) {
 					window.location.href = `/room/${roomId}?token=${masterToken}`;
@@ -50,7 +47,7 @@
 			joiningByCode = true;
 			error = null;
 
-			const response = await roomsApi.code[roomCode.trim().toUpperCase()].get();
+			const response = await roomApi.getByCode(roomCode.trim().toUpperCase());
 
 			if (response.data) {
 				window.location.href = `/room/${response.data.id}`;
