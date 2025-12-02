@@ -205,57 +205,114 @@
 	});
 </script>
 
-<div class="stats-card" class:collapsed={!expanded}>
-<Card title="Statistiques" subtitle="Analyse de ta bibliotheque" icon="📊">
-	{#snippet actions()}
-		<button class="toggle-btn" onclick={toggleExpanded}>
-			{expanded ? 'Masquer' : 'Afficher'}
-		</button>
-	{/snippet}
+{#snippet statsContent()}
+	{#if loading}
+		<div class="loading">Chargement des statistiques...</div>
+	{:else if error}
+		<div class="error">{error}</div>
+	{:else if stats && stats.total > 0}
+		<!-- Language ratio bar -->
+		{#if stats.byLanguage.length > 0}
+			{@const enCount = stats.byLanguage.find(l => l.language === 'en')?.count ?? 0}
+			{@const frCount = stats.byLanguage.find(l => l.language === 'fr')?.count ?? 0}
+			{@const otherCount = stats.total - enCount - frCount}
+			{@const enPercent = Math.round((enCount / stats.total) * 100)}
+			{@const frPercent = Math.round((frCount / stats.total) * 100)}
+			{@const otherPercent = 100 - enPercent - frPercent}
+			<div class="language-stats">
+				<h4>Par langue</h4>
+				<div class="language-bar">
+					{#if enPercent > 0}
+						<div class="lang-segment en" style="width: {enPercent}%" title="Anglais: {enCount} ({enPercent}%)">
+							{#if enPercent >= 10}🇬🇧 {enPercent}%{/if}
+						</div>
+					{/if}
+					{#if frPercent > 0}
+						<div class="lang-segment fr" style="width: {frPercent}%" title="Français: {frCount} ({frPercent}%)">
+							{#if frPercent >= 10}🇫🇷 {frPercent}%{/if}
+						</div>
+					{/if}
+					{#if otherPercent > 0}
+						<div class="lang-segment other" style="width: {otherPercent}%" title="Autre: {otherCount} ({otherPercent}%)">
+							{#if otherPercent >= 10}🌍 {otherPercent}%{/if}
+						</div>
+					{/if}
+				</div>
+				<div class="language-legend">
+					<span class="legend-item"><span class="dot en"></span> Anglais: {enCount}</span>
+					<span class="legend-item"><span class="dot fr"></span> Français: {frCount}</span>
+					{#if otherCount > 0}
+						<span class="legend-item"><span class="dot other"></span> Autre: {otherCount}</span>
+					{/if}
+				</div>
+			</div>
+		{/if}
 
-	{#if expanded}
+		<div class="stats-grid">
+			<!-- Genre Distribution -->
+			{#if stats.byGenre.length > 0}
+				<div class="chart-container">
+					<h4>Par genre</h4>
+					<div class="chart">
+						<canvas bind:this={genreCanvas}></canvas>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Timeline by Decade -->
+			{#if stats.byDecade.length > 0}
+				<div class="chart-container">
+					<h4>Par decennie</h4>
+					<div class="chart">
+						<canvas bind:this={decadeCanvas}></canvas>
+					</div>
+				</div>
+			{/if}
+		</div>
+	{:else}
+		<div class="empty">Aucune musique dans la bibliotheque</div>
+	{/if}
+{/snippet}
+
+{#if autoExpand}
+	<!-- Direct content when used in modal (no Card wrapper) -->
+	<div class="stats-content">
 		<button
 			class="niche-toggle-btn"
-			style="color: #ef4c83; background: transparent; border: 1px solid #ef4c83;"
 			onclick={() => { includeNiche = !includeNiche; handleNicheToggle(); }}
 		>
 			{includeNiche ? 'Masquer' : 'Afficher'} les titres niche
 		</button>
+		{@render statsContent()}
+	</div>
+{:else}
+	<!-- Card wrapper for standalone usage -->
+	<div class="stats-card" class:collapsed={!expanded}>
+		<Card title="Statistiques" subtitle="Analyse de ta bibliotheque" icon="📊">
+			{#snippet actions()}
+				<button class="toggle-btn" onclick={toggleExpanded}>
+					{expanded ? 'Masquer' : 'Afficher'}
+				</button>
+			{/snippet}
 
-		{#if loading}
-			<div class="loading">Chargement des statistiques...</div>
-		{:else if error}
-			<div class="error">{error}</div>
-		{:else if stats && stats.total > 0}
-			<div class="stats-grid">
-				<!-- Genre Distribution -->
-				{#if stats.byGenre.length > 0}
-					<div class="chart-container">
-						<h4>Par genre</h4>
-						<div class="chart">
-							<canvas bind:this={genreCanvas}></canvas>
-						</div>
-					</div>
-				{/if}
-
-				<!-- Timeline by Decade -->
-				{#if stats.byDecade.length > 0}
-					<div class="chart-container">
-						<h4>Par decennie</h4>
-						<div class="chart">
-							<canvas bind:this={decadeCanvas}></canvas>
-						</div>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div class="empty">Aucune musique dans la bibliotheque</div>
-		{/if}
-	{/if}
-</Card>
-</div>
+			{#if expanded}
+				<button
+					class="niche-toggle-btn"
+					onclick={() => { includeNiche = !includeNiche; handleNicheToggle(); }}
+				>
+					{includeNiche ? 'Masquer' : 'Afficher'} les titres niche
+				</button>
+				{@render statsContent()}
+			{/if}
+		</Card>
+	</div>
+{/if}
 
 <style>
+	.stats-content {
+		/* Direct content wrapper for modal usage */
+	}
+
 	.stats-card.collapsed :global(header) {
 		margin-bottom: 0;
 	}
@@ -325,5 +382,83 @@
 
 	.toggle-btn:hover {
 		text-decoration: underline;
+	}
+
+	/* Language stats */
+	.language-stats {
+		background: rgba(255, 255, 255, 0.5);
+		border-radius: 18px;
+		padding: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.language-stats h4 {
+		margin: 0 0 0.75rem;
+		font-size: 1rem;
+		color: var(--aq-color-deep, #122b3b);
+	}
+
+	.language-bar {
+		display: flex;
+		height: 32px;
+		border-radius: 16px;
+		overflow: hidden;
+		background: rgba(0, 0, 0, 0.1);
+	}
+
+	.lang-segment {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: white;
+		transition: width 0.3s ease;
+	}
+
+	.lang-segment.en {
+		background: linear-gradient(135deg, #009daa, #00c4d4);
+	}
+
+	.lang-segment.fr {
+		background: linear-gradient(135deg, #ef4c83, #ff6b9d);
+	}
+
+	.lang-segment.other {
+		background: linear-gradient(135deg, #f8c027, #ffd666);
+		color: #122b3b;
+	}
+
+	.language-legend {
+		display: flex;
+		gap: 1.5rem;
+		margin-top: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.legend-item {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.9rem;
+		color: var(--aq-color-deep, #122b3b);
+	}
+
+	.dot {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+	}
+
+	.dot.en {
+		background: #009daa;
+	}
+
+	.dot.fr {
+		background: #ef4c83;
+	}
+
+	.dot.other {
+		background: #f8c027;
 	}
 </style>

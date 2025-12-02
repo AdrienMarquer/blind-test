@@ -23,6 +23,7 @@
 	let uploading = $state(false);
 	let searchQuery = $state('');
 	let selectedGenre = $state('');
+	let selectedLanguage = $state('');
 	let metadataFilter = $state<'all' | 'incomplete-metadata' | 'missing-file'>('all');
 	let selectedFile = $state<File | null>(null);
 	let showClipSelector = $state(false);
@@ -80,7 +81,12 @@
 				? song.genre === selectedGenre
 				: true;
 
-			return matchesSearch && matchesGenre;
+			// Language filter
+			const matchesLanguage = selectedLanguage
+				? song.language === selectedLanguage
+				: true;
+
+			return matchesSearch && matchesGenre && matchesLanguage;
 		})
 	);
 
@@ -585,6 +591,12 @@
 			{/each}
 		</select>
 
+		<select class="language-filter" bind:value={selectedLanguage}>
+			<option value="">Toutes les langues</option>
+			<option value="en">🇬🇧 Anglais</option>
+			<option value="fr">🇫🇷 Français</option>
+		</select>
+
 		<select class="metadata-filter" bind:value={metadataFilter}>
 			<option value="all">Toutes les musiques</option>
 			<option value="incomplete-metadata">🔍 Métadonnées incomplètes</option>
@@ -967,12 +979,36 @@
 		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
 	}
 
+	.language-filter {
+		min-width: 160px;
+		padding: 0.65rem 1rem;
+		border-radius: var(--aq-radius-md);
+		border: 2px solid rgba(255, 255, 255, 0.7);
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--aq-color-deep);
+		font-size: 1rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: border-color 180ms ease, box-shadow 180ms ease;
+	}
+
+	.language-filter:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.language-filter:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
+	}
+
 	@media (max-width: 768px) {
 		.library-toolbar {
 			flex-wrap: wrap;
 		}
 
 		.genre-filter,
+		.language-filter,
 		.metadata-filter {
 			flex: 1;
 			min-width: 150px;

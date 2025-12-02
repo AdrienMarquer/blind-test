@@ -55,12 +55,14 @@ function sanitizeFilename(str: string): string {
 interface MusiqueEntry {
   title: string;
   artist: string;
+  lang?: string; // ISO 639-1 language code (e.g., 'en', 'fr')
 }
 
 interface EnrichedSong {
   // Original
   title: string;
   artist: string;
+  lang?: string; // ISO 639-1 language code (e.g., 'en', 'fr')
 
   // From Spotify
   spotifyId?: string;
@@ -378,7 +380,7 @@ class DatabaseService {
       year: song.year || 2000, // Default year if missing
       genre: song.genre || null,
       duration: song.duration,
-      language: null,
+      language: song.lang || null,
       niche: false,
       spotifyId: song.spotifyId || null,
       youtubeId: song.youtubeId || null,
@@ -503,6 +505,7 @@ async function main() {
     const song: EnrichedSong = {
       title: entry.title,
       artist: entry.artist,
+      lang: entry.lang,
       status: 'pending',
       processedAt: new Date().toISOString(),
     };
