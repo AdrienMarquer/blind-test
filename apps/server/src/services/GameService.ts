@@ -712,6 +712,7 @@ export class GameService {
         songIndex,
         correctTitle: song.song.title,
         correctArtist: song.song.artist,
+        albumArt: song.song.albumArt,
         winners: winners.length > 0 ? winners : undefined,
       },
     });

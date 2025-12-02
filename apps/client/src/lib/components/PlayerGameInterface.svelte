@@ -46,7 +46,7 @@
 		| { status: 'text_input_answering'; timeRemaining: number }
 		| { status: 'locked_out' }
 		| { status: 'watching_other_player'; playerName: string }
-		| { status: 'answer_reveal'; correctTitle: string; correctArtist: string; winners?: WinnerInfo[] };
+		| { status: 'answer_reveal'; correctTitle: string; correctArtist: string; albumArt?: string; winners?: WinnerInfo[] };
 
 	// Props
 	const { player, socket }: { player: Player; socket: RoomSocket } = $props();
@@ -525,6 +525,7 @@
 				status: 'answer_reveal',
 				correctTitle: event.correctTitle,
 				correctArtist: event.correctArtist,
+				albumArt: event.albumArt,
 				winners: event.winners
 			};
 
@@ -533,22 +534,18 @@
 				clearTimeout(feedbackTimeout);
 			}
 
-			let answerText = `✅ Réponse : « ${event.correctTitle} » par ${event.correctArtist}`;
-			let winnerInfo: string | undefined = undefined;
-
-			// Add winner information if available
+			// Show winner toast if someone won
 			if (event.winners && event.winners.length > 0) {
 				const winner = event.winners[0]; // Top winner
 				const isMe = winner.playerId === player.id;
 				const winnerName = isMe ? 'Toi' : winner.playerName;
-				winnerInfo = `🏆 ${winnerName} +${winner.pointsEarned}`;
+				feedbackMessage = {
+					type: 'success',
+					text: `🏆 ${winnerName} +${winner.pointsEarned}`
+				};
+			} else {
+				feedbackMessage = null;
 			}
-
-			feedbackMessage = {
-				type: 'info',
-				text: answerText,
-				winnerText: winnerInfo
-			};
 
 			// Clear after 4 seconds (song will start new one after 5s delay on server)
 			feedbackTimeout = window.setTimeout(() => {
@@ -753,8 +750,14 @@
 
 	<!-- Answer Reveal State -->
 	{#if gameState.status === 'answer_reveal'}
-		<div class="game-status">
-			<p class="status-text info">👀 Réponse affichée ci-dessus</p>
+		<div class="answer-reveal">
+			{#if gameState.albumArt}
+				<img src={gameState.albumArt} alt="Album cover" class="album-art" />
+			{/if}
+			<div class="answer-info">
+				<p class="answer-title">{gameState.correctTitle}</p>
+				<p class="answer-artist">{gameState.correctArtist}</p>
+			</div>
 		</div>
 	{/if}
 
@@ -1099,6 +1102,44 @@
 
 	@keyframes spin {
 		to { transform: rotate(360deg); }
+	}
+
+	/* Answer Reveal */
+	.answer-reveal {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		text-align: center;
+		padding: 1rem;
+	}
+
+	.album-art {
+		width: 180px;
+		height: 180px;
+		border-radius: 16px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+		object-fit: cover;
+	}
+
+	.answer-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.answer-title {
+		font-size: 1.4rem;
+		font-weight: 700;
+		color: var(--aq-color-deep);
+		margin: 0;
+	}
+
+	.answer-artist {
+		font-size: 1.1rem;
+		font-weight: 500;
+		color: var(--aq-color-muted);
+		margin: 0;
 	}
 
 </style>

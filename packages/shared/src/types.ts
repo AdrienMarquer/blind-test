@@ -180,6 +180,7 @@ export interface Song {
   // Source tracking
   spotifyId?: string;          // Spotify track ID
   youtubeId?: string;          // YouTube video ID
+  albumArt?: string;           // Album cover URL (from Spotify)
   source: string;              // 'upload' | 'spotify-youtube' | 'manual'
 
   // Playback configuration

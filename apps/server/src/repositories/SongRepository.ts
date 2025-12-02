@@ -54,6 +54,7 @@ export class SongRepository implements Repository<Song> {
       niche: dbSong.niche,
       spotifyId: dbSong.spotifyId || undefined,
       youtubeId: dbSong.youtubeId || undefined,
+      albumArt: dbSong.albumArt || undefined,
       source: dbSong.source,
     };
   }

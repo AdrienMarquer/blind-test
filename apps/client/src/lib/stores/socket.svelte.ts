@@ -20,6 +20,7 @@ export class GameEvents {
     songIndex: number;
     correctTitle: string;
     correctArtist: string;
+    albumArt?: string;
     winners?: Array<{
       playerId: string;
       playerName: string;
