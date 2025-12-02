@@ -202,8 +202,8 @@
 </div>
 
 {#if showDiscoveryResult && discoveredMetadata}
-	<div class="modal-overlay" onclick={rejectDiscoveredMetadata} role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && rejectDiscoveredMetadata()}>
-		<div class="discovery-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+	<div class="modal-overlay" onclick={rejectDiscoveredMetadata} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Escape' || e.key === 'Enter') && rejectDiscoveredMetadata()}>
+		<div class="discovery-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
 			<h2>🔍 Métadonnées découvertes</h2>
 
 			<div class="confidence-badge" style="background: {getConfidenceColor(discoveredMetadata.enriched.confidence)}20; color: {getConfidenceColor(discoveredMetadata.enriched.confidence)}">

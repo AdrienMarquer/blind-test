@@ -24,9 +24,10 @@ function sendMessage(ws: ServerWebSocket<any>, message: ServerMessage) {
   ws.send(JSON.stringify(message));
 }
 
-export function handleWebSocket(ws: ServerWebSocket<{ roomId: string; playerId?: string }>) {
+export async function handleWebSocket(ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>) {
   // Extract roomId from ws.data which contains the route params
   const roomId = ws.data?.roomId;
+  const playerId = ws.data?.playerId;
 
   if (!roomId) {
     wsLogger.error('WebSocket connection missing roomId');
@@ -47,13 +48,18 @@ export function handleWebSocket(ws: ServerWebSocket<{ roomId: string; playerId?:
   }
   roomConnections.get(roomId)!.add(ws);
 
-  wsLogger.info('Client connected', { roomId });
+  wsLogger.info('Client connected', { roomId, playerId: playerId || 'new' });
 
   // Send typed ServerMessage
   sendMessage(ws, {
     type: 'connected',
     data: { roomId }
   });
+
+  // If playerId is provided, try to reconnect the player automatically
+  if (playerId) {
+    await handlePlayerReconnect(ws, roomId, playerId);
+  }
 }
 
 export function handleMessage(
@@ -339,6 +345,75 @@ async function handlePlayerDisconnect(roomId: string, playerId: string) {
     }
   } catch (error) {
     wsLogger.error('Failed to handle disconnect', error, { roomId, playerId });
+  }
+}
+
+/**
+ * Handle player reconnection
+ * Called when a WebSocket connection includes a playerId (returning player)
+ */
+async function handlePlayerReconnect(
+  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  roomId: string,
+  playerId: string
+) {
+  try {
+    // Check if player exists and belongs to this room
+    const player = await playerRepository.findById(playerId);
+
+    if (!player) {
+      wsLogger.info('Reconnect failed - player not found', { roomId, playerId });
+      return; // Player will need to join as new player
+    }
+
+    if (player.roomId !== roomId) {
+      wsLogger.info('Reconnect failed - player belongs to different room', {
+        roomId,
+        playerId,
+        actualRoomId: player.roomId
+      });
+      return;
+    }
+
+    // Mark player as connected
+    await playerRepository.update(playerId, { connected: true });
+
+    // Store player ID in WebSocket data
+    ws.data.playerId = playerId;
+
+    wsLogger.info('Player reconnected', {
+      roomId,
+      playerId,
+      playerName: player.name,
+      wasConnected: player.connected
+    });
+
+    // Get updated room and player info
+    const room = await roomRepository.findById(roomId);
+    const updatedPlayer = await playerRepository.findById(playerId);
+
+    if (!room || !updatedPlayer) {
+      wsLogger.error('Failed to get room or player after reconnect', { roomId, playerId });
+      return;
+    }
+
+    // Send confirmation to reconnecting player
+    sendMessage(ws, {
+      type: 'player:joined',
+      data: { player: updatedPlayer, room }
+    });
+
+    // Broadcast reconnection to others in the room
+    broadcastToRoom(roomId, {
+      type: 'player:reconnected',
+      data: {
+        playerId: player.id,
+        playerName: player.name
+      }
+    }, ws);
+
+  } catch (error) {
+    wsLogger.error('Failed to handle reconnect', error, { roomId, playerId });
   }
 }
 

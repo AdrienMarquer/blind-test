@@ -85,10 +85,11 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 0.75rem 1rem;
+		gap: 0.5rem;
+		padding: 0.75rem 0.75rem;
 		border-radius: 12px;
 		background: rgba(18, 43, 59, 0.03);
+		min-width: 0; /* Allow flex children to shrink below content size */
 	}
 
 	.row.top3 {
@@ -96,10 +97,12 @@
 	}
 
 	.rank {
-		min-width: 2.5rem;
+		min-width: 2rem;
+		flex-shrink: 0;
 		font-size: 1.2rem;
 		font-weight: 700;
 		color: var(--aq-color-muted);
+		text-align: center;
 	}
 
 	.row.top3 .rank {
@@ -108,19 +111,28 @@
 
 	.name {
 		flex: 1;
+		min-width: 0; /* Allow text truncation */
 		font-weight: 600;
 		color: var(--aq-color-deep);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.score {
+		flex-shrink: 0;
 		font-weight: 700;
 		color: var(--aq-color-primary);
+		white-space: nowrap;
 	}
 
 	.stats {
 		font-size: 0.8rem;
 		color: var(--aq-color-muted);
-		padding: 0 1rem 0.5rem 4.25rem;
+		padding: 0 0.75rem 0.5rem 3.25rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.restart-btn {
@@ -140,5 +152,43 @@
 	.restart-btn:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 6px 20px rgba(239, 76, 131, 0.3);
+	}
+
+	/* Mobile responsive */
+	@media (max-width: 400px) {
+		.card {
+			padding: 1.5rem 1rem;
+		}
+
+		h1 {
+			font-size: 1.5rem;
+		}
+
+		.row {
+			gap: 0.4rem;
+			padding: 0.6rem 0.5rem;
+		}
+
+		.rank {
+			min-width: 1.8rem;
+			font-size: 1rem;
+		}
+
+		.row.top3 .rank {
+			font-size: 1.2rem;
+		}
+
+		.name {
+			font-size: 0.95rem;
+		}
+
+		.score {
+			font-size: 0.9rem;
+		}
+
+		.stats {
+			padding-left: 2.7rem;
+			font-size: 0.75rem;
+		}
 	}
 </style>

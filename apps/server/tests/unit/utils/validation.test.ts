@@ -18,9 +18,18 @@ describe('validatePlayerName', () => {
     expect(validatePlayerName('Мария')).toBe(true)
   })
 
-  test('rejects invalid characters', () => {
-    expect(validatePlayerName('Player!')).toBe(false)
-    expect(validatePlayerName('Name@')).toBe(false)
+  test('accepts special characters (permissive validation)', () => {
+    expect(validatePlayerName('Player!')).toBe(true)
+    expect(validatePlayerName('Name@')).toBe(true)
+    expect(validatePlayerName('DJ_Cool')).toBe(true)
+    expect(validatePlayerName('🎵 Music 🎵')).toBe(true)
+    expect(validatePlayerName('Winner!!!')).toBe(true)
+  })
+
+  test('rejects angle brackets (XSS prevention)', () => {
+    expect(validatePlayerName('<script>')).toBe(false)
+    expect(validatePlayerName('Player<')).toBe(false)
+    expect(validatePlayerName('Name>')).toBe(false)
   })
 
   test('enforces length constraints', () => {

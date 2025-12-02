@@ -1,16 +1,22 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	let {
 		title = null,
 		subtitle = null,
 		icon = null,
 		padded = true,
-		elevation = 'soft'
+		elevation = 'soft',
+		actions,
+		children
 	}: {
 		title?: string | null;
 		subtitle?: string | null;
 		icon?: string | null;
 		padded?: boolean;
 		elevation?: 'soft' | 'bold';
+		actions?: Snippet;
+		children?: Snippet;
 	} = $props();
 </script>
 
@@ -30,11 +36,15 @@
 					{/if}
 				</div>
 			</div>
-			<slot name="actions" />
+			{#if actions}
+				{@render actions()}
+			{/if}
 		</header>
 	{/if}
 	<div class="content">
-		<slot />
+		{#if children}
+			{@render children()}
+		{/if}
 	</div>
 </div>
 

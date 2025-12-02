@@ -76,12 +76,17 @@ export class RoomSocket {
   // Private WebSocket - components can't access directly
   private socket: WebSocket | null = $state(null);
   private connectionTimeout: number | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectTimeout: number | null = null;
+  private isManualDisconnect = false;
 
   // Public reactive state (Svelte stores for easy subscription)
   connected: Writable<boolean> = writable(false);
   room: Writable<Room | null> = writable(null);
   players: Writable<Player[]> = writable([]);
   error: Writable<string | null> = writable(null);
+  reconnecting: Writable<boolean> = writable(false);
 
   // Reactive event stream
   events = new GameEvents();
@@ -110,6 +115,8 @@ export class RoomSocket {
       return;
     }
 
+    this.isManualDisconnect = false;
+
     // Build WebSocket URL with optional auth query parameters
     let wsUrl = `${SERVER_URL}/ws/rooms/${this.roomId}`;
     const params = new URLSearchParams();
@@ -136,6 +143,8 @@ export class RoomSocket {
         this.error.set('Connection timeout - server may be unavailable');
         this.socket.close();
         this.socket = null;
+        // Try to reconnect on timeout
+        this.scheduleReconnect();
       }
     }, 5000);
 
@@ -156,6 +165,9 @@ export class RoomSocket {
         this.connectionTimeout = null;
       }
 
+      // Reset reconnection state on successful connection
+      this.reconnectAttempts = 0;
+      this.reconnecting.set(false);
       this.connected.set(true);
       this.error.set(null);
 
@@ -170,10 +182,12 @@ export class RoomSocket {
       }
 
       this.connected.set(false);
-      console.log(`[WebSocket] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+      console.log(`[WebSocket] Disconnected. Code: ${event.code}, Reason: ${event.reason}, Manual: ${this.isManualDisconnect}`);
 
-      if (event.code !== 1000 && event.code !== 1005) {
-        this.error.set(event.reason || 'Connection closed unexpectedly');
+      // Don't reconnect on clean close (1000) or manual disconnect
+      if (event.code !== 1000 && !this.isManualDisconnect) {
+        this.error.set(event.reason || 'Connection perdue');
+        this.scheduleReconnect();
       }
     };
 
@@ -184,8 +198,13 @@ export class RoomSocket {
       }
 
       this.connected.set(false);
-      this.error.set('Connection error - check if server is running');
+      this.error.set('Erreur de connexion');
       console.error('[WebSocket] Connection failed');
+
+      // Schedule reconnect on error
+      if (!this.isManualDisconnect) {
+        this.scheduleReconnect();
+      }
     };
 
     this.socket.onmessage = (event) => {
@@ -444,14 +463,62 @@ export class RoomSocket {
   }
 
   // ========================================================================
+  // Reconnection
+  // ========================================================================
+
+  /**
+   * Schedule a reconnection attempt with exponential backoff
+   */
+  private scheduleReconnect() {
+    // Don't reconnect if manually disconnected or max attempts reached
+    if (this.isManualDisconnect) {
+      console.log('[WebSocket] Manual disconnect - not reconnecting');
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('[WebSocket] Max reconnection attempts reached');
+      this.error.set('Impossible de se reconnecter. Rafraîchis la page.');
+      this.reconnecting.set(false);
+      return;
+    }
+
+    // Clear any existing reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    this.reconnectAttempts++;
+    this.reconnecting.set(true);
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 16000);
+    console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    this.reconnectTimeout = window.setTimeout(() => {
+      console.log(`[WebSocket] Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+      this.connect();
+    }, delay);
+  }
+
+  // ========================================================================
   // Cleanup
   // ========================================================================
 
   disconnect() {
+    this.isManualDisconnect = true;
+
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
       this.connectionTimeout = null;
     }
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
+    this.reconnecting.set(false);
 
     if (this.socket) {
       this.socket.close();

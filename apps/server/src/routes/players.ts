@@ -25,7 +25,7 @@ export const playerRoutes = new Elysia({ prefix: '/api/rooms/:roomId/players' })
     }
 
     if (!validatePlayerName(body.name)) {
-      return error(400, { error: 'Invalid player name. Use 1-20 characters with letters (including accents), numbers, spaces, apostrophes or hyphens.' });
+      return error(400, { error: 'Pseudo invalide. Utilise 1-20 caractères (pas de < ou >).' });
     }
 
     // Check if room is full

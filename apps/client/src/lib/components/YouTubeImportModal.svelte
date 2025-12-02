@@ -170,8 +170,8 @@
 	}
 </script>
 
-<div class="modal-overlay" onclick={onCancel}>
-	<div class="modal-content" onclick={(e) => e.stopPropagation()}>
+<div class="modal-overlay" onclick={onCancel} onkeydown={(e) => e.key === 'Escape' && onCancel()} role="button" tabindex="0">
+	<div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
 		<div class="modal-header">
 			<h2>🎬 Importer depuis YouTube</h2>
 			<button class="close-btn" onclick={onCancel} aria-label="Fermer">×</button>

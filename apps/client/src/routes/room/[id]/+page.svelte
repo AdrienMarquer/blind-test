@@ -4,6 +4,7 @@
 	import { api } from '$lib/api';
 	import { createRoomSocket } from '$lib/stores/socket.svelte';
 	import type { Room, Player } from '@blind-test/shared';
+	import { validatePlayerName, PLAYER_CONFIG } from '@blind-test/shared';
 	import MasterGameControl from '$lib/components/MasterGameControl.svelte';
 	import PlayerGameInterface from '$lib/components/PlayerGameInterface.svelte';
 	import GameConfig from '$lib/components/room/GameConfig.svelte';
@@ -20,6 +21,7 @@
 
 	let roomSocket = $state<ReturnType<typeof createRoomSocket> | null>(null);
 	let playerName = $state('');
+	let playerNameError = $state<string | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let joining = $state(false);
@@ -66,6 +68,7 @@
 	let socketError = $state<string | null>(null);
 	let wsRoom = $state<Room | null>(null);
 	let players = $state<Player[]>([]);
+	let reconnecting = $state(false);
 
 	// Derived room state (prefer WebSocket room if available, otherwise use initialRoom)
 	const room = $derived(wsRoom ?? initialRoom);
@@ -77,6 +80,7 @@
 			socketError = null;
 			wsRoom = null;
 			players = [];
+			reconnecting = false;
 			return;
 		}
 
@@ -85,12 +89,14 @@
 		const unsubError = roomSocket.error.subscribe(val => { socketError = val; });
 		const unsubRoom = roomSocket.room.subscribe(val => { wsRoom = val; });
 		const unsubPlayers = roomSocket.players.subscribe(val => { players = val; });
+		const unsubReconnecting = roomSocket.reconnecting.subscribe(val => { reconnecting = val; });
 
 		return () => {
 			unsubConnected();
 			unsubError();
 			unsubRoom();
 			unsubPlayers();
+			unsubReconnecting();
 		};
 	});
 
@@ -203,12 +209,38 @@
 		}
 	}
 
+	function validatePlayerNameInput(name: string): string | null {
+		const trimmed = name.trim();
+		if (!trimmed) return null; // No error for empty (just disable button)
+		if (trimmed.length > PLAYER_CONFIG.NAME_MAX_LENGTH) {
+			return `Max ${PLAYER_CONFIG.NAME_MAX_LENGTH} caractères`;
+		}
+		if (!validatePlayerName(trimmed)) {
+			return 'Les caractères < et > ne sont pas autorisés';
+		}
+		return null;
+	}
+
+	// Validate player name on change
+	$effect(() => {
+		playerNameError = validatePlayerNameInput(playerName);
+	});
+
 	async function joinRoom() {
-		if (!playerName.trim() || !room || !roomId) return;
+		const trimmedName = playerName.trim();
+		if (!trimmedName || !room || !roomId) return;
+
+		// Final validation before submit
+		const validationError = validatePlayerNameInput(trimmedName);
+		if (validationError) {
+			playerNameError = validationError;
+			return;
+		}
 
 		try {
 			joining = true;
 			error = null;
+			playerNameError = null;
 
 			const response = await roomsApi[roomId].players.post({
 				name: playerName.trim()
@@ -549,6 +581,8 @@
 			<button type="button" class="nav-link" onclick={() => (window.location.href = '/')}>&larr; Toutes les salles</button>
 			{#if connected}
 				<span class="connection-status ok">● Connecté</span>
+			{:else if reconnecting}
+				<span class="connection-status reconnecting">● Reconnexion...</span>
 			{:else if socketError}
 				<span class="connection-status error">● {socketError}</span>
 			{:else}
@@ -655,8 +689,14 @@
 					{:else}
 						<Card title="Rejoins la salle" subtitle="Choisis un pseudo fun" icon="🙋">
 							<form class="join-form" onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
-								<InputField label="Pseudo" placeholder="DJ Poppins" bind:value={playerName} required />
-								<Button type="submit" variant="primary" fullWidth disabled={!playerName.trim()} loading={joining}>
+								<InputField
+									label="Pseudo"
+									placeholder="DJ Poppins 🎵"
+									bind:value={playerName}
+									error={playerNameError}
+									required
+								/>
+								<Button type="submit" variant="primary" fullWidth disabled={!playerName.trim() || !!playerNameError} loading={joining}>
 									{joining ? 'Connexion...' : 'Rejoindre la partie'}
 								</Button>
 							</form>
@@ -749,6 +789,7 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
+		margin-bottom: 1rem;
 	}
 
 	.nav-link {
@@ -777,6 +818,16 @@
 
 	.connection-status.error {
 		color: #ef4c83;
+	}
+
+	.connection-status.reconnecting {
+		color: #f8c027;
+		animation: pulse-reconnect 1.5s ease-in-out infinite;
+	}
+
+	@keyframes pulse-reconnect {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
 	}
 
 	.loading-card,

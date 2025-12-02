@@ -1,12 +1,16 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	type BadgeTone = 'primary' | 'success' | 'warning' | 'neutral';
 
 	let {
 		tone = 'primary',
-		icon = null
+		icon = null,
+		children
 	}: {
 		tone?: BadgeTone;
 		icon?: string | null;
+		children?: Snippet;
 	} = $props();
 </script>
 
@@ -14,7 +18,9 @@
 	{#if icon}
 		<span class="icon" aria-hidden="true">{icon}</span>
 	{/if}
-	<slot />
+	{#if children}
+		{@render children()}
+	{/if}
 </span>
 
 <style>

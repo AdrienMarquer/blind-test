@@ -62,6 +62,7 @@
 	// ========================================================================
 
 	let currentSongIndex = $state(0);
+	let totalSongsInRound = $state(0);
 	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'>('buzz_and_choice');
 	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
 	let countdownInterval: number | null = null;
@@ -127,6 +128,15 @@
 	// Player score
 	let score = $state(player.score);
 
+	// Connection state for reconnection indicator
+	let isReconnecting = $state(false);
+	$effect(() => {
+		const unsubscribe = socket.reconnecting.subscribe((val) => {
+			isReconnecting = val;
+		});
+		return unsubscribe;
+	});
+
 	// Feedback messages
 	let feedbackMessage = $state<{ type: 'success' | 'error' | 'info' | 'warning'; text: string; winnerText?: string } | null>(null);
 	let feedbackTimeout: number | null = null; // NOT a $state - just a regular variable for timer ID
@@ -183,8 +193,9 @@
 				playerId: player.id
 			});
 
-			// Update mode type for the new round
+			// Update mode type and song count for the new round
 			currentModeType = event.modeType as 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
+			totalSongsInRound = event.songCount;
 
 			// Reset to idle state between rounds
 			gameState = { status: 'idle' };
@@ -399,16 +410,14 @@
 
 				if (event.isCorrect) {
 					score += event.pointsAwarded;
-					const answerTypeText = formatAnswerLabel(event.answerType);
 					feedbackMessage = {
 						type: 'success',
-						text: `✅ Bonne réponse (${answerTypeText}) ! +${event.pointsAwarded} point${event.pointsAwarded !== 1 ? 's' : ''}`
+						text: `+${event.pointsAwarded}`
 					};
 				} else {
-					const answerTypeText = formatAnswerLabel(event.answerType);
 					feedbackMessage = {
 						type: 'error',
-						text: `❌ Mauvaise réponse (${answerTypeText}). ${event.lockOutPlayer ? 'Tu es bloqué.' : ''}`
+						text: event.lockOutPlayer ? '❌' : '❌'
 					};
 				}
 
@@ -532,10 +541,7 @@
 				const winner = event.winners[0]; // Top winner
 				const isMe = winner.playerId === player.id;
 				const winnerName = isMe ? 'Toi' : winner.playerName;
-				const answersText = winner.answersCorrect.map((type: 'title' | 'artist') =>
-					type === 'title' ? 'titre' : 'artiste'
-				).join(' + ');
-				winnerInfo = `🏆 ${winnerName} (+${winner.pointsEarned} pt${winner.pointsEarned !== 1 ? 's' : ''}, ${answersText})`;
+				winnerInfo = `🏆 ${winnerName} +${winner.pointsEarned}`;
 			}
 
 			feedbackMessage = {
@@ -610,6 +616,16 @@
 </script>
 
 <div class="player-interface" class:loading-active={gameState.status === 'loading'}>
+	<!-- Reconnection Overlay -->
+	{#if isReconnecting}
+		<div class="reconnection-overlay">
+			<div class="reconnection-content">
+				<div class="reconnection-spinner"></div>
+				<p>Reconnexion en cours...</p>
+			</div>
+		</div>
+	{/if}
+
 	<!-- ========================================================================
 	     State-Based Rendering: Each state renders its own UI
 	     ======================================================================== -->
@@ -617,6 +633,11 @@
 	<!-- Loading State -->
 	{#if gameState.status === 'loading'}
 		<div class="loading-screen">
+			{#if totalSongsInRound > 0}
+				<div class="song-progress-indicator">
+					{currentSongIndex + 2} / {totalSongsInRound}
+				</div>
+			{/if}
 			<div class="loading-content">
 				<div class="countdown-circle">
 					<span class="countdown-number">{gameState.countdown}</span>
@@ -656,9 +677,9 @@
 		</div>
 	{/if}
 
-	<!-- Feedback Message (always visible when set) -->
+	<!-- Feedback Message Toast (fixed position - no layout shift) -->
 	{#if feedbackMessage}
-		<div class="feedback-message {feedbackMessage.type}">
+		<div class="feedback-toast {feedbackMessage.type}">
 			<div class="answer-text">{feedbackMessage.text}</div>
 			{#if feedbackMessage.winnerText}
 				<div class="winner-text">{feedbackMessage.winnerText}</div>
@@ -780,20 +801,41 @@
 		text-align: center;
 	}
 
-	.feedback-message {
-		padding: 0.85rem 1rem;
+	/* Toast notification (fixed position - no layout shift) */
+	.feedback-toast {
+		position: fixed;
+		top: 1rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 1100;
+		max-width: 90%;
+		min-width: 280px;
+		padding: 0.85rem 1.25rem;
 		border-radius: 16px;
 		font-weight: 600;
 		text-align: center;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+		animation: toast-slide-in 0.3s ease-out;
 	}
 
-	.feedback-message.success { background: rgba(248,192,39,0.2); color: var(--aq-color-secondary); }
-	.feedback-message.error { background: rgba(239,76,131,0.15); color: var(--aq-color-primary); }
-	.feedback-message.info { background: rgba(18,43,59,0.08); color: var(--aq-color-deep); }
-	.feedback-message.warning { background: rgba(255,140,0,0.15); color: #d35400; }
+	@keyframes toast-slide-in {
+		from {
+			opacity: 0;
+			transform: translateX(-50%) translateY(-20px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(-50%) translateY(0);
+		}
+	}
+
+	.feedback-toast.success { background: rgba(248, 192, 39, 0.95); color: var(--aq-color-deep); }
+	.feedback-toast.error { background: rgba(239, 76, 131, 0.95); color: #fff; }
+	.feedback-toast.info { background: rgba(255, 255, 255, 0.98); color: var(--aq-color-deep); }
+	.feedback-toast.warning { background: rgba(255, 140, 0, 0.95); color: #fff; }
 
 	.answer-text {
 		font-size: 0.95rem;
@@ -803,7 +845,7 @@
 	.winner-text {
 		font-size: 1.35rem;
 		font-weight: 700;
-		color: var(--aq-color-secondary);
+		color: var(--aq-color-deep);
 		margin-top: 0.25rem;
 	}
 
@@ -940,6 +982,21 @@
 		border: 2px solid rgba(255, 255, 255, 0.3);
 	}
 
+	/* Song progress indicator (top-left in loading screen) */
+	.song-progress-indicator {
+		position: absolute;
+		top: 1rem;
+		left: 1rem;
+		background: rgba(255, 255, 255, 0.2);
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		border-radius: 12px;
+		padding: 0.5rem 1rem;
+		font-size: 1rem;
+		font-weight: 700;
+		color: #fff;
+		backdrop-filter: blur(4px);
+	}
+
 	/* Loading Leaderboard */
 	.loading-leaderboard {
 		background: rgba(255, 255, 255, 0.15);
@@ -1002,6 +1059,46 @@
 		font-size: 0.95rem;
 		font-weight: 700;
 		color: #fff;
+	}
+
+	/* Reconnection Overlay */
+	.reconnection-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(18, 43, 59, 0.9);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		animation: fadeIn 0.2s ease;
+	}
+
+	.reconnection-content {
+		text-align: center;
+		color: #fff;
+	}
+
+	.reconnection-content p {
+		margin-top: 1rem;
+		font-size: 1.1rem;
+		font-weight: 600;
+	}
+
+	.reconnection-spinner {
+		width: 50px;
+		height: 50px;
+		border: 4px solid rgba(255, 255, 255, 0.2);
+		border-top-color: var(--aq-color-primary);
+		border-radius: 50%;
+		margin: 0 auto;
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 </style>

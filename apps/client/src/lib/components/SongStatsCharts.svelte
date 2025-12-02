@@ -53,8 +53,8 @@
 	let hasLoadedOnce = $state(false);
 
 	// Canvas refs
-	let genreCanvas: HTMLCanvasElement;
-	let decadeCanvas: HTMLCanvasElement;
+	let genreCanvas = $state<HTMLCanvasElement | null>(null);
+	let decadeCanvas = $state<HTMLCanvasElement | null>(null);
 
 	// Chart instances
 	let charts: Chart[] = [];
