@@ -353,6 +353,15 @@ class DatabaseService {
     return result.length > 0;
   }
 
+  async findByFilePath(filePath: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(schema.songs)
+      .where(sql`${schema.songs.filePath} = ${filePath}`)
+      .limit(1);
+    return result.length > 0;
+  }
+
   async insertSong(song: EnrichedSong): Promise<string | null> {
     // Skip if missing required fields
     if (!song.filePath || !song.fileName || !song.duration || !song.fileSize) {
@@ -360,10 +369,17 @@ class DatabaseService {
       return null;
     }
 
-    // Check if already exists
-    const exists = await this.findByTitleAndArtist(song.title, song.artist);
-    if (exists) {
-      console.log('     ⏭️ Already in database');
+    // Check if already exists by title/artist
+    const existsByMeta = await this.findByTitleAndArtist(song.title, song.artist);
+    if (existsByMeta) {
+      console.log('     ⏭️ Already in database (matching title/artist)');
+      return null;
+    }
+
+    // Check if file path already exists (unique constraint)
+    const existsByPath = await this.findByFilePath(song.filePath);
+    if (existsByPath) {
+      console.log('     ⏭️ Already in database (matching file path)');
       return null;
     }
 
