@@ -75,6 +75,7 @@ interface EnrichedSong {
 
   // From YouTube
   youtubeId?: string;
+  youtubeTitle?: string;
 
   // File info (after download)
   filePath?: string;
@@ -665,6 +666,7 @@ async function main() {
 
       if (youtubeData) {
         song.youtubeId = youtubeData.videoId;
+        song.youtubeTitle = youtubeData.title;
         song.status = 'youtube_found';
         console.log(`     ✓ Found: ${youtubeData.title}`);
 

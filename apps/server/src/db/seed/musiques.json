@@ -14317,26 +14317,6 @@
     "clipDuration": 60
   },
   {
-    "title": "Les rois du monde",
-    "artist": "Roméo & Juliette",
-    "lang": "fr",
-    "status": "downloaded",
-    "processedAt": "2025-12-02T17:10:12.363Z",
-    "spotifyId": "2QxpVhguEv67Lwlf3wwltb",
-    "album": "Roméo Et Juliette, Les enfants de Vérone",
-    "year": 2009,
-    "genre": "Variété française",
-    "duration": 205,
-    "albumArt": "https://i.scdn.co/image/ab67616d0000b273ca621f5e09f1af317fd4e84a",
-    "youtubeId": "-dhTly5e6tc",
-    "filePath": "uploads/romeo_juliette_-_les_rois_du_monde.mp3",
-    "fileName": "romeo_juliette_-_les_rois_du_monde.mp3",
-    "fileSize": 932684,
-    "format": "mp3",
-    "clipStart": 0,
-    "clipDuration": 60
-  },
-  {
     "title": "Vivre",
     "artist": "Notre-Dame de Paris",
     "lang": "en",
