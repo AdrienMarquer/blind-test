@@ -13,6 +13,7 @@
  *   --skip=N           Skip first N songs
  *   --no-download      Fetch metadata only, skip YouTube download
  *   --retry-failed     Only retry entries that previously failed
+ *   --fix-album-art    Re-fetch albumArt for songs missing it in DB
  */
 
 import { SpotifyApi } from '@spotify/web-api-ts-sdk';
@@ -23,7 +24,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { db, schema, runMigrations } from '../index';
 import { generateId } from '@blind-test/shared';
-import { sql } from 'drizzle-orm';
+import { sql, isNull, eq } from 'drizzle-orm';
 import { GenreMapper } from '../../services/GenreMapper';
 
 const execAsync = promisify(exec);
@@ -199,6 +200,34 @@ class SpotifyClient {
         duration: Math.floor(track.duration_ms / 1000),
         albumArt: track.album.images[0]?.url,
       };
+    } catch (error) {
+      console.error(`  ⚠️ Spotify search failed: ${error}`);
+      return null;
+    }
+  }
+
+  async getAlbumArt(title: string, artist: string): Promise<string | null> {
+    if (!this.api) return null;
+
+    try {
+      const query = `track:${title} artist:${artist}`;
+      const results = await this.api.search(query, ['track'], undefined, 10);
+
+      if (results.tracks.items.length === 0) {
+        const fallbackQuery = `${artist} ${title}`;
+        const fallbackResults = await this.api.search(fallbackQuery, ['track'], undefined, 5);
+        if (fallbackResults.tracks.items.length === 0) {
+          return null;
+        }
+        results.tracks.items = fallbackResults.tracks.items;
+      }
+
+      const normalizedArtist = artist.toLowerCase();
+      const track = results.tracks.items.find(t =>
+        t.artists.some(a => a.name.toLowerCase() === normalizedArtist)
+      ) || results.tracks.items[0];
+
+      return track.album.images[0]?.url || null;
     } catch (error) {
       console.error(`  ⚠️ Spotify search failed: ${error}`);
       return null;
@@ -413,6 +442,24 @@ class DatabaseService {
     console.log(`     ✅ Inserted into database (id: ${id})`);
     return id;
   }
+
+  async getSongsWithoutAlbumArt(): Promise<{ id: string; title: string; artist: string }[]> {
+    return await db
+      .select({
+        id: schema.songs.id,
+        title: schema.songs.title,
+        artist: schema.songs.artist,
+      })
+      .from(schema.songs)
+      .where(isNull(schema.songs.albumArt));
+  }
+
+  async updateAlbumArt(id: string, albumArt: string): Promise<void> {
+    await db
+      .update(schema.songs)
+      .set({ albumArt })
+      .where(eq(schema.songs.id, id));
+  }
 }
 
 // ============================================================================
@@ -456,6 +503,7 @@ async function main() {
   const dryRun = args.includes('--dry-run');
   const noDownload = args.includes('--no-download');
   const retryFailed = args.includes('--retry-failed');
+  const fixAlbumArt = args.includes('--fix-album-art');
 
   let limit = Infinity;
   let skip = 0;
@@ -471,6 +519,7 @@ async function main() {
 
   if (dryRun) console.log('🔍 Dry run mode - no files will be downloaded\n');
   if (noDownload) console.log('📋 Metadata only mode - skipping YouTube downloads\n');
+  if (fixAlbumArt) console.log('🎨 Fix album art mode - re-fetching missing albumArt\n');
 
   // Initialize services
   const spotify = new SpotifyClient();
@@ -483,8 +532,58 @@ async function main() {
   }
 
   // Initialize database (skip in dry-run mode)
-  if (!dryRun && !noDownload) {
+  if (!dryRun && !noDownload || fixAlbumArt) {
     await database.initialize();
+  }
+
+  // Handle --fix-album-art mode
+  if (fixAlbumArt) {
+    if (!spotifyReady) {
+      console.error('❌ Cannot fix album art without Spotify API');
+      process.exit(1);
+    }
+
+    const songsWithoutArt = await database.getSongsWithoutAlbumArt();
+    console.log(`📊 Found ${songsWithoutArt.length} songs without album art\n`);
+
+    if (songsWithoutArt.length === 0) {
+      console.log('✅ All songs have album art!');
+      return;
+    }
+
+    let updated = 0;
+    let notFound = 0;
+
+    for (let i = 0; i < songsWithoutArt.length; i++) {
+      const song = songsWithoutArt[i];
+      console.log(`[${i + 1}/${songsWithoutArt.length}] ${song.artist} - ${song.title}`);
+
+      const albumArt = await spotify.getAlbumArt(song.title, song.artist);
+
+      if (albumArt) {
+        if (!dryRun) {
+          await database.updateAlbumArt(song.id, albumArt);
+        }
+        console.log(`  ✅ ${dryRun ? 'Would update' : 'Updated'}`);
+        updated++;
+      } else {
+        console.log('  ❌ Not found on Spotify');
+        notFound++;
+      }
+
+      await sleep(CONFIG.spotifyDelay);
+    }
+
+    console.log('\n========================');
+    console.log('📊 Summary:');
+    console.log(`   Total processed: ${songsWithoutArt.length}`);
+    console.log(`   Updated: ${updated}`);
+    console.log(`   Not found: ${notFound}`);
+
+    if (dryRun) {
+      console.log('\n⚠️  Dry run - no changes were made.');
+    }
+    return;
   }
 
   // Load data
