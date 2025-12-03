@@ -67,6 +67,8 @@ export function createDefaultRound(modeType: GameModeType, mediaType: MediaType 
       songDuration: DEFAULT_SONG_DURATION,
       answerTimer: modeType === 'fast_buzz' ? 5 : 8,
       audioPlayback: 'master',
+      penaltyEnabled: false,
+      penaltyAmount: 1,
     },
   };
 

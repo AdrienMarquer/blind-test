@@ -173,6 +173,31 @@
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
 	}
+
+	function updatePenaltyEnabled(index: number, enabled: boolean) {
+		const updatedRounds = [...rounds];
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			params: {
+				...updatedRounds[index].params,
+				penaltyEnabled: enabled,
+				penaltyAmount: enabled ? (updatedRounds[index].params?.penaltyAmount || 1) : 0
+			}
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
+
+	function updatePenaltyAmount(index: number, amount: number) {
+		const validAmount = Math.max(1, Math.min(5, amount));
+		const updatedRounds = [...rounds];
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			params: { ...updatedRounds[index].params, penaltyAmount: validAmount }
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
 </script>
 
 <div class="round-builder">
@@ -257,6 +282,46 @@
 								+
 							</button>
 						</div>
+					</div>
+
+					<!-- Malus Configuration -->
+					<div class="field malus-field">
+						<label class="malus-toggle">
+							<input
+								type="checkbox"
+								checked={round.params?.penaltyEnabled || false}
+								onchange={(e) => updatePenaltyEnabled(index, e.currentTarget.checked)}
+							/>
+							<span>Activer le malus</span>
+						</label>
+						{#if round.params?.penaltyEnabled}
+							<div class="malus-amount">
+								<span class="malus-label">Points retirés</span>
+								<div class="malus-stepper">
+									<button
+										class="stepper-btn"
+										onclick={() => updatePenaltyAmount(index, (round.params?.penaltyAmount || 1) - 1)}
+										disabled={(round.params?.penaltyAmount || 1) <= 1}
+									>
+										−
+									</button>
+									<input
+										type="number"
+										min="1"
+										max="5"
+										value={round.params?.penaltyAmount || 1}
+										oninput={(e) => updatePenaltyAmount(index, parseInt(e.currentTarget.value) || 1)}
+									/>
+									<button
+										class="stepper-btn"
+										onclick={() => updatePenaltyAmount(index, (round.params?.penaltyAmount || 1) + 1)}
+										disabled={(round.params?.penaltyAmount || 1) >= 5}
+									>
+										+
+									</button>
+								</div>
+							</div>
+						{/if}
 					</div>
 
 					<!-- Filters Toggle (only for music) -->
@@ -705,6 +770,83 @@
 		height: 18px;
 		cursor: pointer;
 		accent-color: var(--aq-color-secondary);
+	}
+
+	/* Malus Configuration Styles */
+	.malus-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.malus-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.6rem 0.75rem;
+		background: rgba(239, 68, 68, 0.08);
+		border: 1px solid rgba(239, 68, 68, 0.15);
+		border-radius: 8px;
+		cursor: pointer;
+		font-size: 0.9rem;
+		color: var(--aq-color-deep);
+		transition: all 0.15s ease;
+	}
+
+	.malus-toggle:hover {
+		background: rgba(239, 68, 68, 0.12);
+	}
+
+	.malus-toggle:has(input:checked) {
+		background: rgba(239, 68, 68, 0.15);
+		border-color: rgba(239, 68, 68, 0.3);
+	}
+
+	.malus-toggle input {
+		width: 18px;
+		height: 18px;
+		cursor: pointer;
+		accent-color: rgb(239, 68, 68);
+	}
+
+	.malus-amount {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.5rem 0.75rem;
+		background: rgba(239, 68, 68, 0.04);
+		border-radius: 8px;
+		margin-left: 1.5rem;
+	}
+
+	.malus-label {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: rgba(18, 43, 59, 0.7);
+	}
+
+	.malus-stepper {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 8px;
+		padding: 0.2rem;
+	}
+
+	.malus-stepper input {
+		width: 40px;
+		padding: 0.3rem;
+		border: none;
+		background: transparent;
+		font-size: 0.95rem;
+		font-weight: 700;
+		text-align: center;
+		color: rgb(239, 68, 68);
+	}
+
+	.malus-stepper input:focus {
+		outline: none;
 	}
 
 	.genre-header {

@@ -133,6 +133,8 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
    */
   async handleAnswer(answer: Answer, song: RoundSong): Promise<AnswerResult> {
     const isCorrect = this.validateAnswer(answer, song.song);
+    // Use song params if available (set by GameService), otherwise fall back to mode defaults
+    const params = song.params ?? this.defaultParams;
 
     // Artist answer (first question)
     if (answer.type === 'artist') {
@@ -140,7 +142,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
         // Correct artist → award points, show title choices
         return {
           isCorrect: true,
-          pointsAwarded: this.defaultParams.pointsArtist!,
+          pointsAwarded: params.pointsArtist || 1,
           shouldShowTitleChoices: true,
           lockOutPlayer: false,
           message: 'Bonne réponse ! Devine maintenant le titre.',
@@ -149,7 +151,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
         // Wrong artist → lock out immediately, others can buzz
         return {
           isCorrect: false,
-          pointsAwarded: this.defaultParams.penaltyEnabled! ? this.defaultParams.penaltyAmount! : 0,
+          pointsAwarded: params.penaltyEnabled ? -(params.penaltyAmount || 0) : 0,
           shouldShowTitleChoices: false,
           lockOutPlayer: true,
           message: 'Mauvais artiste. Tu es éliminé.',
@@ -167,7 +169,7 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
         // Correct title AND artist was correct → award bonus point, song ends
         return {
           isCorrect: true,
-          pointsAwarded: this.defaultParams.pointsTitle!,
+          pointsAwarded: params.pointsTitle || 1,
           shouldShowTitleChoices: false,
           lockOutPlayer: false,
           message: 'Bon titre ! Point bonus gagné.',
@@ -233,8 +235,8 @@ export class BuzzAndChoiceMode extends BaseModeHandler {
     const isCorrect = this.validateAnswer(answer, song);
 
     if (!isCorrect) {
-      // Wrong answer
-      return params.penaltyEnabled ? (params.penaltyAmount || 0) : 0;
+      // Wrong answer - penalty must be negative
+      return params.penaltyEnabled ? -(params.penaltyAmount || 0) : 0;
     }
 
     // Correct answer
