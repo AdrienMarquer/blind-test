@@ -106,11 +106,6 @@
 		margin-bottom: 2rem;
 	}
 
-	.config-tabs h3 {
-		margin: 0 0 0.75rem 0;
-		color: var(--aq-color-deep);
-	}
-
 	.audio-section {
 		margin-bottom: 2rem;
 		padding: 1.25rem;

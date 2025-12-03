@@ -7,7 +7,8 @@ import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { staticPlugin } from '@elysiajs/static';
 import { runMigrations } from './db';
-import { handleWebSocket, handleMessage, handleClose } from './websocket/handler';
+import { handleWebSocket, handleMessage, handleClose, type RoomSocketData } from './websocket/handler';
+import type { ServerWebSocket } from 'bun';
 import { logger } from './utils/logger';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -108,12 +109,19 @@ const hasClientBuild = existsSync(clientBuildPath);
 const app = new Elysia()
   // Global error handler
   .onError(({ code, error, set }) => {
-    logger.error('Request error', { code, error: error.message, stack: error.stack });
+    const errorMessage = typeof (error as any)?.message === 'string'
+      ? (error as any).message
+      : 'Unknown error';
+    const errorStack = typeof (error as any)?.stack === 'string'
+      ? (error as any).stack
+      : undefined;
+
+    logger.error('Request error', { code, error: errorMessage, stack: errorStack });
 
     switch (code) {
       case 'VALIDATION':
         set.status = 400;
-        return { error: 'Validation failed', details: error.message };
+        return { error: 'Validation failed', details: errorMessage };
       case 'NOT_FOUND':
         set.status = 404;
         return { error: 'Resource not found' };
@@ -167,8 +175,9 @@ const app = new Elysia()
       playerId: t.Optional(t.String())
     }),
     open(ws) {
+      const socket = ws as unknown as ServerWebSocket<RoomSocketData>;
       // Extract roomId from route params
-      const roomId = ws.data?.params?.roomId;
+      const roomId = socket.data?.params?.roomId;
 
       if (!roomId) {
         wsLogger.error('WebSocket connection missing roomId');
@@ -177,16 +186,18 @@ const app = new Elysia()
       }
 
       // Store roomId and optional token/playerId in ws.data for access in message handlers
-      ws.data.roomId = roomId;
-      ws.data.token = ws.data?.query?.token;
-      ws.data.playerId = ws.data?.query?.playerId;
-      handleWebSocket(ws);
+      socket.data.roomId = roomId;
+      socket.data.token = socket.data?.query?.token;
+      socket.data.playerId = socket.data?.query?.playerId;
+      handleWebSocket(socket);
     },
     message(ws, message) {
-      handleMessage(ws, typeof message === 'string' ? message : JSON.stringify(message));
+      const socket = ws as unknown as ServerWebSocket<RoomSocketData>;
+      handleMessage(socket, typeof message === 'string' ? message : JSON.stringify(message));
     },
     close(ws) {
-      handleClose(ws);
+      const socket = ws as unknown as ServerWebSocket<RoomSocketData>;
+      handleClose(socket);
     }
   })
 

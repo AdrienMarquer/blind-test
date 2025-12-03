@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getApiUrl, getAdminHeaders } from '$lib/api';
 	import { songApi } from '$lib/api-helpers';
+	import type { SpotifyTrackMetadata } from '$lib/api-helpers';
 	// Note: getAdminHeaders is used for file upload (FormData) which Eden Treaty doesn't handle well
 	import type { Song } from '@blind-test/shared';
 	import { SONG_CONFIG, CANONICAL_GENRES } from '@blind-test/shared';
@@ -16,6 +17,19 @@
 	import EditableSongCard from '$lib/components/EditableSongCard.svelte';
 	import SongStatsCharts from '$lib/components/SongStatsCharts.svelte';
 	import AdminGate from '$lib/components/AdminGate.svelte';
+
+	const getResponseError = (responseError: any, fallback: string) => {
+		if (!responseError) return fallback;
+		const value = responseError.value as any;
+		if (value && typeof value === 'object') {
+			if (typeof value.error === 'string') return value.error;
+			if (typeof value.message === 'string') return value.message;
+		}
+		return fallback;
+	};
+
+	const isApiErrorResponse = (data: unknown): data is { error: string } =>
+		!!data && typeof data === 'object' && 'error' in data && typeof (data as any).error === 'string';
 
 
 	let songs = $state<Song[]>([]);
@@ -40,7 +54,9 @@
 	// Spotify clip selection flow
 	let spotifyTempFile = $state<File | null>(null);
 	let spotifyTempFileId = $state<string | null>(null);
-	let spotifyTempMetadata = $state<any>(null);
+	let spotifyTempMetadata = $state<SpotifyTrackMetadata | null>(null);
+	let spotifyTempYoutube = $state<{ videoId: string; title: string } | null>(null);
+	let spotifyTempFileSize = $state<number>(0);
 	let showSpotifyClipSelector = $state(false);
 
 	// Duplicate warning (Spotify)
@@ -108,7 +124,7 @@
 			const response = await songApi.searchSpotify(spotifyQuery);
 
 			if (response.error) {
-				error = (response.error as any).value?.error || 'Recherche Spotify impossible';
+				error = getResponseError(response.error, 'Recherche Spotify impossible');
 			} else {
 				spotifyResults = response.data?.results || [];
 			}
@@ -132,16 +148,24 @@
 			const response = await songApi.spotifyDownloadTemp(spotifyId, force);
 
 			if (response.error) {
-				throw new Error(response.error.value?.error || 'Téléchargement impossible');
+				throw new Error(getResponseError(response.error, 'Téléchargement impossible'));
 			}
 
 			const data = response.data;
+			if (!data) {
+				throw new Error('Réponse Spotify invalide');
+			}
+			if (isApiErrorResponse(data)) {
+				throw new Error(data.error);
+			}
 
 			// Check if duplicates were found
 			if (data.duplicates && data.duplicates.length > 0) {
 				// Show duplicate warning modal
 				spotifyDuplicates = data.duplicates;
-				spotifyTempMetadata = data.metadata;
+				spotifyTempMetadata = data.metadata || null;
+				spotifyTempYoutube = null;
+				spotifyTempFileSize = 0;
 				pendingSpotifyId = spotifyId;
 				showSpotifyDuplicateWarning = true;
 				addingFromSpotify = false;
@@ -149,19 +173,27 @@
 				return;
 			}
 
+			const tempFileId = data.tempFileId;
+			const spotifyData = data.spotify;
+			if (!tempFileId || !spotifyData) {
+				throw new Error('Données Spotify incomplètes');
+			}
+
 			// Step 2: Fetch the temp file as a blob
-			const audioResponse = await songApi.streamTemp(data.tempFileId);
+			const audioResponse = await songApi.streamTemp(tempFileId);
 			if (audioResponse.error) {
 				throw new Error('Impossible de charger le fichier audio');
 			}
 
 			const audioBlob = await audioResponse.response.blob();
-			const audioFile = new File([audioBlob], data.spotify.title + '.mp3', { type: 'audio/mpeg' });
+			const audioFile = new File([audioBlob], spotifyData.title + '.mp3', { type: 'audio/mpeg' });
 
 			// Step 3: Show clip selector
 			spotifyTempFile = audioFile;
-			spotifyTempFileId = data.tempFileId;
-			spotifyTempMetadata = data.spotify;
+			spotifyTempFileId = tempFileId;
+			spotifyTempMetadata = spotifyData;
+			spotifyTempYoutube = data.youtube || null;
+			spotifyTempFileSize = data.fileSize ?? audioFile.size;
 			showSpotifyClipSelector = true;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Téléchargement impossible';
@@ -184,6 +216,8 @@
 		showSpotifyDuplicateWarning = false;
 		spotifyDuplicates = [];
 		spotifyTempMetadata = null;
+		spotifyTempYoutube = null;
+		spotifyTempFileSize = 0;
 		pendingSpotifyId = null;
 	}
 
@@ -216,16 +250,25 @@
 		try {
 			error = null;
 
+			if (!spotifyTempFileId || !spotifyTempMetadata || !spotifyTempYoutube) {
+				throw new Error('Téléchargement Spotify incomplet');
+			}
+
 			// Step 4: Finalize with selected clip
 			const response = await songApi.spotifyFinalize(
-				spotifyTempFileId!,
+				spotifyTempFileId,
 				start,
 				duration,
-				spotifyTempMetadata
+				{
+					spotify: spotifyTempMetadata,
+					youtube: spotifyTempYoutube,
+					originalFileSize: spotifyTempFileSize || spotifyTempFile?.size || 0,
+					genre: spotifyTempMetadata.genre,
+				}
 			);
 
 			if (response.error) {
-				throw new Error(response.error.value?.error || 'Finalisation impossible');
+				throw new Error(getResponseError(response.error, 'Finalisation impossible'));
 			}
 
 			// Clear Spotify search results and reload library
@@ -235,6 +278,8 @@
 			spotifyTempFile = null;
 			spotifyTempFileId = null;
 			spotifyTempMetadata = null;
+			spotifyTempYoutube = null;
+			spotifyTempFileSize = 0;
 			await loadSongs();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Finalisation impossible';
@@ -250,6 +295,8 @@
 		spotifyTempFile = null;
 		spotifyTempFileId = null;
 		spotifyTempMetadata = null;
+		spotifyTempYoutube = null;
+		spotifyTempFileSize = 0;
 		addingFromSpotify = false;
 		selectedSpotifyId = null;
 	}
@@ -273,10 +320,16 @@
 			);
 
 			if (response.error) {
-				throw new Error(response.error.value?.error || 'Import failed');
+				throw new Error(getResponseError(response.error, 'Import failed'));
 			}
 
 			const data = response.data;
+			if (!data) {
+				throw new Error('Réponse serveur invalide');
+			}
+			if (isApiErrorResponse(data)) {
+				throw new Error(data.error);
+			}
 
 			// Close modal
 			showYouTubeModal = false;
@@ -415,7 +468,7 @@
 			const response = await songApi.update(songId, updates);
 
 			if (response.error) {
-				throw new Error(response.error.value?.error || 'Mise à jour impossible');
+				throw new Error(getResponseError(response.error, 'Mise à jour impossible'));
 			}
 
 			await loadSongs();
@@ -433,7 +486,7 @@
 			const response = await songApi.delete(songId);
 
 			if (response.error) {
-				throw new Error(response.error.value?.error || 'Suppression impossible');
+				throw new Error(getResponseError(response.error, 'Suppression impossible'));
 			}
 
 			await loadSongs();

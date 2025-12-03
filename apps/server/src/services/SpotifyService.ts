@@ -1,4 +1,5 @@
-import { MaxInt, SpotifyApi } from "@spotify/web-api-ts-sdk";
+import { SpotifyApi } from "@spotify/web-api-ts-sdk";
+import type { MaxInt } from "@spotify/web-api-ts-sdk";
 import { GenreMapper } from "./GenreMapper";
 import type { CanonicalGenre } from "@blind-test/shared";
 
@@ -49,7 +50,7 @@ export class SpotifyService {
     }
   }
 
-  async search(query: string, limit: MaxInt<50> = 20): Promise<SpotifyTrack[]> {
+  async search(query: string, limit: number = 20): Promise<SpotifyTrack[]> {
     await this.ensureInitialized();
 
     if (!this.api) {
@@ -57,7 +58,8 @@ export class SpotifyService {
     }
 
     try {
-      const results = await this.api.search(query, ["track"], undefined, limit);
+      const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit))) as MaxInt<50>;
+      const results = await this.api.search(query, ["track"], undefined, boundedLimit);
 
       // Fetch genres for each track by getting artist data
       const tracksWithGenres = await Promise.all(

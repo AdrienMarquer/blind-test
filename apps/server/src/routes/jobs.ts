@@ -36,35 +36,38 @@ export const jobRoutes = new Elysia({ prefix: '/api/jobs' })
 	})
 
 	// Get job by ID
-	.get('/:jobId', async ({ params: { jobId }, error }) => {
+	.get('/:jobId', async ({ params: { jobId }, set }) => {
 		apiLogger.debug('Fetching job', { jobId });
 
 		const job = jobQueue.getJob(jobId);
 
 		if (!job) {
-			return error(404, { error: 'Job not found' });
+			set.status = 404;
+			return { error: 'Job not found' };
 		}
 
 		return job;
 	})
 
 	// Cancel a job
-	.delete('/:jobId', async ({ params: { jobId }, error }) => {
+	.delete('/:jobId', async ({ params: { jobId }, set }) => {
 		apiLogger.info('Cancelling job', { jobId });
 
 		const job = jobQueue.getJob(jobId);
 
 		if (!job) {
-			return error(404, { error: 'Job not found' });
+			set.status = 404;
+			return { error: 'Job not found' };
 		}
 
 		const cancelled = jobQueue.cancelJob(jobId);
 
 		if (!cancelled) {
-			return error(400, {
+			set.status = 400;
+			return {
 				error: 'Cannot cancel job',
 				reason: 'Job is already completed, failed, or cancelled'
-			});
+			};
 		}
 
 		apiLogger.info('Job cancelled successfully', { jobId });
@@ -77,29 +80,32 @@ export const jobRoutes = new Elysia({ prefix: '/api/jobs' })
 	})
 
 	// Retry a failed job
-	.post('/:jobId/retry', async ({ params: { jobId }, error }) => {
+	.post('/:jobId/retry', async ({ params: { jobId }, set }) => {
 		apiLogger.info('Retrying job', { jobId });
 
 		const job = jobQueue.getJob(jobId);
 
 		if (!job) {
-			return error(404, { error: 'Job not found' });
+			set.status = 404;
+			return { error: 'Job not found' };
 		}
 
 		if (job.status !== 'failed') {
-			return error(400, {
+			set.status = 400;
+			return {
 				error: 'Cannot retry job',
 				reason: 'Only failed jobs can be retried'
-			});
+			};
 		}
 
 		const retried = jobQueue.retryJob(jobId);
 
 		if (!retried) {
-			return error(400, {
+			set.status = 400;
+			return {
 				error: 'Cannot retry job',
 				reason: 'Maximum retry attempts exceeded'
-			});
+			};
 		}
 
 		apiLogger.info('Job queued for retry', { jobId });

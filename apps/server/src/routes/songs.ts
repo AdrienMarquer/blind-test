@@ -120,27 +120,30 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Get song by ID
-  .get('/:songId', async ({ params: { songId }, error }) => {
+  .get('/:songId', async ({ params: { songId }, set }) => {
     const song = await songRepository.findById(songId);
 
     if (!song) {
-      return error(404, { error: 'Song not found' });
+      set.status = 404;
+      return { error: 'Song not found' };
     }
 
     return song;
   })
 
   // Get audio info (duration, format, etc.) for preview
-  .get('/:songId/info', async ({ params: { songId }, error }) => {
+  .get('/:songId/info', async ({ params: { songId }, set }) => {
     const song = await songRepository.findById(songId);
 
     if (!song) {
-      return error(404, { error: 'Song not found' });
+      set.status = 404;
+      return { error: 'Song not found' };
     }
 
     const filePath = path.join(process.cwd(), song.filePath);
     if (!existsSync(filePath)) {
-      return error(404, { error: 'Audio file not found' });
+      set.status = 404;
+      return { error: 'Audio file not found' };
     }
 
     try {
@@ -153,17 +156,19 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       };
     } catch (err) {
       apiLogger.error('Failed to get audio info', err, { songId });
-      return error(500, { error: 'Failed to analyze audio file' });
+      set.status = 500;
+      return { error: 'Failed to analyze audio file' };
     }
   })
 
   // Stream song audio
-  .get('/:songId/stream', async ({ params: { songId }, error, set, request }) => {
+  .get('/:songId/stream', async ({ params: { songId }, set, request }) => {
     apiLogger.debug('Streaming audio', { songId });
 
     const song = await songRepository.findById(songId);
     if (!song) {
-      return error(404, { error: 'Song not found' });
+      set.status = 404;
+      return { error: 'Song not found' };
     }
 
     // Security: Validate file path to prevent directory traversal
@@ -173,13 +178,15 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     // Ensure the resolved path is within the uploads directory
     if (!requestedPath.startsWith(uploadsDir)) {
       apiLogger.error('Path traversal attempt detected', { songId, filePath: song.filePath, requestedPath, uploadsDir });
-      return error(403, { error: 'Access denied' });
+      set.status = 403;
+      return { error: 'Access denied' };
     }
 
     const filePath = requestedPath;
     if (!existsSync(filePath)) {
       apiLogger.warn('Audio file not found on disk', { songId, filePath });
-      return error(404, { error: 'Audio file not found' });
+      set.status = 404;
+      return { error: 'Audio file not found' };
     }
 
     try {
@@ -220,7 +227,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       }
     } catch (err) {
       apiLogger.error('Failed to stream audio file', err, { songId, filePath });
-      return error(500, { error: 'Failed to stream audio' });
+      set.status = 500;
+      return { error: 'Failed to stream audio' };
     }
   })
 
@@ -310,6 +318,11 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       }),
       clipStart: t.Optional(t.Number({ minimum: 0 })),
       clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })), // Max 3 minutes
+      title: t.Optional(t.String()),
+      artist: t.Optional(t.String()),
+      album: t.Optional(t.String()),
+      year: t.Optional(t.Number()),
+      genre: t.Optional(t.String()),
     }),
     query: t.Object({
       force: t.Optional(t.Boolean()),
@@ -317,7 +330,7 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Update song metadata
-  .patch('/:songId', async ({ params: { songId }, body, error, set, headers }) => {
+  .patch('/:songId', async ({ params: { songId }, body, set, headers }) => {
     // Check admin auth
     const authError = checkAdminAuth(headers as Record<string, string | undefined>);
     if (authError) {
@@ -328,7 +341,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     const song = await songRepository.findById(songId);
 
     if (!song) {
-      return error(404, { error: 'Song not found' });
+      set.status = 404;
+      return { error: 'Song not found' };
     }
 
     try {
@@ -337,7 +351,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       return updated;
     } catch (err) {
       apiLogger.error('Failed to update song', err, { songId });
-      return error(500, { error: 'Failed to update song' });
+      set.status = 500;
+      return { error: 'Failed to update song' };
     }
   }, {
     body: t.Object({
@@ -352,7 +367,7 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
   })
 
   // Auto-discover metadata for existing song
-  .post('/:songId/auto-discover', async ({ params: { songId }, error, set, headers }) => {
+  .post('/:songId/auto-discover', async ({ params: { songId }, set, headers }) => {
     // Check admin auth
     const authError = checkAdminAuth(headers as Record<string, string | undefined>);
     if (authError) {
@@ -363,7 +378,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     const song = await songRepository.findById(songId);
 
     if (!song) {
-      return error(404, { error: 'Song not found' });
+      set.status = 404;
+      return { error: 'Song not found' };
     }
 
     try {
@@ -397,12 +413,13 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       };
     } catch (err) {
       apiLogger.error('Failed to auto-discover metadata', err, { songId });
-      return error(500, { error: 'Failed to auto-discover metadata' });
+      set.status = 500;
+      return { error: 'Failed to auto-discover metadata' };
     }
   })
 
   // Delete song
-  .delete('/:songId', async ({ params: { songId }, error, set, headers }) => {
+  .delete('/:songId', async ({ params: { songId }, set, headers }) => {
     // Check admin auth
     const authError = checkAdminAuth(headers as Record<string, string | undefined>);
     if (authError) {
@@ -413,7 +430,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
     const song = await songRepository.findById(songId);
 
     if (!song) {
-      return error(404, { error: 'Song not found' });
+      set.status = 404;
+      return { error: 'Song not found' };
     }
 
     try {
@@ -431,7 +449,8 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       return new Response(null, { status: 204 });
     } catch (err) {
       apiLogger.error('Failed to delete song', err, { songId });
-      return error(500, { error: 'Failed to delete song' });
+      set.status = 500;
+      return { error: 'Failed to delete song' };
     }
   })
 
@@ -1086,4 +1105,3 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       })),
     }),
   })
-

@@ -362,10 +362,12 @@
 				</button>
 			</div>
 
-			<div class="rounds">
+			<div class="rounds" role="list" aria-label="Manches configurées">
 				{#each rounds as round, index}
 					<div
 						class="round-card"
+						role="listitem"
+						aria-roledescription="Manche"
 						class:dragging={draggedIndex === index}
 						class:drag-over={dragOverIndex === index && draggedIndex !== index}
 						class:is-dragging-active={isDragging}
@@ -410,7 +412,7 @@
 									<!-- Genre Filter -->
 									<div class="filter-group filter-group-wide">
 										<div class="filter-header">
-											<label>Genres</label>
+											<span class="filter-label" aria-hidden="true">Genres</span>
 											{#if expandedGenreSections.has(index)}
 												<div class="filter-actions">
 													<button
@@ -822,7 +824,8 @@
 		min-width: 120px;
 	}
 
-	.filter-group label {
+	.filter-group label,
+	.filter-label {
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: rgba(18, 43, 59, 0.6);
@@ -830,8 +833,7 @@
 		letter-spacing: 0.3px;
 	}
 
-	.filter-group input[type="number"],
-	.filter-group select {
+	.filter-group input[type="number"] {
 		padding: 0.4rem 0.6rem;
 		border: 1px solid rgba(18, 43, 59, 0.15);
 		border-radius: 8px;
@@ -841,8 +843,7 @@
 		transition: all 0.2s ease;
 	}
 
-	.filter-group input[type="number"]:focus,
-	.filter-group select:focus {
+	.filter-group input[type="number"]:focus {
 		outline: none;
 		border-color: var(--aq-color-primary);
 		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.15);

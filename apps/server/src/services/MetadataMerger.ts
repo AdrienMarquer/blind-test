@@ -105,6 +105,7 @@ export function mergeMetadata(
 		}
 		finalYear = getCurrentYear();
 	}
+	finalYear = finalYear ?? getCurrentYear();
 
 	// Genre: enriched > provided > extracted
 	const finalGenre = enriched?.genre || provided?.genre || extracted.genre;

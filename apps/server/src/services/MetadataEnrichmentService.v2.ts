@@ -287,7 +287,9 @@ export class MetadataEnrichmentService {
 				parsedArtist: parsed.artist,
 				parsedYear: parsed.year
 			},
-			provider: usedFallback ? `${this.provider.name} + ${this.fallbackProvider.name}` : this.provider.name
+			provider: usedFallback && this.fallbackProvider
+				? `${this.provider.name} + ${this.fallbackProvider.name}`
+				: this.provider.name
 		};
 	}
 

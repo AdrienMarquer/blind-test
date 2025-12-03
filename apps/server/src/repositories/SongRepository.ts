@@ -474,12 +474,12 @@ export class SongRepository implements Repository<Song> {
 
     // Apply all conditions
     if (conditions.length > 0) {
-      query = query.where(sql`${sql.join(conditions, sql` AND `)}`);
+      query = query.where(sql`${sql.join(conditions, sql` AND `)}`) as typeof query;
     }
 
     // Apply limit
     if (criteria.limit) {
-      query = query.limit(criteria.limit);
+      query = query.limit(criteria.limit) as typeof query;
     }
 
     const results = await query;

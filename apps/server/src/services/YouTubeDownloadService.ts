@@ -226,7 +226,7 @@ export class YouTubeDownloadService {
 	 */
 	async getVideoInfo(videoId: string): Promise<any> {
 		try {
-			const info = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+			const info: any = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
 				dumpSingleJson: true,
 				noCheckCertificates: true,
 				noWarnings: true,

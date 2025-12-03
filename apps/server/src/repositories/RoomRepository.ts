@@ -154,6 +154,8 @@ export class RoomRepository implements Repository<Room> {
     // Return room with masterToken for initial response (client needs it once)
     return {
       ...newRoom,
+      createdAt: now,
+      updatedAt: now,
       players: [],
       masterToken, // Client gets this once on creation
     };

@@ -14,8 +14,16 @@ import { timerManager } from '../services/TimerManager';
 
 const wsLogger = logger.child({ module: 'WebSocket' });
 
+export type RoomSocketData = {
+  roomId?: string;
+  playerId?: string;
+  token?: string;
+  params?: { roomId: string };
+  query?: { token?: string; playerId?: string };
+};
+
 // Store active connections per room
-const roomConnections = new Map<string, Set<ServerWebSocket<{ roomId: string; playerId?: string }>>>();
+const roomConnections = new Map<string, Set<ServerWebSocket<RoomSocketData>>>();
 
 /**
  * Type-safe helper to send ServerMessage to WebSocket
@@ -24,7 +32,7 @@ function sendMessage(ws: ServerWebSocket<any>, message: ServerMessage) {
   ws.send(JSON.stringify(message));
 }
 
-export async function handleWebSocket(ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>) {
+export async function handleWebSocket(ws: ServerWebSocket<RoomSocketData>) {
   // Extract roomId from ws.data which contains the route params
   const roomId = ws.data?.roomId;
   const playerId = ws.data?.playerId;
@@ -63,7 +71,7 @@ export async function handleWebSocket(ws: ServerWebSocket<{ roomId: string; play
 }
 
 export function handleMessage(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   message: string
 ) {
   // Extract roomId with single source of truth
@@ -125,7 +133,7 @@ export function handleMessage(
   }
 }
 
-export function handleClose(ws: ServerWebSocket<{ roomId: string; playerId?: string }>) {
+export function handleClose(ws: ServerWebSocket<RoomSocketData>) {
   // Extract roomId with fallback
   const roomId = ws.data?.roomId || ws.data?.params?.roomId;
   const playerId = ws.data?.playerId;
@@ -154,10 +162,18 @@ export function handleClose(ws: ServerWebSocket<{ roomId: string; playerId?: str
 
 // Helper functions
 
-async function handleStateSync(ws: ServerWebSocket<{ roomId: string; playerId?: string }>, roomId: string) {
+async function handleStateSync(ws: ServerWebSocket<RoomSocketData>, roomId: string) {
   try {
     const room = await roomRepository.findById(roomId);
     const players = await playerRepository.findByRoom(roomId);
+
+    if (!room) {
+      sendMessage(ws, {
+        type: 'error',
+        data: { code: 'ROOM_NOT_FOUND', message: 'Room not found' }
+      });
+      return;
+    }
 
     sendMessage(ws, {
       type: 'state:synced',
@@ -173,7 +189,7 @@ async function handleStateSync(ws: ServerWebSocket<{ roomId: string; playerId?: 
 }
 
 async function handlePlayerJoin(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string,
   data: { name: string }
 ) {
@@ -248,7 +264,7 @@ async function handlePlayerJoin(
 }
 
 async function handlePlayerLeave(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string
 ) {
   const { playerId } = ws.data;
@@ -278,7 +294,7 @@ async function handlePlayerLeave(
 }
 
 async function handlePlayerKick(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string,
   data: { playerId: string }
 ) {
@@ -353,7 +369,7 @@ async function handlePlayerDisconnect(roomId: string, playerId: string) {
  * Called when a WebSocket connection includes a playerId (returning player)
  */
 async function handlePlayerReconnect(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string,
   playerId: string
 ) {
@@ -424,7 +440,7 @@ async function handlePlayerReconnect(
  * Lightweight friendly-server auth - prevents accidental tampering
  */
 async function isMaster(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string
 ): Promise<boolean> {
   const providedToken = ws.data?.token;
@@ -439,7 +455,7 @@ async function isMaster(
 export function broadcastToRoom(
   roomId: string,
   message: ServerMessage,
-  excludeWs?: ServerWebSocket<{ roomId: string; playerId?: string }>
+  excludeWs?: ServerWebSocket<RoomSocketData>
 ) {
   const connections = roomConnections.get(roomId);
   if (!connections) {
@@ -507,7 +523,7 @@ export function broadcastJobEvent(message: ServerMessage) {
 // ============================================================================
 
 async function handlePlayerBuzz(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string,
   data: { songIndex: number }
 ) {
@@ -542,7 +558,7 @@ async function handlePlayerBuzz(
 }
 
 async function handlePlayerAnswer(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string,
   data: { songIndex: number; answerType: 'title' | 'artist'; value: string }
 ) {
@@ -649,7 +665,7 @@ async function handlePlayerAnswer(
 }
 
 async function handleGamePause(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string
 ) {
   // Verify master authorization
@@ -674,7 +690,7 @@ async function handleGamePause(
 }
 
 async function handleGameResume(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string
 ) {
   // Verify master authorization
@@ -699,7 +715,7 @@ async function handleGameResume(
 }
 
 async function handleGameRestart(
-  ws: ServerWebSocket<{ roomId: string; playerId?: string; token?: string }>,
+  ws: ServerWebSocket<RoomSocketData>,
   roomId: string
 ) {
   // Verify master authorization
@@ -769,4 +785,3 @@ async function handleGameRestart(
     });
   }
 }
-

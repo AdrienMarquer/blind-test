@@ -23,7 +23,7 @@ export const modeRoutes = new Elysia({ prefix: '/api/modes' })
   })
 
   // Get specific mode details
-  .get('/:modeType', ({ params: { modeType }, error }) => {
+  .get('/:modeType', ({ params: { modeType }, set }) => {
     apiLogger.debug('Fetching mode details', { modeType });
 
     try {
@@ -37,6 +37,7 @@ export const modeRoutes = new Elysia({ prefix: '/api/modes' })
       };
     } catch (err) {
       apiLogger.error('Failed to get mode', err, { modeType });
-      return error(404, { error: `Mode not found: ${modeType}` });
+      set.status = 404;
+      return { error: `Mode not found: ${modeType}` };
     }
   });

@@ -23,7 +23,7 @@ export const mediaRoutes = new Elysia({ prefix: '/api/media' })
   })
 
   // Get specific media type details
-  .get('/:mediaType', ({ params: { mediaType }, error }) => {
+  .get('/:mediaType', ({ params: { mediaType }, set }) => {
     apiLogger.debug('Fetching media type details', { mediaType });
 
     try {
@@ -36,6 +36,7 @@ export const mediaRoutes = new Elysia({ prefix: '/api/media' })
       };
     } catch (err) {
       apiLogger.error('Failed to get media type', err, { mediaType });
-      return error(404, { error: `Media type not found: ${mediaType}` });
+      set.status = 404;
+      return { error: `Media type not found: ${mediaType}` };
     }
   });

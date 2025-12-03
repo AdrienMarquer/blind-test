@@ -125,7 +125,11 @@
 						plugins: {
 							legend: {
 								position: 'right',
-								labels: { color: '#122b3b' }
+								labels: {
+									color: '#122b3b',
+									usePointStyle: true,
+									pointStyle: 'rectRounded'
+								}
 							}
 						}
 					}
@@ -310,7 +314,9 @@
 
 <style>
 	.stats-content {
-		/* Direct content wrapper for modal usage */
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
 
 	.stats-card.collapsed :global(header) {

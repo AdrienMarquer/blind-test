@@ -140,6 +140,7 @@ export class GameService {
       song: song,
       index,
       status: 'pending',
+      params: round.params,
       lockedOutPlayerIds: [],
       answers: [],
     }));

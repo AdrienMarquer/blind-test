@@ -49,7 +49,7 @@
 		| { status: 'answer_reveal'; correctTitle: string; correctArtist: string; albumArt?: string; winners?: WinnerInfo[] };
 
 	// Props
-	const { player, socket }: { player: Player; socket: RoomSocket } = $props();
+const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 
 	// ========================================================================
 	// Core State Machine
@@ -664,16 +664,6 @@
 		</div>
 	{/if}
 
-	<!-- Score Display (hidden during loading) -->
-	{#if gameState.status !== 'loading'}
-		<div class="score-display">
-			<div class="score-card">
-				<span class="score-label">Ton score</span>
-				<span class="score-value">{score}</span>
-			</div>
-		</div>
-	{/if}
-
 	<!-- Feedback Message Toast (fixed position - no layout shift) -->
 	{#if feedbackMessage}
 		<div class="feedback-toast {feedbackMessage.type}">
@@ -794,14 +784,6 @@
 	.player-interface.loading-active {
 		background: transparent;
 		box-shadow: none;
-	}
-
-	.score-card {
-		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
-		border-radius: 24px;
-		color: #fff;
-		padding: 1.5rem;
-		text-align: center;
 	}
 
 	/* Toast notification (fixed position - no layout shift) */

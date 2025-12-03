@@ -3,7 +3,7 @@
  * Type-safe event-driven architecture for real-time communication
  */
 
-import type { Room, Player, ServerMessage, ClientMessage, MediaQuestion } from '@blind-test/shared';
+import type { Room, Player, ServerMessage, ClientMessage, MediaQuestion, MediaType } from '@blind-test/shared';
 import { writable, type Writable, get } from 'svelte/store';
 import { getWsUrl } from '$lib/api';
 
@@ -15,7 +15,7 @@ const SERVER_URL = getWsUrl();
 export class GameEvents {
   // Song events
   songPreparing = $state<{ songIndex: number; genre?: string; year?: number; countdown: number } | null>(null);
-  songStarted = $state<{ songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all'; songTitle?: string; songArtist?: string } | null>(null);
+  songStarted = $state<{ songIndex: number; duration: number; audioUrl: string; clipStart: number; audioPlayback: 'master' | 'players' | 'all'; songTitle?: string; songArtist?: string; albumArt?: string; answerTimer?: number } | null>(null);
   songEnded = $state<{
     songIndex: number;
     correctTitle: string;
@@ -31,7 +31,7 @@ export class GameEvents {
   } | null>(null);
 
   // Player events (gameplay)
-  playerBuzzed = $state<{ playerId: string; playerName: string; songIndex: number; modeType: import('@blind-test/shared').ModeType; manualValidation?: boolean; artistQuestion?: MediaQuestion } | null>(null);
+  playerBuzzed = $state<{ playerId: string; playerName: string; songIndex: number; modeType: import('@blind-test/shared').ModeType; manualValidation?: boolean; artistQuestion?: MediaQuestion; titleQuestion?: MediaQuestion; answerTimer?: number } | null>(null);
   buzzRejected = $state<{ playerId: string; reason: string } | null>(null);
   answerResult = $state<{
     playerId: string;
@@ -41,13 +41,15 @@ export class GameEvents {
     pointsAwarded: number;
     shouldShowTitleChoices?: boolean;
     lockOutPlayer?: boolean;
+    message?: string;
   } | null>(null);
-  titleChoices = $state<{ playerId: string; titleQuestion: MediaQuestion } | null>(null);
+  titleChoices = $state<{ playerId: string; titleQuestion: MediaQuestion; answerTimer?: number } | null>(null);
 
   // Round events
-  roundStarted = $state<{ roundIndex: number; songCount: number; modeType: string } | null>(null);
+  roundStarted = $state<{ room: Room | null; roundIndex: number; songCount: number; modeType: string; mediaType: MediaType } | null>(null);
   roundEnded = $state<{ roundIndex: number; scores: Array<{ playerId: string; playerName: string; score: number; rank: number }> } | null>(null);
   roundBetween = $state<{
+    room: Room;
     completedRoundIndex: number;
     nextRoundIndex: number;
     nextRoundMode: string;
@@ -59,7 +61,7 @@ export class GameEvents {
 
   // Game control events
   gamePaused = $state<{ timestamp: number } | null>(null);
-  gameResumed = $state<{ timestamp: number } | null>(null);
+  gameResumed = $state<{ timestamp: number; reason?: string } | null>(null);
 
   /**
    * Clear an event after it's been processed

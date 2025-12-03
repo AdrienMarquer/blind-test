@@ -17,6 +17,24 @@
 	import type { FinalScore, RoundConfig } from '@blind-test/shared';
 	import { readable, type Readable } from 'svelte/store';
 
+	const isApiErrorResponse = (data: unknown): data is { error: string } =>
+		!!data && typeof data === 'object' && 'error' in data && typeof (data as any).error === 'string';
+
+	const getResponseError = (responseError: any, fallback: string) => {
+		if (!responseError) return fallback;
+		const value = responseError.value as any;
+		if (value && typeof value === 'object') {
+			if (typeof value.error === 'string') return value.error;
+			if (typeof value.message === 'string') return value.message;
+		}
+		return fallback;
+	};
+
+	const READY_ICON = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+		<circle cx="9" cy="9" r="8" fill="#22c55e" fill-opacity="0.1" stroke="#22c55e" stroke-width="1.5" />
+		<path d="M5.25 9.25L7.5 11.5L12.5 6.5" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+	</svg>`;
+
 	const roomId = $derived($page.params.id);
 
 	let roomSocket = $state<ReturnType<typeof createRoomSocket> | null>(null);
@@ -177,15 +195,17 @@
 		try {
 			error = null;
 			const response = await roomApi.get(roomId);
+			const data = response.data;
 
-			if (response.data) {
-				initialRoom = response.data;
-				console.log('Loaded room:', response.data);
+			if (data && !isApiErrorResponse(data)) {
+				initialRoom = data;
+				console.log('Loaded room:', data);
 
 				// Validate saved player still exists in the room
 				if (currentPlayer && !isMaster) {
-					const playerStillExists = response.data.players.some(
-						(p: Player) => p.id === currentPlayer.id
+					const savedPlayer = currentPlayer;
+					const playerStillExists = data.players.some(
+						(p: Player) => p.id === savedPlayer.id
 					);
 					if (!playerStillExists) {
 						console.log('[Player] Saved player was removed from room');
@@ -195,8 +215,10 @@
 				}
 
 				// WebSocket will update this with real-time changes
-			} else if (response.error) {
-				error = 'Salle introuvable';
+			} else if (response.error || (data && isApiErrorResponse(data))) {
+				error = data && isApiErrorResponse(data)
+					? data.error
+					: getResponseError(response.error, 'Salle introuvable');
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Impossible de charger la salle';
@@ -240,26 +262,27 @@
 			playerNameError = null;
 
 			const response = await playerApi.add(roomId, playerName.trim());
+			const data = response.data;
 
-			if (response.data) {
-				console.log('Joined room as:', response.data);
+			if (data && !isApiErrorResponse(data)) {
+				console.log('Joined room as:', data);
 
 				// Store player info and token in memory
-				currentPlayer = response.data;
-				authToken = response.data.token;
+				currentPlayer = data;
+				authToken = data.token ?? null;
 
 				// Save to localStorage for reconnection
 				const storageKey = `room_${roomId}_auth`;
 				localStorage.setItem(storageKey, JSON.stringify({
 					token: authToken,
 					isMaster: false,
-					playerId: response.data.id,
-					playerName: response.data.name,
+					playerId: data.id,
+					playerName: data.name,
 					timestamp: Date.now()
 				}));
 
 				playerName = '';
-				console.log(`[Player] Joined as ${response.data.name} with token, saved to localStorage`);
+				console.log(`[Player] Joined as ${data.name} with token, saved to localStorage`);
 
 				// Reconnect WebSocket with player token
 				if (roomSocket) {
@@ -274,7 +297,7 @@
 
 				// Player join will be broadcast via WebSocket
 			} else {
-				error = 'Impossible de rejoindre la salle';
+				error = data && isApiErrorResponse(data) ? data.error : 'Impossible de rejoindre la salle';
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Impossible de rejoindre la salle';
@@ -677,7 +700,7 @@
 					{/if}
 				{:else if room.status === 'lobby' && !isMaster}
 					{#if currentPlayer}
-						<Card title="Tu es prêt !" subtitle="Le maître démarre quand tout le monde est là" icon="✅">
+						<Card title="Tu es prêt !" subtitle="Le maître démarre quand tout le monde est là" icon={READY_ICON}>
 							<p class="card-text">Tu joues en tant que <strong>{currentPlayer.name}</strong>. Reste connecté !</p>
 							<Button variant="outline" fullWidth onclick={leaveRoom}>Quitter la salle</Button>
 						</Card>
@@ -896,38 +919,6 @@
 		color: white;
 	}
 
-	.code-pill {
-		border: none;
-		border-radius: 999px;
-		padding: 0.35rem 1rem;
-		background: rgba(255, 255, 255, 0.2);
-		color: #fff;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.code-pill.copied {
-		background: rgba(248, 192, 39, 0.3);
-		color: var(--aq-color-deep);
-	}
-
-	.hero-stats {
-		display: grid;
-		gap: 1rem;
-		align-self: stretch;
-	}
-
-	.hero-stats .stat-label {
-		font-size: 0.8rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: rgba(255, 255, 255, 0.8);
-	}
-
-	.hero-stats strong {
-		font-size: 1.5rem;
-	}
-
 	.room-panels {
 		display: grid;
 		gap: 1.5rem;
@@ -1071,7 +1062,6 @@
 		margin-top: 2rem;
 	}
 
-	.between-wrapper,
 	.final-wrapper,
 	.game-stage {
 		margin-top: 1.5rem;
@@ -1125,7 +1115,7 @@
 		font-weight: 700;
 		color: var(--aq-color-deep);
 		box-shadow: 0 8px 24px rgba(248, 192, 39, 0.4);
-		z-index: 1001;
+		z-index: 600;
 		font-size: 1rem;
 	}
 

@@ -140,11 +140,13 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
       }
 
       // Broadcast game start to all connected WebSocket clients
+      const startedSession = await gameSessionRepository.findById(session.id);
+
       broadcastToRoom(roomId, {
         type: 'game:started',
         data: {
           room: updated,
-          session: await gameSessionRepository.findById(session.id),
+          session: startedSession || session,
         }
       });
 

@@ -53,7 +53,7 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
   })
 
   // Create new room
-  .post('/', async ({ body, error }) => {
+  .post('/', async ({ body, set }) => {
     try {
       const room = await roomRepository.create({
         name: body.name,
@@ -66,7 +66,8 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
       return room;
     } catch (err) {
       apiLogger.error('Failed to create room', err);
-      return error(500, { error: 'Failed to create room' });
+      set.status = 500;
+      return { error: 'Failed to create room' };
     }
   }, {
     body: t.Object({
@@ -84,12 +85,13 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
   })
 
   // Find room by code
-  .get('/code/:code', async ({ params: { code }, error }) => {
+  .get('/code/:code', async ({ params: { code }, set }) => {
     const room = await roomRepository.findByCode(code.toUpperCase());
 
     if (!room) {
       apiLogger.warn('Room not found by code', { code });
-      return error(404, { error: 'Room not found' });
+      set.status = 404;
+      return { error: 'Room not found' };
     }
 
     // Populate players

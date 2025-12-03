@@ -11,6 +11,7 @@
 		"strict": true,
 		"moduleResolution": "bundler",
 		"module": "ESNext",
-		"target": "ESNext"
+		"target": "ESNext",
+		"types": ["bun-types"]
 	}
 }

@@ -24,9 +24,9 @@
 	{#if title || icon}
 		<header>
 			<div class="title">
-				{#if icon}
-					<span class="icon" aria-hidden="true">{icon}</span>
-				{/if}
+		{#if icon}
+			<span class="icon" aria-hidden="true">{@html icon}</span>
+			{/if}
 				<div>
 					{#if title}
 						<h3>{title}</h3>

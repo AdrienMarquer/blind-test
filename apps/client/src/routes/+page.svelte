@@ -5,6 +5,9 @@
 	import InputField from '$lib/components/ui/InputField.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
 
+	const isApiErrorResponse = (data: unknown): data is { error: string } =>
+		!!data && typeof data === 'object' && 'error' in data && typeof (data as any).error === 'string';
+
 	let newRoomName = $state('');
 	let roomCode = $state('');
 	let error = $state<string | null>(null);
@@ -19,10 +22,11 @@
 			error = null;
 
 			const response = await roomApi.create(newRoomName.trim());
+			const data = response.data;
 
-			if (response.data) {
-				const roomId = response.data.id;
-				const masterToken = response.data.masterToken;
+			if (data && !isApiErrorResponse(data)) {
+				const roomId = data.id;
+				const masterToken = data.masterToken;
 
 				if (masterToken) {
 					window.location.href = `/room/${roomId}?token=${masterToken}`;
@@ -30,7 +34,7 @@
 					window.location.href = `/room/${roomId}`;
 				}
 			} else {
-				error = 'Création impossible';
+				error = data && isApiErrorResponse(data) ? data.error : 'Création impossible';
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Création impossible';
@@ -48,11 +52,12 @@
 			error = null;
 
 			const response = await roomApi.getByCode(roomCode.trim().toUpperCase());
+			const data = response.data;
 
-			if (response.data) {
-				window.location.href = `/room/${response.data.id}`;
+			if (data && !isApiErrorResponse(data)) {
+				window.location.href = `/room/${data.id}`;
 			} else {
-				error = 'Salle introuvable avec ce code';
+				error = data && isApiErrorResponse(data) ? data.error : 'Salle introuvable avec ce code';
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Code de salle invalide';

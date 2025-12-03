@@ -65,6 +65,7 @@ export interface Player {
   roundScore: number;        // Score for current round
   isActive: boolean;         // Currently answering
   isLockedOut: boolean;      // Locked out of current song
+  token?: string;            // Session token (only returned when authenticated)
 
   // Statistics
   stats: PlayerStats;
@@ -259,6 +260,7 @@ export interface RoundSong {
   song: Song;                  // Populated song data (or picture/video data)
   index: number;               // Song number in round
   status: SongStatus;          // Note: mediaType inherited from parent Round
+  params?: ModeParams;         // Effective params applied to this song (defaults overridden per-round)
 
   // State
   startedAt?: Date;
@@ -380,7 +382,7 @@ export type ServerMessage =
   | { type: 'player:reconnected'; data: { playerId: string; playerName: string } }
 
   // Game Flow
-  | { type: 'game:started'; data: { room: Room } }
+  | { type: 'game:started'; data: { room: Room; session: GameSession | null } }
   | { type: 'round:started'; data: { room: Room | null; roundIndex: number; songCount: number; modeType: ModeType; mediaType: MediaType } }
   | { type: 'round:ended'; data: { roundIndex: number; scores: Array<{ playerId: string; playerName: string; score: number; rank: number }> } }
   | { type: 'round:between'; data: {
@@ -389,7 +391,7 @@ export type ServerMessage =
       nextRoundIndex: number;
       nextRoundMode: ModeType;
       nextRoundMedia: MediaType;
-      scores: Array<{ playerId: string; playerName: string; score: number; rank: number }>;
+      scores: Array<{ playerId: string; playerName: string; score: number; rank: number; averageAnswerTime?: number }>;
     } }
   | { type: 'game:ended'; data: { finalScores: FinalScore[] } }
   | { type: 'game:restarted'; data: { room: Room; players: Player[] } }
@@ -407,15 +409,18 @@ export type ServerMessage =
       audioUrl: string;
       clipStart: number;
       audioPlayback: 'master' | 'players' | 'all';
+      answerTimer?: number;
       answerChoices?: Array<{ title: string; artist: string; correct: boolean }>;
       // For master only - players should ignore these fields
       songTitle?: string;
       songArtist?: string;
+      albumArt?: string;
     } }
   | { type: 'song:ended'; data: {
       songIndex: number;
       correctTitle: string;
       correctArtist: string;
+      albumArt?: string;
       winners?: Array<{
         playerId: string;
         playerName: string;
@@ -426,7 +431,7 @@ export type ServerMessage =
     } }
 
   // Gameplay
-  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; songIndex: number; modeType: ModeType; manualValidation?: boolean; artistQuestion?: MediaQuestion } }
+  | { type: 'player:buzzed'; data: { playerId: string; playerName: string; songIndex: number; modeType: ModeType; manualValidation?: boolean; artistQuestion?: MediaQuestion; titleQuestion?: MediaQuestion; answerTimer?: number } }
   | { type: 'buzz:rejected'; data: { playerId: string; reason: string } }
   | { type: 'answer:result'; data: {
       playerId: string;
@@ -436,12 +441,13 @@ export type ServerMessage =
       pointsAwarded: number;
       shouldShowTitleChoices?: boolean;
       lockOutPlayer?: boolean;
+      message?: string;
     } }
-  | { type: 'choices:title'; data: { playerId: string; titleQuestion: MediaQuestion } }
+  | { type: 'choices:title'; data: { playerId: string; titleQuestion: MediaQuestion; answerTimer?: number } }
 
   // Master Controls
   | { type: 'game:paused'; data: { timestamp: number } }
-  | { type: 'game:resumed'; data: { timestamp: number } }
+  | { type: 'game:resumed'; data: { timestamp: number; reason?: string } }
 
   // Timers
   | { type: 'timer:song'; data: { timeRemaining: number } }

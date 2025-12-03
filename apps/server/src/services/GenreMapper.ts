@@ -303,7 +303,17 @@ export class GenreMapper {
    * Normalize a genre string to its canonical form
    * Returns 'Unknown' if no mapping is found
    */
-  static normalize(genre: string | undefined | null): CanonicalGenre | 'Unknown' {
+  static normalize(genre: string | string[] | undefined | null): CanonicalGenre | 'Unknown' {
+    if (Array.isArray(genre)) {
+      for (const entry of genre) {
+        const normalized = this.normalize(entry);
+        if (normalized !== 'Unknown') {
+          return normalized;
+        }
+      }
+      return 'Unknown';
+    }
+
     if (!genre || typeof genre !== 'string') {
       return 'Unknown';
     }

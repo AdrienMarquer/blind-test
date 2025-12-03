@@ -54,6 +54,7 @@ export interface JobMetadata {
 		year?: number;
 		genre?: string;
 	};
+	force?: boolean;
 
 	// Common metadata
 	tempFilePath?: string;

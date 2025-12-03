@@ -3,7 +3,7 @@
  * Background worker that processes import jobs from the queue
  */
 
-import { jobQueue, Job, JobType } from './JobQueue';
+import { jobQueue, type Job, type JobType } from './JobQueue';
 import { youtubeDownloadService } from './YouTubeDownloadService';
 import { songRepository } from '../repositories';
 import { extractMetadata, getFileFormat } from '../utils/mp3-metadata';
@@ -583,7 +583,7 @@ export class JobWorker {
 		const stats = await stat(tempFilePath);
 
 		// Move file from temp to uploads directory
-		const { getFileFormat, detectSongLanguage } = await import('../utils/mp3-metadata');
+		const { getFileFormat } = await import('../utils/mp3-metadata');
 		const targetPath = `uploads/${fileName}`;
 		await rename(tempFilePath, targetPath);
 
@@ -685,7 +685,6 @@ export class JobWorker {
 		}
 
 		// Detect language
-		const { detectSongLanguage } = await import('../utils/mp3-metadata');
 		const language = detectSongLanguage(finalMetadata.title, finalMetadata.artist);
 
 		// Create song record (Spotify imports don't have local files)
