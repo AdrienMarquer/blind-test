@@ -1,12 +1,19 @@
 <script lang="ts">
 	/**
 	 * RoundBuilder Component
-	 * Allows creating multi-round games using presets or custom configuration
+	 * Simple round management
 	 */
 
 	import { onMount } from 'svelte';
-	import { DEFAULT_SONG_DURATION, CANONICAL_GENRES, type RoundConfig } from '@blind-test/shared';
-	import { gamePresets, getModeDisplayName, getMediaDisplayName } from '$lib/presets';
+	import { CANONICAL_GENRES, type RoundConfig, type MediaType } from '@blind-test/shared';
+	import {
+		gameModes,
+		mediaTypes,
+		getModeInfo,
+		getDefaultRounds,
+		createDefaultRound,
+		type GameModeType
+	} from '$lib/presets';
 
 	interface Props {
 		rounds: RoundConfig[];
@@ -15,105 +22,61 @@
 		songs: any[];
 	}
 
-	let {
-		rounds = $bindable(),
-		availableGenres,
-		onUpdateRounds,
-		songs
-	}: Props = $props();
+	let { rounds = $bindable(), availableGenres, onUpdateRounds, songs }: Props = $props();
 
-	let selectedPreset = $state<string | null>(null);
-	let useCustom = $state(false);
-	let draggedIndex = $state<number | null>(null);
-	let dragOverIndex = $state<number | null>(null);
-	let isDragging = $state(false);
-	let expandedGenreSections = $state<Set<number>>(new Set());
+	let expandedRound = $state<number | null>(null);
 
-	// Apply default preset on mount if no rounds are configured
 	onMount(() => {
-		if (rounds.length === 0 && gamePresets.length > 0) {
-			console.log('[RoundBuilder] No rounds configured, applying default preset');
-			applyPreset(gamePresets[0].id); // Apply first preset (Quick Game)
+		if (rounds.length === 0) {
+			rounds = getDefaultRounds();
+			onUpdateRounds(rounds);
 		}
 	});
 
-	// Apply preset
-	function applyPreset(presetId: string) {
-		const preset = gamePresets.find((p) => p.id === presetId);
-		if (preset) {
-			selectedPreset = presetId;
-			useCustom = false;
-			rounds = [...preset.rounds];
-			onUpdateRounds(rounds);
-		}
-	}
-
-	// Add a new round
-	function addRound() {
-		if (rounds.length >= 5) {
-			console.warn('Maximum 5 rounds allowed');
-			return;
-		}
-
-		const newRound: RoundConfig = {
-			modeType: 'buzz_and_choice',
-			mediaType: 'music',
-			songFilters: {
-				songCount: 5
-			},
-			params: {
-				songDuration: DEFAULT_SONG_DURATION,
-				answerTimer: 10,
-				audioPlayback: 'master'
-			}
-		};
-		rounds = [...rounds, newRound];
+	function addRound(modeType: GameModeType) {
+		rounds = [...rounds, createDefaultRound(modeType)];
 		onUpdateRounds(rounds);
 	}
 
-	// Remove a round
 	function removeRound(index: number) {
-		if (rounds.length <= 1) {
-			console.warn('Cannot remove the last round');
-			return;
-		}
+		if (rounds.length <= 1) return;
 		rounds = rounds.filter((_, i) => i !== index);
 		onUpdateRounds(rounds);
-		// Clear preset selection since we've modified the rounds
-		selectedPreset = null;
+		if (expandedRound === index) expandedRound = null;
 	}
 
-	// Toggle custom mode
-	function toggleCustom() {
-		useCustom = !useCustom;
-		if (useCustom) {
-			selectedPreset = null;
-			if (rounds.length === 0) {
-				addRound();
-			}
-		}
-	}
-
-	// Update song count for a specific round
-	function updateSongCount(index: number, newCount: number) {
-		const validCount = Math.max(1, Math.min(30, newCount)); // Min 1, max 30
+	function changeRoundMode(index: number, modeType: GameModeType) {
 		const updatedRounds = [...rounds];
-		const previousCount = updatedRounds[index].songFilters?.songCount || 5;
-
+		const currentMediaType = updatedRounds[index].mediaType;
 		updatedRounds[index] = {
-			...updatedRounds[index],
-			songFilters: {
-				...updatedRounds[index].songFilters,
-				songCount: validCount
-			}
+			...createDefaultRound(modeType, currentMediaType),
+			songFilters: updatedRounds[index].songFilters
 		};
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
-
-		console.log(`🎵 Round ${index + 1} song count updated: ${previousCount} → ${validCount}`);
 	}
 
-	// Update year range for a specific round
+	function changeRoundMediaType(index: number, mediaType: MediaType) {
+		const updatedRounds = [...rounds];
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			mediaType
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
+
+	function updateSongCount(index: number, newCount: number) {
+		const validCount = Math.max(1, Math.min(30, newCount));
+		const updatedRounds = [...rounds];
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			songFilters: { ...updatedRounds[index].songFilters, songCount: validCount }
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
+
 	function updateYearMin(index: number, year: string) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
@@ -140,28 +103,18 @@
 		onUpdateRounds(rounds);
 	}
 
-	// Toggle genre for a specific round (multi-select)
 	function toggleGenre(index: number, genre: string) {
 		const updatedRounds = [...rounds];
 		const currentGenres = updatedRounds[index].songFilters?.genre;
+		let genreArray: string[] = Array.isArray(currentGenres)
+			? [...currentGenres]
+			: currentGenres
+				? [currentGenres]
+				: [];
 
-		// Convert to array if needed
-		let genreArray: string[] = [];
-		if (Array.isArray(currentGenres)) {
-			genreArray = [...currentGenres];
-		} else if (currentGenres) {
-			genreArray = [currentGenres];
-		}
-
-		// Toggle the genre
 		const genreIndex = genreArray.indexOf(genre);
-		if (genreIndex > -1) {
-			// Remove genre
-			genreArray.splice(genreIndex, 1);
-		} else {
-			// Add genre
-			genreArray.push(genre);
-		}
+		if (genreIndex > -1) genreArray.splice(genreIndex, 1);
+		else genreArray.push(genre);
 
 		updatedRounds[index] = {
 			...updatedRounds[index],
@@ -174,345 +127,238 @@
 		onUpdateRounds(rounds);
 	}
 
-	// Select all genres for a specific round
 	function selectAllGenres(index: number) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
 			...updatedRounds[index],
-			songFilters: {
-				...updatedRounds[index].songFilters,
-				genre: [...CANONICAL_GENRES]
-			}
+			songFilters: { ...updatedRounds[index].songFilters, genre: [...CANONICAL_GENRES] }
 		};
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
 	}
 
-	// Clear all genres for a specific round
 	function clearAllGenres(index: number) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
 			...updatedRounds[index],
-			songFilters: {
-				...updatedRounds[index].songFilters,
-				genre: undefined
-			}
+			songFilters: { ...updatedRounds[index].songFilters, genre: undefined }
 		};
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
 	}
 
-	// Helper to check if a genre is selected for a round
 	function isGenreSelected(index: number, genre: string): boolean {
 		const currentGenres = rounds[index].songFilters?.genre;
 		if (!currentGenres) return false;
-		if (Array.isArray(currentGenres)) {
-			return currentGenres.includes(genre);
-		}
-		return currentGenres === genre;
+		return Array.isArray(currentGenres) ? currentGenres.includes(genre) : currentGenres === genre;
 	}
 
-	// Helper to get selected genres display text
 	function getSelectedGenresText(index: number): string {
 		const currentGenres = rounds[index].songFilters?.genre;
 		if (!currentGenres) return 'Tous les genres';
 		if (Array.isArray(currentGenres)) {
-			return currentGenres.length === CANONICAL_GENRES.length
-				? 'Tous les genres'
-				: currentGenres.join(', ');
+			if (currentGenres.length === CANONICAL_GENRES.length) return 'Tous les genres';
+			if (currentGenres.length <= 2) return currentGenres.join(', ');
+			return `${currentGenres.length} genres sélectionnés`;
 		}
 		return currentGenres;
 	}
 
-	// Toggle genre section expansion
-	function toggleGenreExpansion(index: number) {
-		if (expandedGenreSections.has(index)) {
-			expandedGenreSections.delete(index);
-		} else {
-			expandedGenreSections.add(index);
-		}
-		// Trigger reactivity
-		expandedGenreSections = new Set(expandedGenreSections);
-	}
-
-	// Update includeNiche for a specific round
 	function updateIncludeNiche(index: number, include: boolean) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
 			...updatedRounds[index],
-			songFilters: {
-				...updatedRounds[index].songFilters,
-				includeNiche: include
-			}
+			songFilters: { ...updatedRounds[index].songFilters, includeNiche: include }
 		};
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
 	}
-
-	// Drag and drop handlers
-	function handleDragStart(event: DragEvent, index: number) {
-		draggedIndex = index;
-		isDragging = true;
-		if (event.dataTransfer) {
-			event.dataTransfer.effectAllowed = 'move';
-		}
-	}
-
-	function handleDragOver(event: DragEvent, index: number) {
-		event.preventDefault();
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect = 'move';
-		}
-		if (draggedIndex !== index) {
-			dragOverIndex = index;
-		}
-	}
-
-	function handleDragLeave(event: DragEvent) {
-		// Only clear if actually leaving the element
-		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-		const x = event.clientX;
-		const y = event.clientY;
-
-		if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
-			dragOverIndex = null;
-		}
-	}
-
-	function handleDrop(event: DragEvent, dropIndex: number) {
-		event.preventDefault();
-
-		if (draggedIndex === null || draggedIndex === dropIndex) {
-			draggedIndex = null;
-			dragOverIndex = null;
-			isDragging = false;
-			return;
-		}
-
-		// Reorder rounds with animation
-		const reorderedRounds = [...rounds];
-		const [movedRound] = reorderedRounds.splice(draggedIndex, 1);
-		reorderedRounds.splice(dropIndex, 0, movedRound);
-
-		rounds = reorderedRounds;
-		onUpdateRounds(rounds);
-
-		// Reset drag state
-		setTimeout(() => {
-			draggedIndex = null;
-			dragOverIndex = null;
-			isDragging = false;
-		}, 50);
-	}
-
-	function handleDragEnd() {
-		setTimeout(() => {
-			draggedIndex = null;
-			dragOverIndex = null;
-			isDragging = false;
-		}, 50);
-	}
 </script>
 
 <div class="round-builder">
-	<h3>Mode de jeu</h3>
-
-	<div class="mode-selector">
-		<!-- Preset Selection -->
-		<div class="presets">
-			{#each gamePresets as preset}
-				<button
-					class="preset-card"
-					class:selected={selectedPreset === preset.id}
-					onclick={() => applyPreset(preset.id)}
-				>
-					<div class="preset-header">
-						<strong>{preset.name}</strong>
-						<span class="round-badge">{preset.rounds.length} manches</span>
-					</div>
-					<p class="preset-description">{preset.description}</p>
-				</button>
-			{/each}
-		</div>
-
-		<!-- Custom Game Toggle -->
-		<div class="custom-toggle">
-			<label>
-				<input type="checkbox" checked={useCustom} onchange={toggleCustom} />
-				<strong>Jeu personnalisé</strong>
-				<span>Compose tes propres manches</span>
-			</label>
-		</div>
-	</div>
-
-	<!-- Round List -->
-	{#if rounds.length > 0}
-		<div class="rounds-list">
-			<div class="rounds-header">
-				<h4>Manches</h4>
-				<button
-					class="icon-btn add-btn"
-					onclick={addRound}
-					disabled={rounds.length >= 5}
-					title="Ajouter une manche"
-				>
-					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-						<path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					</svg>
-				</button>
-			</div>
-
-			<div class="rounds" role="list" aria-label="Manches configurées">
-				{#each rounds as round, index}
-					<div
-						class="round-card"
-						role="listitem"
-						aria-roledescription="Manche"
-						class:dragging={draggedIndex === index}
-						class:drag-over={dragOverIndex === index && draggedIndex !== index}
-						class:is-dragging-active={isDragging}
-						style="transition-delay: {index * 30}ms;"
-						draggable="true"
-						ondragstart={(e) => handleDragStart(e, index)}
-						ondragover={(e) => handleDragOver(e, index)}
-						ondragleave={(e) => handleDragLeave(e)}
-						ondrop={(e) => handleDrop(e, index)}
-						ondragend={handleDragEnd}
-					>
-						<div class="drag-handle" title="Glisser pour réorganiser">
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-								<circle cx="6" cy="4" r="1.5" fill="currentColor"/>
-								<circle cx="10" cy="4" r="1.5" fill="currentColor"/>
-								<circle cx="6" cy="8" r="1.5" fill="currentColor"/>
-								<circle cx="10" cy="8" r="1.5" fill="currentColor"/>
-								<circle cx="6" cy="12" r="1.5" fill="currentColor"/>
-								<circle cx="10" cy="12" r="1.5" fill="currentColor"/>
-							</svg>
-						</div>
-						<div class="round-info">
-							<div class="round-number">Manche {index + 1}</div>
-							<div class="round-details">
-								<span class="mode-badge">{getModeDisplayName(round.modeType)}</span>
-								<span class="media-badge">{getMediaDisplayName(round.mediaType)}</span>
-								<div class="song-count-input">
-									<input
-										type="number"
-										min="1"
-										max="30"
-										value={round.songFilters?.songCount || round.songFilters?.songIds?.length || 5}
-										oninput={(e) => updateSongCount(index, parseInt(e.currentTarget.value) || 1)}
-									/>
-									<span>morceaux</span>
-								</div>
-							</div>
-
-							<!-- Music Filters -->
-							{#if round.mediaType === 'music'}
-								<div class="filter-controls">
-									<!-- Genre Filter -->
-									<div class="filter-group filter-group-wide">
-										<div class="filter-header">
-											<span class="filter-label" aria-hidden="true">Genres</span>
-											{#if expandedGenreSections.has(index)}
-												<div class="filter-actions">
-													<button
-														type="button"
-														class="filter-action-btn"
-														onclick={() => selectAllGenres(index)}
-													>
-														Tous
-													</button>
-													<button
-														type="button"
-														class="filter-action-btn"
-														onclick={() => clearAllGenres(index)}
-													>
-														Aucun
-													</button>
-												</div>
-											{/if}
-										</div>
-										<button
-											type="button"
-											class="genre-selection-summary"
-											onclick={() => toggleGenreExpansion(index)}
-										>
-											<span>{getSelectedGenresText(index)}</span>
-											<span class="chevron" class:expanded={expandedGenreSections.has(index)}>▼</span>
-										</button>
-										{#if expandedGenreSections.has(index)}
-											<div class="genre-checkboxes">
-												{#each CANONICAL_GENRES as genre}
-													<label class="genre-checkbox-label">
-														<input
-															type="checkbox"
-															checked={isGenreSelected(index, genre)}
-															onchange={() => toggleGenre(index, genre)}
-														/>
-														<span>{genre}</span>
-													</label>
-												{/each}
-											</div>
-										{/if}
-									</div>
-
-									<!-- Year Range Filter -->
-									<div class="filter-group">
-										<label for="year-min-{index}">Année min</label>
-										<input
-											id="year-min-{index}"
-											type="number"
-											min="1900"
-											max="2099"
-											placeholder="Ex: 1980"
-											value={round.songFilters?.yearMin || ''}
-											oninput={(e) => updateYearMin(index, e.currentTarget.value)}
-										/>
-									</div>
-
-									<div class="filter-group">
-										<label for="year-max-{index}">Année max</label>
-										<input
-											id="year-max-{index}"
-											type="number"
-											min="1900"
-											max="2099"
-											placeholder="Ex: 2000"
-											value={round.songFilters?.yearMax || ''}
-											oninput={(e) => updateYearMax(index, e.currentTarget.value)}
-										/>
-									</div>
-
-									<!-- Include Niche Toggle -->
-									<div class="filter-group filter-checkbox">
-										<label for="niche-{index}">
-											<input
-												id="niche-{index}"
-												type="checkbox"
-												checked={round.songFilters?.includeNiche || false}
-												onchange={(e) => updateIncludeNiche(index, e.currentTarget.checked)}
-											/>
-											<span>Inclure chansons niche</span>
-										</label>
-									</div>
-								</div>
-							{/if}
+	<div class="rounds">
+		{#each rounds as round, index}
+			{@const modeInfo = getModeInfo(round.modeType)}
+			<div class="round-card">
+				<div class="round-header">
+					<span class="round-num">Manche {index + 1}</span>
+					<div class="header-right">
+						<div class="mode-badges">
+							{#each gameModes as mode}
+								<button
+									class="mode-badge"
+									class:active={round.modeType === mode.id}
+									onclick={() => changeRoundMode(index, mode.id)}
+								>
+									<span class="mode-icon">{mode.icon}</span>
+									<span class="mode-name">{mode.name}</span>
+								</button>
+							{/each}
 						</div>
 						<button
-							class="icon-btn remove-btn"
+							class="remove-btn"
 							onclick={() => removeRound(index)}
 							disabled={rounds.length === 1}
 							title="Supprimer cette manche"
 						>
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-								<path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M18 6L6 18M6 6l12 12" />
 							</svg>
 						</button>
 					</div>
-				{/each}
+				</div>
+
+				<div class="round-body">
+
+					<!-- Media Type Selection -->
+					<div class="field">
+						<span class="field-label">Support</span>
+						<div class="media-toggle">
+							{#each mediaTypes as media}
+								{@const isSupported = media.id === 'music'}
+								<button
+									class="media-btn"
+									class:active={round.mediaType === media.id}
+									onclick={() => changeRoundMediaType(index, media.id)}
+									disabled={!isSupported}
+									title={isSupported ? '' : 'Bientôt disponible'}
+								>
+									<span class="media-icon">{media.icon}</span>
+									<span class="media-name">{media.name}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Song Count -->
+					<div class="field field-inline">
+						<label class="field-label" for="song-count-{index}">Nombre de titres</label>
+						<div class="song-count-input">
+							<button
+								class="stepper-btn"
+								onclick={() => updateSongCount(index, (round.songFilters?.songCount || 5) - 1)}
+								disabled={(round.songFilters?.songCount || 5) <= 1}
+							>
+								−
+							</button>
+							<input
+								id="song-count-{index}"
+								type="number"
+								min="1"
+								max="30"
+								value={round.songFilters?.songCount || 5}
+								oninput={(e) => updateSongCount(index, parseInt(e.currentTarget.value) || 1)}
+							/>
+							<button
+								class="stepper-btn"
+								onclick={() => updateSongCount(index, (round.songFilters?.songCount || 5) + 1)}
+								disabled={(round.songFilters?.songCount || 5) >= 30}
+							>
+								+
+							</button>
+						</div>
+					</div>
+
+					<!-- Filters Toggle (only for music) -->
+					{#if round.mediaType === 'music'}
+						<button
+							class="filters-toggle"
+							class:expanded={expandedRound === index}
+							class:has-filters={round.songFilters?.genre ||
+								round.songFilters?.yearMin ||
+								round.songFilters?.yearMax}
+							onclick={() => (expandedRound = expandedRound === index ? null : index)}
+						>
+							<span>Filtres avancés</span>
+							{#if round.songFilters?.genre || round.songFilters?.yearMin || round.songFilters?.yearMax}
+								<span class="filter-badge">Actifs</span>
+							{/if}
+							<svg
+								class="chevron"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</button>
+
+						{#if expandedRound === index}
+							<div class="filters-panel">
+								<!-- Year Range -->
+								<div class="filter-section">
+									<span class="field-label">Période</span>
+									<div class="year-range">
+										<input
+											type="number"
+											placeholder="Année min"
+											value={round.songFilters?.yearMin || ''}
+											oninput={(e) => updateYearMin(index, e.currentTarget.value)}
+										/>
+										<span class="year-separator">à</span>
+										<input
+											type="number"
+											placeholder="Année max"
+											value={round.songFilters?.yearMax || ''}
+											oninput={(e) => updateYearMax(index, e.currentTarget.value)}
+										/>
+									</div>
+								</div>
+
+								<!-- Niche Toggle -->
+								<div class="filter-section">
+									<label class="niche-toggle">
+										<input
+											type="checkbox"
+											checked={round.songFilters?.includeNiche || false}
+											onchange={(e) => updateIncludeNiche(index, e.currentTarget.checked)}
+										/>
+										<span>Inclure les titres niche</span>
+									</label>
+								</div>
+
+								<!-- Genre Selection -->
+								<div class="filter-section">
+									<div class="genre-header">
+										<span class="field-label">Genres: {getSelectedGenresText(index)}</span>
+										<div class="genre-actions">
+											<button onclick={() => selectAllGenres(index)}>Tous</button>
+											<button onclick={() => clearAllGenres(index)}>Aucun</button>
+										</div>
+									</div>
+									<div class="genre-grid">
+										{#each CANONICAL_GENRES as genre}
+											<label class="genre-chip" class:selected={isGenreSelected(index, genre)}>
+												<input
+													type="checkbox"
+													checked={isGenreSelected(index, genre)}
+													onchange={() => toggleGenre(index, genre)}
+												/>
+												{genre}
+											</label>
+										{/each}
+									</div>
+								</div>
+							</div>
+						{/if}
+					{/if}
+				</div>
 			</div>
-		</div>
-	{/if}
+		{/each}
+	</div>
+
+	<div class="add-buttons">
+		{#each gameModes as mode}
+			<button class="add-btn" onclick={() => addRound(mode.id)}>
+				<span class="add-icon">+</span>
+				<span class="add-mode-icon">{mode.icon}</span>
+				<span>{mode.name}</span>
+			</button>
+		{/each}
+	</div>
 </div>
 
 <style>
@@ -522,525 +368,458 @@
 		gap: 1rem;
 	}
 
-	.presets {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 1rem;
-	}
-
-	.preset-card {
-		padding: 1rem;
-		border-radius: 18px;
-		border: 1px solid rgba(18, 43, 59, 0.08);
-		background: rgba(255, 255, 255, 0.9);
-		text-align: left;
-		cursor: pointer;
-		transition: border-color 160ms ease, box-shadow 160ms ease;
-	}
-
-	.preset-card:hover {
-		border-color: var(--aq-color-primary);
-		box-shadow: var(--aq-shadow-soft);
-	}
-
-	.preset-card.selected {
-		border-color: var(--aq-color-primary);
-		box-shadow: var(--aq-shadow-card);
-	}
-
-	.preset-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 0.5rem;
-	}
-
-	.round-badge {
-		padding: 0.35rem 0.75rem;
-		border-radius: 999px;
-		background: rgba(239, 76, 131, 0.12);
-		color: var(--aq-color-primary);
-		font-size: 0.8rem;
-	}
-
-	.custom-toggle {
-		margin-top: 1.25rem;
-		padding: 0.75rem 1rem;
-		border-radius: 16px;
-		border: 1px dashed rgba(18, 43, 59, 0.2);
-	}
-
-	.rounds-list {
-		margin-top: 1.5rem;
-	}
-
-	.rounds-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1rem;
-	}
-
-	.rounds-header h4 {
-		margin: 0;
-		font-size: 1.1rem;
-		color: var(--aq-color-deep);
-	}
-
 	.rounds {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 1rem;
 	}
 
 	.round-card {
+		background: white;
+		border-radius: 16px;
+		border: 1px solid rgba(18, 43, 59, 0.08);
+		overflow: hidden;
+		box-shadow: 0 2px 8px rgba(18, 43, 59, 0.04);
+	}
+
+	.round-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.85rem 1rem;
-		border-radius: 16px;
-		background: rgba(18, 43, 59, 0.04);
-		cursor: grab;
-		transition:
-			transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-			opacity 0.25s ease,
-			background 0.2s ease,
-			border-color 0.2s ease,
-			box-shadow 0.25s ease;
-		position: relative;
-		border: 2px solid transparent;
-		will-change: transform, opacity;
+		padding: 0.75rem 1rem;
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.08), rgba(248, 192, 39, 0.08));
+		border-bottom: 1px solid rgba(18, 43, 59, 0.06);
+		gap: 0.75rem;
 	}
 
-	.round-card:hover {
-		background: rgba(18, 43, 59, 0.06);
-		box-shadow: 0 2px 8px rgba(18, 43, 59, 0.08);
+	.round-num {
+		font-weight: 700;
+		font-size: 1rem;
+		color: var(--aq-color-deep);
 	}
 
-	.round-card:active {
-		cursor: grabbing;
-	}
-
-	.round-card.dragging {
-		opacity: 0.4;
-		transform: scale(0.98) rotate(2deg);
-		box-shadow: 0 8px 24px rgba(239, 76, 131, 0.3);
-		border-color: var(--aq-color-primary);
-		background: rgba(239, 76, 131, 0.05);
-		z-index: 1000;
-	}
-
-	.round-card.drag-over {
-		border-color: var(--aq-color-primary);
-		background: rgba(239, 76, 131, 0.12);
-		transform: translateY(-4px) scale(1.02);
-		box-shadow:
-			0 0 0 2px rgba(239, 76, 131, 0.2),
-			0 8px 16px rgba(239, 76, 131, 0.15);
-	}
-
-	.round-card.drag-over::before {
-		content: '';
-		position: absolute;
-		top: -8px;
-		left: 50%;
-		transform: translateX(-50%);
-		width: 60%;
-		height: 3px;
-		background: var(--aq-color-primary);
-		border-radius: 999px;
-		animation: pulse-line 0.6s ease-in-out infinite;
-	}
-
-	@keyframes pulse-line {
-		0%, 100% {
-			opacity: 0.5;
-			width: 60%;
-		}
-		50% {
-			opacity: 1;
-			width: 80%;
-		}
-	}
-
-	.round-card.is-dragging-active:not(.dragging):not(.drag-over) {
-		transform: scale(0.98);
-		opacity: 0.7;
-	}
-
-	.drag-handle {
+	.header-right {
 		display: flex;
 		align-items: center;
-		color: rgba(18, 43, 59, 0.3);
-		margin-right: 0.75rem;
-		cursor: grab;
-		transition: all 0.2s ease;
-		padding: 0.25rem;
-		border-radius: 6px;
+		gap: 0.5rem;
 	}
 
-	.drag-handle:hover {
-		color: var(--aq-color-primary);
-		background: rgba(239, 76, 131, 0.1);
+	.mode-badges {
+		display: flex;
+		gap: 0.25rem;
 	}
 
-	.drag-handle:active {
-		cursor: grabbing;
-		transform: scale(0.95);
-	}
-
-	.dragging .drag-handle {
-		color: var(--aq-color-primary);
-	}
-
-	.mode-badge,
-	.media-badge {
-		padding: 0.25rem 0.6rem;
+	.mode-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.35rem 0.65rem;
+		border: 1.5px solid rgba(18, 43, 59, 0.12);
+		background: white;
 		border-radius: 999px;
+		cursor: pointer;
+		transition: all 0.15s ease;
 		font-size: 0.8rem;
-		background: rgba(239, 76, 131, 0.12);
+	}
+
+	.mode-badge:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.mode-badge.active {
+		border-color: var(--aq-color-primary);
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.15), rgba(248, 192, 39, 0.15));
+	}
+
+	.mode-badge .mode-icon {
+		font-size: 0.9rem;
+	}
+
+	.mode-badge .mode-name {
+		font-weight: 600;
+		font-size: 0.8rem;
+		color: var(--aq-color-deep);
+	}
+
+	.mode-badge.active .mode-name {
 		color: var(--aq-color-primary);
 	}
 
-	.media-badge {
-		background: rgba(248, 192, 39, 0.15);
-		color: var(--aq-color-secondary);
+	.remove-btn {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: transparent;
+		color: rgba(18, 43, 59, 0.3);
+		cursor: pointer;
+		border-radius: 8px;
+		transition: all 0.15s ease;
+	}
+
+	.remove-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.1);
+		color: rgb(220, 38, 38);
+	}
+
+	.remove-btn:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+
+	.round-body {
+		padding: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.field-inline {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.field-label {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: rgba(18, 43, 59, 0.7);
+	}
+
+	.media-toggle {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+
+	.media-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.6rem 0.9rem;
+		border: 2px solid rgba(18, 43, 59, 0.1);
+		background: white;
+		border-radius: 10px;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex: 1;
+		min-width: fit-content;
+		justify-content: center;
+	}
+
+	.media-btn:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.media-btn.active {
+		border-color: var(--aq-color-primary);
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.1), rgba(248, 192, 39, 0.1));
+	}
+
+	.media-icon {
+		font-size: 1.1rem;
+	}
+
+	.media-name {
+		font-weight: 600;
+		font-size: 0.85rem;
+		color: var(--aq-color-deep);
+	}
+
+	.media-btn.active .media-name {
+		color: var(--aq-color-primary);
+	}
+
+	.media-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.media-btn:disabled:hover {
+		border-color: rgba(18, 43, 59, 0.1);
 	}
 
 	.song-count-input {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.25rem 0.6rem;
-		border-radius: 999px;
-		background: rgba(18, 43, 59, 0.06);
-		font-size: 0.8rem;
+		gap: 0.25rem;
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 10px;
+		padding: 0.25rem;
 	}
 
-	.song-count-input input {
-		width: 3.5rem;
-		padding: 0.2rem 0.4rem;
-		border: 1px solid transparent;
-		border-radius: 8px;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: var(--aq-color-deep);
-		text-align: center;
-		background: transparent;
-		transition: all 0.2s ease;
-	}
-
-	.song-count-input input:hover {
-		border-color: rgba(239, 76, 131, 0.2);
-		background: rgba(255, 255, 255, 0.5);
-	}
-
-	.song-count-input input:focus {
-		outline: none;
-		border-color: var(--aq-color-primary);
-		background: rgba(255, 255, 255, 0.8);
-		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.15);
-		transform: scale(1.05);
-	}
-
-	.song-count-input input:active {
-		transform: scale(0.98);
-	}
-
-	.song-count-input span {
-		color: rgba(18, 43, 59, 0.6);
-		font-weight: 500;
-	}
-
-	.round-info {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		flex: 1;
-	}
-
-	.round-number {
-		font-weight: 700;
-		color: var(--aq-color-deep);
-		min-width: 80px;
-	}
-
-	.round-details {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.icon-btn {
+	.stepper-btn {
+		width: 32px;
+		height: 32px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
 		border: none;
+		background: white;
 		border-radius: 8px;
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--aq-color-deep);
 		cursor: pointer;
-		transition: all 0.2s ease;
-		background: transparent;
-		color: rgba(18, 43, 59, 0.5);
+		transition: all 0.15s ease;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 	}
 
-	.icon-btn:hover:not(:disabled) {
-		background: rgba(239, 76, 131, 0.1);
-		color: var(--aq-color-primary);
-		transform: scale(1.05);
+	.stepper-btn:hover:not(:disabled) {
+		background: var(--aq-color-primary);
+		color: white;
 	}
 
-	.icon-btn:active:not(:disabled) {
-		transform: scale(0.95);
-	}
-
-	.icon-btn:disabled {
+	.stepper-btn:disabled {
 		opacity: 0.3;
 		cursor: not-allowed;
 	}
 
-	.remove-btn {
-		margin-left: 1rem;
-	}
-
-	/* Filter Controls */
-	.filter-controls {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-		margin-top: 0.75rem;
-		padding: 0.75rem;
-		border-radius: 12px;
-		background: rgba(255, 255, 255, 0.5);
-		border: 1px solid rgba(18, 43, 59, 0.08);
-	}
-
-	.filter-group {
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-		min-width: 120px;
-	}
-
-	.filter-group label,
-	.filter-label {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: rgba(18, 43, 59, 0.6);
-		text-transform: uppercase;
-		letter-spacing: 0.3px;
-	}
-
-	.filter-group input[type="number"] {
-		padding: 0.4rem 0.6rem;
-		border: 1px solid rgba(18, 43, 59, 0.15);
-		border-radius: 8px;
-		font-size: 0.85rem;
+	.song-count-input input {
+		width: 50px;
+		padding: 0.4rem;
+		border: none;
+		background: transparent;
+		font-size: 1rem;
+		font-weight: 700;
+		text-align: center;
 		color: var(--aq-color-deep);
-		background: white;
-		transition: all 0.2s ease;
 	}
 
-	.filter-group input[type="number"]:focus {
+	.song-count-input input:focus {
 		outline: none;
-		border-color: var(--aq-color-primary);
-		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.15);
 	}
 
-	.filter-group input[type="number"]::placeholder {
-		color: rgba(18, 43, 59, 0.3);
-		font-size: 0.8rem;
-	}
-
-	.filter-checkbox {
-		justify-content: flex-end;
-	}
-
-	.filter-checkbox label {
+	.filters-toggle {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		cursor: pointer;
-		padding: 0.4rem 0.6rem;
-		border-radius: 8px;
-		background: rgba(248, 192, 39, 0.08);
-		border: 1px solid rgba(248, 192, 39, 0.2);
-		transition: all 0.2s ease;
-		text-transform: none;
-		font-size: 0.8rem;
-	}
-
-	.filter-checkbox label:hover {
-		background: rgba(248, 192, 39, 0.15);
-		border-color: rgba(248, 192, 39, 0.3);
-	}
-
-	.filter-checkbox input[type="checkbox"] {
-		width: 16px;
-		height: 16px;
-		cursor: pointer;
-	}
-
-	.filter-checkbox span {
-		color: var(--aq-color-deep);
-		font-weight: 500;
-	}
-
-	/* Genre Multi-Select Styles */
-	.filter-group-wide {
-		flex: 1 1 100%;
-		min-width: 100%;
-	}
-
-	.filter-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 0.5rem;
-	}
-
-	.filter-actions {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.filter-action-btn {
-		padding: 0.25rem 0.6rem;
-		border: 1px solid rgba(18, 43, 59, 0.15);
-		border-radius: 6px;
-		background: white;
+		padding: 0.75rem 1rem;
+		border: 1px solid rgba(18, 43, 59, 0.1);
+		background: rgba(18, 43, 59, 0.02);
+		border-radius: 10px;
+		font-size: 0.9rem;
 		color: rgba(18, 43, 59, 0.7);
-		font-size: 0.75rem;
-		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.2s ease;
-	}
-
-	.filter-action-btn:hover {
-		background: var(--aq-color-primary);
-		color: white;
-		border-color: var(--aq-color-primary);
-		transform: scale(1.05);
-	}
-
-	.filter-action-btn:active {
-		transform: scale(0.95);
-	}
-
-	.genre-selection-summary {
+		transition: all 0.15s ease;
 		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 8px;
-		background: rgba(239, 76, 131, 0.08);
-		border: 1px solid rgba(239, 76, 131, 0.2);
-		font-size: 0.85rem;
-		color: var(--aq-color-deep);
-		margin-bottom: 0.75rem;
-		min-height: 2rem;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		overflow-wrap: break-word;
-		cursor: pointer;
-		transition: all 0.2s ease;
 		text-align: left;
 	}
 
-	.genre-selection-summary:hover {
-		background: rgba(239, 76, 131, 0.12);
-		border-color: rgba(239, 76, 131, 0.3);
-		transform: scale(1.01);
+	.filters-toggle:hover {
+		background: rgba(18, 43, 59, 0.04);
+		border-color: rgba(18, 43, 59, 0.15);
 	}
 
-	.genre-selection-summary:active {
-		transform: scale(0.99);
+	.filters-toggle.expanded {
+		border-color: var(--aq-color-primary);
+		background: rgba(239, 76, 131, 0.04);
+	}
+
+	.filter-badge {
+		padding: 0.2rem 0.5rem;
+		background: var(--aq-color-primary);
+		color: white;
+		border-radius: 6px;
+		font-size: 0.7rem;
+		font-weight: 600;
 	}
 
 	.chevron {
+		margin-left: auto;
 		transition: transform 0.2s ease;
-		font-size: 0.7rem;
-		color: rgba(239, 76, 131, 0.7);
-		margin-left: 0.5rem;
 	}
 
-	.chevron.expanded {
+	.filters-toggle.expanded .chevron {
 		transform: rotate(180deg);
 	}
 
-	.genre-checkboxes {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+	.filters-panel {
+		padding: 1rem;
+		background: rgba(18, 43, 59, 0.02);
+		border-radius: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.filter-section {
+		display: flex;
+		flex-direction: column;
 		gap: 0.5rem;
-		max-height: 200px;
-		overflow-y: auto;
-		padding: 0.5rem;
-		border: 1px solid rgba(18, 43, 59, 0.1);
-		border-radius: 8px;
-		background: rgba(255, 255, 255, 0.5);
 	}
 
-	.genre-checkboxes::-webkit-scrollbar {
-		width: 6px;
-	}
-
-	.genre-checkboxes::-webkit-scrollbar-track {
-		background: rgba(18, 43, 59, 0.05);
-		border-radius: 3px;
-	}
-
-	.genre-checkboxes::-webkit-scrollbar-thumb {
-		background: rgba(239, 76, 131, 0.3);
-		border-radius: 3px;
-	}
-
-	.genre-checkboxes::-webkit-scrollbar-thumb:hover {
-		background: rgba(239, 76, 131, 0.5);
-	}
-
-	.genre-checkbox-label {
+	.year-range {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.4rem 0.6rem;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		background: transparent;
-		border: 1px solid transparent;
-		font-size: 0.85rem;
 	}
 
-	.genre-checkbox-label:hover {
-		background: rgba(239, 76, 131, 0.08);
-		border-color: rgba(239, 76, 131, 0.2);
+	.year-range input {
+		flex: 1;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid rgba(18, 43, 59, 0.15);
+		border-radius: 8px;
+		font-size: 0.9rem;
 	}
 
-	.genre-checkbox-label input[type="checkbox"] {
-		width: 16px;
-		height: 16px;
-		cursor: pointer;
-		accent-color: var(--aq-color-primary);
+	.year-range input:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
 	}
 
-	.genre-checkbox-label span {
-		color: var(--aq-color-deep);
+	.year-separator {
+		color: rgba(18, 43, 59, 0.4);
 		font-weight: 500;
-		user-select: none;
 	}
 
-	@media (max-width: 768px) {
-		.filter-controls {
+	.niche-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.6rem 0.75rem;
+		background: rgba(248, 192, 39, 0.1);
+		border: 1px solid rgba(248, 192, 39, 0.2);
+		border-radius: 8px;
+		cursor: pointer;
+		font-size: 0.9rem;
+		color: var(--aq-color-deep);
+		transition: all 0.15s ease;
+	}
+
+	.niche-toggle:hover {
+		background: rgba(248, 192, 39, 0.15);
+	}
+
+	.niche-toggle input {
+		width: 18px;
+		height: 18px;
+		cursor: pointer;
+		accent-color: var(--aq-color-secondary);
+	}
+
+	.genre-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.genre-actions {
+		display: flex;
+		gap: 0.4rem;
+	}
+
+	.genre-actions button {
+		padding: 0.35rem 0.7rem;
+		border: 1px solid rgba(18, 43, 59, 0.15);
+		background: white;
+		border-radius: 6px;
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.genre-actions button:hover {
+		background: var(--aq-color-primary);
+		color: white;
+		border-color: var(--aq-color-primary);
+	}
+
+	.genre-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.genre-chip {
+		display: flex;
+		align-items: center;
+		padding: 0.4rem 0.75rem;
+		border: 1px solid rgba(18, 43, 59, 0.12);
+		border-radius: 999px;
+		font-size: 0.85rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		background: white;
+		color: rgba(18, 43, 59, 0.8);
+	}
+
+	.genre-chip:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.genre-chip.selected {
+		background: rgba(239, 76, 131, 0.12);
+		border-color: var(--aq-color-primary);
+		color: var(--aq-color-primary);
+		font-weight: 500;
+	}
+
+	.genre-chip input {
+		display: none;
+	}
+
+	.add-buttons {
+		display: flex;
+		gap: 0.75rem;
+	}
+
+	.add-btn {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 1rem;
+		border: 2px dashed rgba(18, 43, 59, 0.15);
+		background: transparent;
+		border-radius: 14px;
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: rgba(18, 43, 59, 0.5);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.add-btn:hover {
+		border-color: var(--aq-color-primary);
+		color: var(--aq-color-primary);
+		background: rgba(239, 76, 131, 0.03);
+	}
+
+	.add-icon {
+		font-size: 1.1rem;
+	}
+
+	.add-mode-icon {
+		font-size: 1.1rem;
+	}
+
+	@media (max-width: 640px) {
+		.field-inline {
 			flex-direction: column;
+			align-items: stretch;
+			gap: 0.5rem;
 		}
 
-		.filter-group {
-			min-width: 100%;
+		.song-count-input {
+			justify-content: center;
 		}
 
-		.genre-checkboxes {
-			grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+		.add-buttons {
+			flex-direction: column;
 		}
 	}
 </style>

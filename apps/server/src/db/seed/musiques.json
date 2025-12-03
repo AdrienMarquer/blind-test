@@ -18723,26 +18723,6 @@
     "clipDuration": 60
   },
   {
-    "title": "La vallée",
-    "artist": "Manau",
-    "lang": "fr",
-    "status": "downloaded",
-    "processedAt": "2025-12-02T18:01:49.654Z",
-    "spotifyId": "64gCM9yZv2jpNflclKUnXu",
-    "album": "Panique Celtique",
-    "year": 1998,
-    "genre": "Variété française",
-    "duration": 287,
-    "albumArt": "https://i.scdn.co/image/ab67616d0000b273548e29326422f7ab62fc4fe5",
-    "youtubeId": "80hMEKlLVgQ",
-    "filePath": "uploads/manau_-_la_vallee.mp3",
-    "fileName": "manau_-_la_vallee.mp3",
-    "fileSize": 1141580,
-    "format": "mp3",
-    "clipStart": 0,
-    "clipDuration": 60
-  },
-  {
     "title": "Emmenez-moi",
     "artist": "Boulevard des Airs",
     "lang": "fr",

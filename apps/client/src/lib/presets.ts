@@ -1,170 +1,107 @@
 /**
- * Game Presets - Pre-configured multi-round games
+ * Game Mode Helpers
  */
 
-import { DEFAULT_SONG_DURATION, type RoundConfig } from '@blind-test/shared';
+import { DEFAULT_SONG_DURATION, type RoundConfig, type MediaType } from '@blind-test/shared';
 
-export interface GamePreset {
-  id: string;
+/**
+ * Available game mode types
+ */
+export type GameModeType = 'fast_buzz' | 'buzz_and_choice';
+
+export interface GameModeInfo {
+  id: GameModeType;
   name: string;
   description: string;
-  rounds: RoundConfig[];
+  icon: string;
 }
 
 /**
- * Quick Game - 3 rounds of fast-paced buzzer action
- * Perfect for a quick 10-15 minute game session
+ * Available game modes
  */
-const quickGame: GamePreset = {
-  id: 'quick',
-  name: 'Session express',
-  description: '3 manches nerveuses au buzzer (10-15 minutes)',
-  rounds: [
-    {
-      modeType: 'fast_buzz',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 5,
-        audioPlayback: 'master',
-      },
-    },
-    {
-      modeType: 'fast_buzz',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 5,
-        audioPlayback: 'master',
-      },
-    },
-    {
-      modeType: 'buzz_and_choice',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 6,
-        audioPlayback: 'master',
-        numChoices: 4,
-        pointsTitle: 1,
-        pointsArtist: 1,
-      },
-    },
-  ],
-};
+export const gameModes: GameModeInfo[] = [
+  {
+    id: 'fast_buzz',
+    name: 'Buzz éclair',
+    description: 'Premier à buzzer peut répondre',
+    icon: '⚡',
+  },
+  {
+    id: 'buzz_and_choice',
+    name: 'QCM',
+    description: 'Choix multiples après buzz',
+    icon: '📝',
+  },
+];
 
 /**
- * Classic Game - 5 rounds mixing different game modes
- * A complete 20-30 minute game experience with variety
+ * Media type info
  */
-const classicGame: GamePreset = {
-  id: 'classic',
-  name: 'Classique',
-  description: '5 manches variées pour 20-30 minutes de jeu',
-  rounds: [
-    {
-      modeType: 'buzz_and_choice',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 6,
-        audioPlayback: 'master',
-        numChoices: 4,
-        pointsTitle: 1,
-        pointsArtist: 1,
-      },
-    },
-    {
-      modeType: 'fast_buzz',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 5,
-        audioPlayback: 'master',
-      },
-    },
-    {
-      modeType: 'text_input',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 15,
-        audioPlayback: 'master',
-        fuzzyMatch: true,
-        levenshteinDistance: 2,
-      },
-    },
-    {
-      modeType: 'buzz_and_choice',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 8,
-        audioPlayback: 'master',
-        numChoices: 4,
-        pointsTitle: 2,
-        pointsArtist: 2,
-      },
-    },
-    {
-      modeType: 'fast_buzz',
-      mediaType: 'music',
-      songFilters: {
-        songCount: 5,
-      },
-      params: {
-        songDuration: DEFAULT_SONG_DURATION,
-        answerTimer: 5,
-        audioPlayback: 'master',
-      },
-    },
-  ],
-};
+export interface MediaTypeInfo {
+  id: MediaType;
+  name: string;
+  icon: string;
+}
 
 /**
- * All available game presets
+ * Available media types
  */
-export const gamePresets: GamePreset[] = [quickGame, classicGame];
+export const mediaTypes: MediaTypeInfo[] = [
+  { id: 'music', name: 'Musique', icon: '🎵' },
+  { id: 'picture', name: 'Image', icon: '🖼️' },
+  { id: 'video', name: 'Vidéo', icon: '🎬' },
+  { id: 'text_question', name: 'Question', icon: '❓' },
+];
 
 /**
- * Get a preset by ID
+ * Create a default round config for a given mode type
  */
-export function getPresetById(id: string): GamePreset | undefined {
-  return gamePresets.find((preset) => preset.id === id);
+export function createDefaultRound(modeType: GameModeType, mediaType: MediaType = 'music'): RoundConfig {
+  const baseConfig: RoundConfig = {
+    modeType,
+    mediaType,
+    songFilters: {
+      songCount: 5,
+    },
+    params: {
+      songDuration: DEFAULT_SONG_DURATION,
+      answerTimer: modeType === 'fast_buzz' ? 5 : 8,
+      audioPlayback: 'master',
+    },
+  };
+
+  if (modeType === 'buzz_and_choice') {
+    baseConfig.params = {
+      ...baseConfig.params,
+      numChoices: 4,
+      pointsTitle: 1,
+      pointsArtist: 1,
+    };
+  }
+
+  return baseConfig;
+}
+
+/**
+ * Get default rounds for a new game (1 Buzz éclair + 1 QCM)
+ */
+export function getDefaultRounds(): RoundConfig[] {
+  return [createDefaultRound('fast_buzz'), createDefaultRound('buzz_and_choice')];
 }
 
 /**
  * Get mode display name
  */
 export function getModeDisplayName(modeType: string): string {
-  const names: Record<string, string> = {
-    buzz_and_choice: 'Buzz + QCM',
-    fast_buzz: 'Buzz éclair',
-    text_input: 'Réponse texte',
-    timed_answer: 'Réponse chronométrée',
-  };
-  return names[modeType] || modeType;
+  const mode = gameModes.find((m) => m.id === modeType);
+  return mode?.name || modeType;
+}
+
+/**
+ * Get mode info
+ */
+export function getModeInfo(modeType: string): GameModeInfo | undefined {
+  return gameModes.find((m) => m.id === modeType);
 }
 
 /**
