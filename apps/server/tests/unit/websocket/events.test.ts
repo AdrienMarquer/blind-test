@@ -98,7 +98,7 @@ describe('WebSocket - Event Structure', () => {
       data: {
         completedRoundIndex: 0,
         nextRoundIndex: 1,
-        nextRoundMode: 'text_input',
+        nextRoundMode: 'fast_buzz',
         nextRoundMedia: 'music',
         scores: [
           { playerId: 'player-1', playerName: 'Alice', score: 10, rank: 1 },
@@ -201,12 +201,12 @@ describe('WebSocket - Event Order', () => {
       data: {
         completedRoundIndex: 0,
         nextRoundIndex: 1,
-        nextRoundMode: 'text_input',
+        nextRoundMode: 'buzz_and_choice',
         nextRoundMedia: 'music',
         scores: [],
       },
     })
-    events.push({ type: 'round:started', data: { roundIndex: 1, modeType: 'text_input', mediaType: 'music', songCount: 2 } })
+    events.push({ type: 'round:started', data: { roundIndex: 1, modeType: 'buzz_and_choice', mediaType: 'music', songCount: 2 } })
     events.push({ type: 'round:ended', data: { roundIndex: 1, scores: {} } })
     events.push({ type: 'game:ended', data: { finalScores: [] } })
 

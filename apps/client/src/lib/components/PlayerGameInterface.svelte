@@ -5,7 +5,6 @@
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import BuzzAndChoiceUI from './game/BuzzAndChoiceUI.svelte';
 	import FastBuzzUI from './game/FastBuzzUI.svelte';
-	import TextInputUI from './game/TextInputUI.svelte';
 	import VolumeControl from './VolumeControl.svelte';
 
 	// Get players from socket store for leaderboard display (reactive subscription)
@@ -43,7 +42,6 @@
 		| { status: 'buzzed_waiting_server' }
 		| { status: 'answering_choices'; answerType: 'title' | 'artist'; choices: AnswerChoice[]; timeRemaining: number }
 		| { status: 'fast_buzz_waiting'; timeRemaining: number }
-		| { status: 'text_input_answering'; timeRemaining: number }
 		| { status: 'locked_out' }
 		| { status: 'watching_other_player'; playerName: string }
 		| { status: 'answer_reveal'; correctTitle: string; correctArtist: string; albumArt?: string; winners?: WinnerInfo[] };
@@ -63,7 +61,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 
 	let currentSongIndex = $state(0);
 	let totalSongsInRound = $state(0);
-	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'>('buzz_and_choice');
+	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz'>('buzz_and_choice');
 	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
 	let countdownInterval: number | null = null;
 
@@ -194,7 +192,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 			});
 
 			// Update mode type and song count for the new round
-			currentModeType = event.modeType as 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
+			currentModeType = event.modeType as 'buzz_and_choice' | 'fast_buzz';
 			totalSongsInRound = event.songCount;
 
 			// Reset to idle state between rounds
@@ -325,7 +323,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 
 			if (event.playerId === player.id) {
 				// We buzzed successfully - transition based on mode type
-				if (event.modeType === 'buzz_and_choice' || event.modeType === 'timed_answer') {
+				if (event.modeType === 'buzz_and_choice') {
 					// Show multiple choice questions (artist first, then title)
 					const choices = event.artistQuestion?.choices || [];
 					gameState = {
@@ -346,13 +344,6 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 						timeRemaining: answerTimeRemaining
 					};
 					console.log('[Player] Fast buzz mode - waiting for master validation');
-				} else if (event.modeType === 'text_input') {
-					// Text input mode - show text input field
-					gameState = {
-						status: 'text_input_answering',
-						timeRemaining: answerTimeRemaining
-					};
-					console.log('[Player] Text input mode - showing text input');
 				}
 			} else {
 				// Someone else buzzed - transition to watching state
@@ -709,17 +700,6 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 	{#if gameState.status === 'fast_buzz_waiting'}
 		<FastBuzzUI
 			hasBuzzed={true}
-			answerTimeRemaining={answerTimeRemaining}
-		/>
-	{/if}
-
-	<!-- Text Input Answering State -->
-	{#if gameState.status === 'text_input_answering'}
-		<TextInputUI
-			onSubmit={(title, artist) => {
-				if (title) handleAnswer(title);
-				if (artist) handleAnswer(artist);
-			}}
 			answerTimeRemaining={answerTimeRemaining}
 		/>
 	{/if}

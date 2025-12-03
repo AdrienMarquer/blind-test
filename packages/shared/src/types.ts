@@ -24,7 +24,7 @@ export const CANONICAL_GENRES = [
 export type CanonicalGenre = typeof CANONICAL_GENRES[number];
 
 // Game Mechanics - HOW players interact
-export type ModeType = 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer';
+export type ModeType = 'buzz_and_choice' | 'fast_buzz';
 
 // Media Type - WHAT content is shown
 export type MediaType = 'music' | 'picture' | 'video' | 'text_question';

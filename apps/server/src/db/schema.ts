@@ -118,7 +118,7 @@ export const rounds = sqliteTable('rounds', {
   id: text('id').primaryKey(),
   sessionId: text('session_id').notNull().references(() => gameSessions.id, { onDelete: 'cascade' }),
   index: integer('index').notNull(),
-  modeType: text('mode_type').notNull(), // 'buzz_and_choice' | 'fast_buzz' | 'text_input' | 'timed_answer'
+  modeType: text('mode_type').notNull(), // 'buzz_and_choice' | 'fast_buzz'
   mediaType: text('media_type').notNull(), // 'music' | 'picture' | 'video' | 'text_question'
 
   // Metadata-based song filtering (stored as JSON)

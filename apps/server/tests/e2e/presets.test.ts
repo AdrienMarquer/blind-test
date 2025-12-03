@@ -18,7 +18,6 @@ import { describe, test, expect, beforeEach } from 'bun:test'
 import { DEFAULT_SONG_DURATION, type RoundConfig, type Answer, type RoundSong } from '@blind-test/shared'
 import { BuzzAndChoiceMode } from '../../src/modes/BuzzAndChoiceMode'
 import { FastBuzzMode } from '../../src/modes/FastBuzzMode'
-import { TextInputMode } from '../../src/modes/TextInputMode'
 import { createMockSong, createMockSongs, MockWebSocketCollector } from '../helpers/testUtils'
 
 /**
@@ -60,12 +59,6 @@ const classicGamePreset: RoundConfig[] = [
     mediaType: 'music',
     songFilters: { songCount: 5 },
     params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 5 },
-  },
-  {
-    modeType: 'text_input',
-    mediaType: 'music',
-    songFilters: { songCount: 5 },
-    params: { songDuration: DEFAULT_SONG_DURATION, answerTimer: 15, fuzzyMatch: true, levenshteinDistance: 2 },
   },
   {
     modeType: 'buzz_and_choice',
@@ -375,16 +368,15 @@ describe('E2E: Quick Game Preset (3 rounds)', () => {
   })
 })
 
-describe('E2E: Classic Game Preset (5 rounds)', () => {
+describe('E2E: Classic Game Preset (4 rounds)', () => {
   test('validates preset configuration', () => {
-    expect(classicGamePreset.length).toBe(5)
+    expect(classicGamePreset.length).toBe(4)
 
     // Verify mode variety
     expect(classicGamePreset[0].modeType).toBe('buzz_and_choice')
     expect(classicGamePreset[1].modeType).toBe('fast_buzz')
-    expect(classicGamePreset[2].modeType).toBe('text_input')
-    expect(classicGamePreset[3].modeType).toBe('buzz_and_choice')
-    expect(classicGamePreset[4].modeType).toBe('fast_buzz')
+    expect(classicGamePreset[2].modeType).toBe('buzz_and_choice')
+    expect(classicGamePreset[3].modeType).toBe('fast_buzz')
 
     // Verify all rounds use music
     classicGamePreset.forEach(round => {
@@ -392,87 +384,10 @@ describe('E2E: Classic Game Preset (5 rounds)', () => {
       expect(round.songFilters?.songCount).toBe(5)
     })
 
-    // Verify text_input fuzzy match configuration
-    const textInputRound = classicGamePreset[2]
-    expect(textInputRound.params?.fuzzyMatch).toBe(true)
-    expect(textInputRound.params?.levenshteinDistance).toBe(2)
-
-    // Verify higher points in round 4
-    const bonusRound = classicGamePreset[3]
+    // Verify higher points in round 3
+    const bonusRound = classicGamePreset[2]
     expect(bonusRound.params?.pointsTitle).toBe(2)
     expect(bonusRound.params?.pointsArtist).toBe(2)
-  })
-
-  test('simulates text_input round with fuzzy matching', async () => {
-    const textInputMode = new TextInputMode()
-    const song = createMockSong({
-      title: 'Bohemian Rhapsody',
-      artist: 'Queen',
-    })
-
-    const roundSong: RoundSong = {
-      songId: song.id,
-      song,
-      index: 0,
-      status: 'playing',
-      lockedOutPlayerIds: [],
-      answers: [],
-      params: classicGamePreset[2].params,
-    }
-
-    // Player 1: Exact match
-    const exactAnswer: Answer = {
-      id: 'answer-1',
-      playerId: 'player-1',
-      roundId: 'round-3',
-      songId: song.id,
-      type: 'title',
-      value: 'Bohemian Rhapsody',
-      submittedAt: new Date(),
-      timeToAnswer: 5000,
-      isCorrect: true,
-      pointsAwarded: 0,
-    }
-
-    const exactResult = await textInputMode.handleAnswer(exactAnswer, roundSong)
-    expect(exactResult.isCorrect).toBe(true)
-    expect(exactResult.pointsAwarded).toBe(1)
-
-    // Player 2: Fuzzy match (1 typo)
-    const fuzzyAnswer: Answer = {
-      id: 'answer-2',
-      playerId: 'player-2',
-      roundId: 'round-3',
-      songId: song.id,
-      type: 'title',
-      value: 'Bohemian Rapsody', // Missing 'h'
-      submittedAt: new Date(),
-      timeToAnswer: 7000,
-      isCorrect: false,
-      pointsAwarded: 0,
-    }
-
-    const fuzzyResult = await textInputMode.handleAnswer(fuzzyAnswer, roundSong)
-    expect(fuzzyResult.isCorrect).toBe(true) // Accepted due to fuzzy match
-    expect(fuzzyResult.pointsAwarded).toBe(1)
-
-    // Player 3: Beyond threshold (3 typos)
-    const wrongAnswer: Answer = {
-      id: 'answer-3',
-      playerId: 'player-3',
-      roundId: 'round-3',
-      songId: song.id,
-      type: 'title',
-      value: 'Boheman Rapsod', // 3 changes
-      submittedAt: new Date(),
-      timeToAnswer: 10000,
-      isCorrect: false,
-      pointsAwarded: 0,
-    }
-
-    const wrongResult = await textInputMode.handleAnswer(wrongAnswer, roundSong)
-    expect(wrongResult.isCorrect).toBe(false)
-    expect(wrongResult.pointsAwarded).toBe(0)
   })
 })
 
