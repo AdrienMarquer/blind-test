@@ -57,7 +57,7 @@ body::after {
 main {
 	width: min(100%, var(--aq-max-width));
 	margin: 0 auto;
-	padding: clamp(1.5rem, 3vw, 3rem);
+	padding: clamp(0.75rem, 2.5vw, 2.5rem);
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -87,7 +87,7 @@ input, select, textarea {
 .aq-shell {
 	max-width: var(--aq-max-width);
 	margin: 0 auto;
-	padding: clamp(1.25rem, 2vw, 2.5rem);
+	padding: clamp(0.5rem, 2vw, 2rem);
 }
 
 .aq-panel {

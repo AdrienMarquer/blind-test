@@ -55,6 +55,7 @@
 	let rounds = $state<RoundConfig[]>([]);
 	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
 	let showConfig = $state(true);
+	let showQr = $state(false);
 
 	// Master playing as participant
 	let masterPlaying = $state(false);
@@ -801,7 +802,24 @@
 								</Button>
 							</div>
 							{#if room.qrCode}
-								<img src={room.qrCode} alt={`QR pour ${room.name}`} />
+								{@const qrBlockId = room ? `room-qr-${room.id}` : 'room-qr-block'}
+								<div class="qr-preview">
+									<button
+										type="button"
+										class="qr-toggle-inline"
+										aria-expanded={showQr}
+										aria-controls={qrBlockId}
+										onclick={() => (showQr = !showQr)}
+									>
+										{showQr ? 'Masquer' : 'Afficher'} le QR code
+									</button>
+									{#if showQr}
+										<div id={qrBlockId} class="qr-visual-inline" aria-live="polite">
+											<img src={room.qrCode} alt={`QR pour ${room.name}`} />
+											<p class="qr-hint-inline">Les joueurs peuvent scanner ce QR code pour rejoindre plus vite.</p>
+										</div>
+									{/if}
+								</div>
 							{/if}
 							<Button variant="outline" size="sm" onclick={copyInviteLink}>
 								{inviteCopied ? 'Lien copié' : "Copier le lien d'invitation"}
@@ -1178,11 +1196,62 @@
 		text-align: center;
 	}
 
+	.qr-preview {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		border-radius: var(--aq-radius-md);
+		border: 1px dashed rgba(18, 43, 59, 0.2);
+		background: rgba(18, 43, 59, 0.02);
+	}
+
+	.qr-toggle-inline {
+		border: 1px solid rgba(18, 43, 59, 0.3);
+		border-radius: 999px;
+		background: transparent;
+		padding: 0.45rem 0.9rem;
+		font-weight: 600;
+		font-size: 0.9rem;
+		cursor: pointer;
+		color: var(--aq-color-deep);
+		transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+	}
+
+	.qr-toggle-inline:hover,
+	.qr-toggle-inline:focus-visible {
+		background: var(--aq-color-primary);
+		color: white;
+		border-color: var(--aq-color-primary);
+	}
+
+	.qr-toggle-inline:focus-visible {
+		outline: 2px solid var(--aq-color-primary);
+		outline-offset: 3px;
+	}
+
+	.qr-visual-inline {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		align-items: center;
+	}
+
 	.share-card img {
 		max-width: 220px;
 		margin: 0 auto;
 		border-radius: var(--aq-radius-md);
 		border: 4px solid rgba(18, 43, 59, 0.08);
+	}
+
+	.qr-hint-inline {
+		font-size: 0.85rem;
+		color: var(--aq-color-muted);
+		margin: 0;
+	}
+
+	.qr-hint-inline.compact {
+		text-align: left;
 	}
 
 	.code-banner {

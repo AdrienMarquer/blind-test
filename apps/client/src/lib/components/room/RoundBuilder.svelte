@@ -226,12 +226,12 @@
 	<div class="rounds">
 		{#each rounds as round, index}
 			{@const modeInfo = getModeInfo(round.modeType)}
-			<div class="round-card">
-				<div class="round-header">
-					<span class="round-num">Manche {index + 1}</span>
-					<div class="header-right">
-						<div class="mode-badges">
-							{#each gameModes as mode}
+				<div class="round-card">
+					<div class="round-header">
+						<span class="round-num">Manche {index + 1}</span>
+						<div class="header-right">
+							<div class="mode-badges">
+								{#each gameModes as mode}
 								{@const isDisabled = masterPlaying && mode.id === 'fast_buzz'}
 								<button
 									class="mode-badge"
@@ -245,21 +245,38 @@
 									<span class="mode-name">{mode.name}</span>
 								</button>
 							{/each}
+							</div>
+							<div class="mode-select-mobile">
+								<div class="mode-select-control">
+									<select
+										id={`round-mode-${index}`}
+										aria-label="Type de manche"
+										value={round.modeType}
+										onchange={(e) => changeRoundMode(index, e.currentTarget.value as GameModeType)}
+									>
+										{#each gameModes as mode}
+											{@const optionDisabled = masterPlaying && mode.id === 'fast_buzz'}
+											<option value={mode.id} disabled={optionDisabled}>
+												{mode.icon} {mode.name}
+											</option>
+										{/each}
+									</select>
+								</div>
+							</div>
+							<button
+								class="remove-btn"
+								onclick={() => removeRound(index)}
+								disabled={rounds.length === 1}
+								title="Supprimer cette manche"
+							>
+								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M18 6L6 18M6 6l12 12" />
+								</svg>
+							</button>
 						</div>
-						<button
-							class="remove-btn"
-							onclick={() => removeRound(index)}
-							disabled={rounds.length === 1}
-							title="Supprimer cette manche"
-						>
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M18 6L6 18M6 6l12 12" />
-							</svg>
-						</button>
 					</div>
-				</div>
 
-				<div class="round-body">
+					<div class="round-body">
 
 					<!-- Media Type Selection -->
 					<div class="field">
@@ -502,6 +519,40 @@
 		gap: 0.5rem;
 	}
 
+	.mode-select-mobile {
+		display: none;
+		flex: 1 1 180px;
+		min-width: 140px;
+	}
+
+	.mode-select-control {
+		width: 100%;
+	}
+
+	.mode-select-control select {
+		width: 100%;
+		padding: 0.65rem 0.75rem;
+		padding-right: 2.5rem;
+		border-radius: 10px;
+		border: 1.5px solid rgba(18, 43, 59, 0.15);
+		background: white;
+		font-weight: 600;
+		font-size: 0.9rem;
+		font-family: inherit;
+		color: var(--aq-color-deep);
+		appearance: none;
+		background-image: linear-gradient(45deg, transparent 50%, rgba(18, 43, 59, 0.4) 50%),
+			linear-gradient(135deg, rgba(18, 43, 59, 0.4) 50%, transparent 50%);
+		background-position: calc(100% - 18px) calc(50% + 2px), calc(100% - 12px) calc(50% + 2px);
+		background-size: 6px 6px;
+		background-repeat: no-repeat;
+	}
+
+	.mode-select-control select:focus-visible {
+		outline: 2px solid var(--aq-color-primary);
+		outline-offset: 2px;
+	}
+
 	.mode-badges {
 		display: flex;
 		gap: 0.25rem;
@@ -576,6 +627,37 @@
 	.remove-btn:disabled {
 		opacity: 0.3;
 		cursor: not-allowed;
+	}
+
+	@media (max-width: 640px) {
+		.round-header {
+			gap: 0.4rem;
+		}
+
+		.header-right {
+			flex: 1 1 auto;
+			justify-content: flex-end;
+			flex-wrap: nowrap;
+			gap: 0.4rem;
+		}
+
+		.mode-badges {
+			display: none;
+		}
+
+		.mode-select-mobile {
+			display: flex;
+			flex: 1 1 auto;
+			min-width: 0;
+		}
+
+		.mode-select-control select {
+			font-size: 0.85rem;
+		}
+
+		.remove-btn {
+			flex: 0 0 auto;
+		}
 	}
 
 	.round-body {
