@@ -1,3 +1,8 @@
+<svelte:head>
+	<title>Music Quiz - Crée ou rejoins une partie</title>
+	<meta name="description" content="Lance un blind test musical et invite tes amis via QR code. Devine les artistes et titres pour marquer des points !" />
+</svelte:head>
+
 <script lang="ts">
 	import { roomApi } from '$lib/api-helpers';
 	import Logo from '$lib/components/Logo.svelte';

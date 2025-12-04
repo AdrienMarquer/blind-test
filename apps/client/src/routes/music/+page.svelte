@@ -1,3 +1,8 @@
+<svelte:head>
+	<title>Bibliothèque musicale - Music Quiz</title>
+	<meta name="description" content="Gère ta bibliothèque de musiques pour le blind test. Importe des chansons depuis YouTube ou Spotify." />
+</svelte:head>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getApiUrl, getAdminHeaders } from '$lib/api';

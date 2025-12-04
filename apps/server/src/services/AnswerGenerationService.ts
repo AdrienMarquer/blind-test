@@ -229,30 +229,46 @@ export class AnswerGenerationService {
 		};
 
 		try {
-			// 1. Try to find similar songs from library
-			const libraryCandidates = await this.findSimilarFromLibrary(normalizedCorrectSong);
+			const wrongAnswers: WrongAnswer[] = [];
+			const usedIds = new Set<string>([normalizedCorrectSong.id]);
 
-			serviceLogger.debug('Library candidates found', { count: libraryCandidates.length });
+			// 1. PRIORITY: Other songs by the same artist
+			const sameArtistSongs = await this.findSameArtistSongs(normalizedCorrectSong);
+			serviceLogger.debug('Same artist songs found', { count: sameArtistSongs.length });
 
-			// 2. If we have enough from library, use them
-			if (libraryCandidates.length >= REQUIRED_WRONG_ANSWERS) {
-				const ranked = this.rankBySimilarity(normalizedCorrectSong, libraryCandidates);
-				return ranked.slice(0, REQUIRED_WRONG_ANSWERS).map(song => ({
+			// Shuffle same-artist songs to get random selection
+			const shuffledSameArtist = this.shuffleArray(sameArtistSongs);
+			for (const song of shuffledSameArtist) {
+				if (wrongAnswers.length >= REQUIRED_WRONG_ANSWERS) break;
+				usedIds.add(song.id);
+				wrongAnswers.push({
 					title: song.title,
 					artist: song.artist || 'Unknown Artist',
-					isInLibrary: true,
-					score: (song as any).score
-				}));
+					isInLibrary: true
+				});
 			}
 
-			// 3. Need more answers, start with library candidates
-			const wrongAnswers: WrongAnswer[] = libraryCandidates.map(song => ({
-				title: song.title,
-				artist: song.artist || 'Unknown Artist',
-				isInLibrary: true
-			}));
+			// 2. FALLBACK: Similar songs from library (different artists)
+			if (wrongAnswers.length < REQUIRED_WRONG_ANSWERS) {
+				const libraryCandidates = await this.findSimilarFromLibrary(normalizedCorrectSong);
+				const ranked = this.rankBySimilarity(normalizedCorrectSong, libraryCandidates);
 
-			// 4. Still need more? Use random songs from entire library as fallback
+				serviceLogger.debug('Similar library candidates found', { count: libraryCandidates.length });
+
+				for (const song of ranked) {
+					if (wrongAnswers.length >= REQUIRED_WRONG_ANSWERS) break;
+					if (usedIds.has(song.id)) continue;
+					usedIds.add(song.id);
+					wrongAnswers.push({
+						title: song.title,
+						artist: song.artist || 'Unknown Artist',
+						isInLibrary: true,
+						score: (song as any).score
+					});
+				}
+			}
+
+			// 3. Still need more? Use random songs from entire library
 			if (wrongAnswers.length < REQUIRED_WRONG_ANSWERS) {
 				const stillNeeded = REQUIRED_WRONG_ANSWERS - wrongAnswers.length;
 				serviceLogger.warn('Insufficient similar songs, using random fallback', {
@@ -260,38 +276,28 @@ export class AnswerGenerationService {
 					need: stillNeeded
 				});
 
-				// Get existing song IDs to avoid duplicates
-				const existingIds = new Set<string>();
-				existingIds.add(normalizedCorrectSong.id);
-				libraryCandidates.forEach(s => existingIds.add(s.id));
+				const randomSongs = await this.getRandomSongs(normalizedCorrectSong, stillNeeded * 2, usedIds);
 
-				const randomSongs = await this.getRandomSongs(normalizedCorrectSong, stillNeeded * 2, existingIds);
-
-				// Add unique random songs
 				for (const song of randomSongs) {
 					if (wrongAnswers.length >= REQUIRED_WRONG_ANSWERS) break;
-					// Check if this song is already in our answers (by title/artist combo)
-					const isDuplicate = wrongAnswers.some(
-						wa => wa.title === song.title && wa.artist === (song.artist || 'Unknown Artist')
-					);
-					if (!isDuplicate) {
-						wrongAnswers.push({
-							title: song.title,
-							artist: song.artist || 'Unknown Artist',
-							isInLibrary: true
-						});
-					}
+					if (usedIds.has(song.id)) continue;
+					usedIds.add(song.id);
+					wrongAnswers.push({
+						title: song.title,
+						artist: song.artist || 'Unknown Artist',
+						isInLibrary: true
+					});
 				}
 			}
 
 			serviceLogger.info('Generated wrong answers', {
 				total: wrongAnswers.length,
+				fromSameArtist: sameArtistSongs.length,
 				fromLibrary: wrongAnswers.length
 			});
 
 			// GUARANTEE: Always return exactly 3 answers
 			if (wrongAnswers.length < REQUIRED_WRONG_ANSWERS) {
-				// Emergency fallback - generate placeholder answers
 				serviceLogger.error('CRITICAL: Could not generate 3 wrong answers, using placeholders', {
 					generated: wrongAnswers.length
 				});
@@ -307,7 +313,6 @@ export class AnswerGenerationService {
 			return wrongAnswers.slice(0, REQUIRED_WRONG_ANSWERS);
 		} catch (error) {
 			serviceLogger.error('CRITICAL: generateWrongAnswers failed completely', { error });
-			// Emergency fallback - return placeholder answers
 			return [
 				{ title: 'Song A', artist: 'Artist A', isInLibrary: false },
 				{ title: 'Song B', artist: 'Artist B', isInLibrary: false },
@@ -478,6 +483,23 @@ export class AnswerGenerationService {
 			serviceLogger.error('Failed to get random songs', { error });
 			return [];
 		}
+	}
+
+	/**
+	 * Find other songs by the same artist (excluding the correct song)
+	 */
+	private async findSameArtistSongs(song: Song): Promise<Song[]> {
+		const allSongs = await this.repository.findAll();
+		const normalizedArtist = (song.artist || 'Unknown Artist').toLowerCase();
+
+		return allSongs.filter(candidate => {
+			// Exclude the song itself
+			if (candidate.id === song.id) return false;
+
+			// Same artist
+			const candidateArtist = (candidate.artist || 'Unknown Artist').toLowerCase();
+			return candidateArtist === normalizedArtist;
+		});
 	}
 
 	/**

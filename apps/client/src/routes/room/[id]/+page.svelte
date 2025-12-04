@@ -91,6 +91,11 @@
 	// Derived room state (prefer WebSocket room if available, otherwise use initialRoom)
 	const room = $derived(wsRoom ?? initialRoom);
 
+	// Page title for SEO
+	const pageTitle = $derived(
+		room ? `${room.name} - Music Quiz` : 'Salle - Music Quiz'
+	);
+
 	// Subscribe to store changes and update reactive state
 	$effect(() => {
 		if (!roomSocket) {
@@ -591,6 +596,11 @@
 		if (inviteCopyTimeout) clearTimeout(inviteCopyTimeout);
 	});
 </script>
+
+<svelte:head>
+	<title>{pageTitle}</title>
+	<meta name="description" content="Rejoins la partie et devine les chansons en temps réel. Buzze le premier pour marquer des points !" />
+</svelte:head>
 
 <main class="room-page">
 	<!-- Hide navigation when in game mode or between rounds -->
