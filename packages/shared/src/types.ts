@@ -42,6 +42,7 @@ export interface Room {
   code: string;              // 4-character join code (uppercase alphanumeric)
   qrCode: string;            // Data URL for QR code
   masterIp: string;          // Master device IP
+  masterPlayerId?: string;   // Player ID when master is also playing
   status: RoomStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -371,7 +372,7 @@ export interface Repository<T> {
 export type ServerMessage =
   // Connection
   | { type: 'connected'; data: { roomId: string } }
-  | { type: 'state:synced'; data: { room: Room; players: Player[] } }
+  | { type: 'state:synced'; data: { room: Room; players: Player[]; masterPlaying?: { playing: boolean; playerName: string | null } } }
   | { type: 'error'; data: { code?: string; message: string } }
 
   // Player Events
@@ -381,8 +382,11 @@ export type ServerMessage =
   | { type: 'player:disconnected'; data: { playerId: string; playerName: string; canRejoin: boolean } }
   | { type: 'player:reconnected'; data: { playerId: string; playerName: string } }
 
+  // Master Playing Status (for lobby preview)
+  | { type: 'master:playing'; data: { playing: boolean; playerName: string | null } }
+
   // Game Flow
-  | { type: 'game:started'; data: { room: Room; session: GameSession | null } }
+  | { type: 'game:started'; data: { room: Room; session: GameSession | null; players?: Player[] } }
   | { type: 'round:started'; data: { room: Room | null; roundIndex: number; songCount: number; modeType: ModeType; mediaType: MediaType } }
   | { type: 'round:ended'; data: { roundIndex: number; scores: Array<{ playerId: string; playerName: string; score: number; rank: number }> } }
   | { type: 'round:between'; data: {

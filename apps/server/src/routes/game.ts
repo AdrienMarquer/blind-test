@@ -15,6 +15,7 @@ import { db, schema } from '../db';
 import { broadcastToRoom } from '../websocket/handler';
 import { gameService } from '../services/GameService';
 import { logger } from '../utils/logger';
+import { clearMasterPlayingStatus } from './rooms';
 
 const apiLogger = logger.child({ module: 'API:Game' });
 
@@ -37,8 +38,12 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
       return { error: 'Game already started' };
     }
 
+    // If master is playing, they count as a player
+    const masterPlaying = !!body.masterPlayerName;
     const playerCount = await playerRepository.countConnected(roomId);
-    if (playerCount < 2) {
+    const effectivePlayerCount = playerCount + (masterPlaying ? 1 : 0);
+
+    if (effectivePlayerCount < 2) {
       set.status = 400;
       return { error: 'Need at least 2 players to start' };
     }
@@ -48,6 +53,18 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
       if (!body.rounds || body.rounds.length === 0) {
         set.status = 400;
         return { error: 'At least one round is required. Use the round configuration system.' };
+      }
+
+      // If master is playing, validate all rounds use buzz_and_choice mode
+      if (masterPlaying) {
+        for (let i = 0; i < body.rounds.length; i++) {
+          if (body.rounds[i].modeType !== 'buzz_and_choice') {
+            set.status = 400;
+            return {
+              error: `Round ${i + 1} uses "${body.rounds[i].modeType}" mode which requires manual validation. When hosting and playing, only "buzz_and_choice" mode is allowed.`
+            };
+          }
+        }
       }
 
       // Validate maximum 5 rounds
@@ -126,11 +143,85 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
         });
       }
 
+      // If master is playing, create their player record (or reuse existing)
+      let masterPlayerId: string | null = room.masterPlayerId || null;
+      if (masterPlaying && body.masterPlayerName) {
+        // Check if master player already exists (e.g., from previous game)
+        if (masterPlayerId) {
+          const existingMasterPlayer = await playerRepository.findById(masterPlayerId);
+          if (existingMasterPlayer) {
+            // Reuse existing master player, just update the name if needed
+            if (existingMasterPlayer.name !== body.masterPlayerName) {
+              await playerRepository.update(masterPlayerId, { name: body.masterPlayerName });
+            }
+            apiLogger.info('Reusing existing master player', {
+              roomId,
+              masterPlayerId,
+              masterPlayerName: body.masterPlayerName
+            });
+          } else {
+            // Master player ID set but player doesn't exist - create new one
+            masterPlayerId = null;
+          }
+        }
+
+        // Create new master player if needed
+        if (!masterPlayerId) {
+          const masterPlayer = await playerRepository.create({
+            roomId,
+            name: body.masterPlayerName,
+            role: 'player', // Master plays as a regular player
+          });
+          masterPlayerId = masterPlayer.id;
+
+          // Set the master player ID on the room
+          await roomRepository.setMasterPlayerId(roomId, masterPlayerId);
+
+          apiLogger.info('Master joined as player', {
+            roomId,
+            masterPlayerId,
+            masterPlayerName: body.masterPlayerName
+          });
+        }
+      } else if (!masterPlaying && room.masterPlayerId) {
+        // Master was playing before but not anymore - clear the master player
+        await roomRepository.setMasterPlayerId(roomId, null);
+        // Optionally remove the master player record
+        await playerRepository.delete(room.masterPlayerId);
+        masterPlayerId = null;
+        apiLogger.info('Master stopped playing, removed master player', { roomId });
+      }
+
       // Update room status
       const updated = await roomRepository.update(roomId, { status: 'playing' });
       apiLogger.info('Game started', { roomId, roomName: room.name, roundCount: rounds.length });
 
-      // Start the first round
+      // Clear the in-memory master playing status (no longer needed once game starts)
+      clearMasterPlayingStatus(roomId);
+
+      // Broadcast game start FIRST - before startRound
+      // This ensures clients have masterPlayerId set before the game interface renders
+      const startedSession = await gameSessionRepository.findById(session.id);
+
+      // Get updated players list (includes master player if they're playing)
+      const updatedPlayers = await playerRepository.findByRoom(roomId);
+      apiLogger.info('Broadcasting game:started with players', {
+        roomId,
+        playerCount: updatedPlayers.length,
+        playerNames: updatedPlayers.map(p => ({ name: p.name, role: p.role, id: p.id })),
+        masterPlayerId
+      });
+
+      broadcastToRoom(roomId, {
+        type: 'game:started',
+        data: {
+          room: updated,
+          session: startedSession || session,
+          players: updatedPlayers,
+        }
+      });
+
+      // Start the first round (broadcasts round:started and song:started)
       try {
         await gameService.startRound(roomId, session.id, 0);
         apiLogger.info('Round started successfully', { roomId, roundIndex: 0 });
@@ -139,23 +230,13 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
         // Continue anyway - game is created, round start can be retried
       }
 
-      // Broadcast game start to all connected WebSocket clients
-      const startedSession = await gameSessionRepository.findById(session.id);
-
-      broadcastToRoom(roomId, {
-        type: 'game:started',
-        data: {
-          room: updated,
-          session: startedSession || session,
-        }
-      });
-
       return {
         sessionId: session.id,
         roomId,
         status: updated.status,
         roundCount: rounds.length,
-        message: `Game started with ${rounds.length} round${rounds.length > 1 ? 's' : ''}`,
+        masterPlayerId: masterPlayerId || undefined,
+        message: `Game started with ${rounds.length} round${rounds.length > 1 ? 's' : ''}${masterPlaying ? ' (master playing)' : ''}`,
       };
     } catch (err) {
       apiLogger.error('Failed to start game', err, { roomId });
@@ -164,6 +245,8 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
     }
   }, {
     body: t.Object({
+      // Master playing as a participant (optional)
+      masterPlayerName: t.Optional(t.String({ minLength: 1, maxLength: 20 })),
       // Multi-round configuration (REQUIRED, max 5 rounds)
       rounds: t.Array(t.Object({
         modeType: t.String(),

@@ -46,13 +46,14 @@
 
 <style>
 	.final-scores {
-		height: 100dvh;
+		min-height: 80dvh;
 		box-sizing: border-box;
 		padding: 2rem 1rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		animation: fadeIn 0.4s ease;
+		overflow: visible;
 	}
 
 	@keyframes fadeIn {

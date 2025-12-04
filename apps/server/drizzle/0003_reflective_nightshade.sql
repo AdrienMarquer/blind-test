@@ -1,0 +1,1 @@
+ALTER TABLE `rooms` ADD `master_player_id` text;

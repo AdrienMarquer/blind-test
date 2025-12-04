@@ -11,6 +11,7 @@ import { gameStateManager } from '../services/GameStateManager';
 import { AuthService } from '../services/AuthService';
 import { logger } from '../utils/logger';
 import { timerManager } from '../services/TimerManager';
+import { getMasterPlayingStatus } from '../routes/rooms';
 
 const wsLogger = logger.child({ module: 'WebSocket' });
 
@@ -35,7 +36,8 @@ function sendMessage(ws: ServerWebSocket<any>, message: ServerMessage) {
 export async function handleWebSocket(ws: ServerWebSocket<RoomSocketData>) {
   // Extract roomId from ws.data which contains the route params
   const roomId = ws.data?.roomId;
-  const playerId = ws.data?.playerId;
+  let playerId = ws.data?.playerId;
+  const token = ws.data?.token;
 
   if (!roomId) {
     wsLogger.error('WebSocket connection missing roomId');
@@ -48,6 +50,21 @@ export async function handleWebSocket(ws: ServerWebSocket<RoomSocketData>) {
     ws.data = { roomId };
   } else {
     ws.data.roomId = roomId;
+  }
+
+  // Check if this is master connecting AND master is playing
+  // If master has a player account (masterPlayerId), associate this connection with it
+  if (token && !playerId) {
+    const masterToken = await roomRepository.getMasterToken(roomId);
+    if (masterToken && AuthService.validateMasterToken(token, masterToken)) {
+      // This is the master - check if they're also playing
+      const masterPlayerId = await roomRepository.getMasterPlayerId(roomId);
+      if (masterPlayerId) {
+        playerId = masterPlayerId;
+        ws.data.playerId = masterPlayerId;
+        wsLogger.info('Master connected as player', { roomId, masterPlayerId });
+      }
+    }
   }
 
   // Add to room connections
@@ -175,9 +192,16 @@ async function handleStateSync(ws: ServerWebSocket<RoomSocketData>, roomId: stri
       return;
     }
 
+    // Get master playing status for lobby preview
+    const masterPlaying = getMasterPlayingStatus(roomId);
+
     sendMessage(ws, {
       type: 'state:synced',
-      data: { room, players }
+      data: {
+        room,
+        players,
+        masterPlaying: masterPlaying.playing ? masterPlaying : undefined
+      }
     });
   } catch (error) {
     wsLogger.error('State sync failed', error, { roomId });
@@ -527,7 +551,22 @@ async function handlePlayerBuzz(
   roomId: string,
   data: { songIndex: number }
 ) {
-  const { playerId } = ws.data;
+  let { playerId } = ws.data;
+
+  // If no playerId, check if this is a master who's playing
+  // (master connects before game starts, so playerId might not be set yet)
+  if (!playerId && ws.data.token) {
+    const masterToken = await roomRepository.getMasterToken(roomId);
+    if (masterToken && AuthService.validateMasterToken(ws.data.token, masterToken)) {
+      const masterPlayerId = await roomRepository.getMasterPlayerId(roomId);
+      if (masterPlayerId) {
+        playerId = masterPlayerId;
+        ws.data.playerId = masterPlayerId; // Update for future calls
+        wsLogger.info('Master buzzing as player', { roomId, masterPlayerId });
+      }
+    }
+  }
+
   if (!playerId) {
     sendMessage(ws, {
       type: 'error',
@@ -562,10 +601,24 @@ async function handlePlayerAnswer(
   roomId: string,
   data: { songIndex: number; answerType: 'title' | 'artist'; value: string }
 ) {
-  const { playerId } = ws.data;
+  let { playerId } = ws.data;
 
   // Check if this is a master validation (value is 'correct' or 'wrong')
   const isMasterValidation = data.value === 'correct' || data.value === 'wrong';
+
+  // If no playerId, check if this is a master who's playing
+  // (master connects before game starts, so playerId might not be set yet)
+  if (!playerId && ws.data.token) {
+    const masterToken = await roomRepository.getMasterToken(roomId);
+    if (masterToken && AuthService.validateMasterToken(ws.data.token, masterToken)) {
+      const masterPlayerId = await roomRepository.getMasterPlayerId(roomId);
+      if (masterPlayerId) {
+        playerId = masterPlayerId;
+        ws.data.playerId = masterPlayerId; // Update for future calls
+        wsLogger.info('Master answering as player', { roomId, masterPlayerId });
+      }
+    }
+  }
 
   // For master validation, allow even without playerId (master uses token auth)
   // For regular answers, playerId is required

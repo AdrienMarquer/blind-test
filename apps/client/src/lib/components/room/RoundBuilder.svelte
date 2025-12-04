@@ -20,9 +20,31 @@
 		availableGenres: string[];
 		onUpdateRounds: (rounds: RoundConfig[]) => void;
 		songs: any[];
+		masterPlaying?: boolean;
 	}
 
-	let { rounds = $bindable(), availableGenres, onUpdateRounds, songs }: Props = $props();
+	let { rounds = $bindable(), availableGenres, onUpdateRounds, songs, masterPlaying = false }: Props = $props();
+
+	// When master starts playing, switch any fast_buzz rounds to buzz_and_choice
+	$effect(() => {
+		if (masterPlaying) {
+			let hasChanges = false;
+			const updatedRounds = rounds.map(round => {
+				if (round.modeType === 'fast_buzz') {
+					hasChanges = true;
+					return {
+						...createDefaultRound('buzz_and_choice', round.mediaType),
+						songFilters: round.songFilters
+					};
+				}
+				return round;
+			});
+			if (hasChanges) {
+				rounds = updatedRounds;
+				onUpdateRounds(rounds);
+			}
+		}
+	});
 
 	let expandedRound = $state<number | null>(null);
 
@@ -210,10 +232,14 @@
 					<div class="header-right">
 						<div class="mode-badges">
 							{#each gameModes as mode}
+								{@const isDisabled = masterPlaying && mode.id === 'fast_buzz'}
 								<button
 									class="mode-badge"
 									class:active={round.modeType === mode.id}
+									class:disabled={isDisabled}
 									onclick={() => changeRoundMode(index, mode.id)}
+									disabled={isDisabled}
+									title={isDisabled ? 'Indisponible quand l\'hôte joue' : ''}
 								>
 									<span class="mode-icon">{mode.icon}</span>
 									<span class="mode-name">{mode.name}</span>
@@ -417,7 +443,14 @@
 
 	<div class="add-buttons">
 		{#each gameModes as mode}
-			<button class="add-btn" onclick={() => addRound(mode.id)}>
+			{@const isDisabled = masterPlaying && mode.id === 'fast_buzz'}
+			<button
+				class="add-btn"
+				class:disabled={isDisabled}
+				onclick={() => addRound(mode.id)}
+				disabled={isDisabled}
+				title={isDisabled ? 'Indisponible quand l\'hôte joue' : ''}
+			>
 				<span class="add-icon">+</span>
 				<span class="add-mode-icon">{mode.icon}</span>
 				<span>{mode.name}</span>
@@ -508,6 +541,17 @@
 
 	.mode-badge.active .mode-name {
 		color: var(--aq-color-primary);
+	}
+
+	.mode-badge.disabled,
+	.mode-badge:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.mode-badge.disabled:hover,
+	.mode-badge:disabled:hover {
+		border-color: rgba(18, 43, 59, 0.12);
 	}
 
 	.remove-btn {
@@ -935,10 +979,16 @@
 		transition: all 0.15s ease;
 	}
 
-	.add-btn:hover {
+	.add-btn:hover:not(:disabled) {
 		border-color: var(--aq-color-primary);
 		color: var(--aq-color-primary);
 		background: rgba(239, 76, 131, 0.03);
+	}
+
+	.add-btn.disabled,
+	.add-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	.add-icon {

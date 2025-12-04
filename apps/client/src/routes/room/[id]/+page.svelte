@@ -6,6 +6,7 @@
 	import type { Room, Player } from '@blind-test/shared';
 	import { validatePlayerName, PLAYER_CONFIG } from '@blind-test/shared';
 	import MasterGameControl from '$lib/components/MasterGameControl.svelte';
+	import MasterPlayerInterface from '$lib/components/MasterPlayerInterface.svelte';
 	import PlayerGameInterface from '$lib/components/PlayerGameInterface.svelte';
 	import GameConfig from '$lib/components/room/GameConfig.svelte';
 	import FinalScores from '$lib/components/room/FinalScores.svelte';
@@ -54,6 +55,14 @@
 	let rounds = $state<RoundConfig[]>([]);
 	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
 	let showConfig = $state(true);
+
+	// Master playing as participant
+	let masterPlaying = $state(false);
+	let masterPlayerName = $state('');
+	let masterPlayingInitialized = $state(false); // Track if master has explicitly set their playing status
+
+	// Remote master playing status (received from other clients via WebSocket)
+	let remoteMasterPlaying = $state<{ playing: boolean; playerName: string | null } | null>(null);
 
 	// Available genres (populated from songs)
 	let availableGenres = $derived.by(() => {
@@ -126,6 +135,8 @@
 	// Auto-scroll master to game controls when game starts
 	$effect(() => {
 		if (isMaster && room?.status === 'playing') {
+			// Hide config modal when game is in progress
+			showConfig = false;
 			// Small delay to ensure DOM has rendered
 			setTimeout(() => {
 				const gameStage = document.querySelector('.game-stage');
@@ -134,6 +145,48 @@
 				}
 			}, 100);
 		}
+	});
+
+	// Sync remote master playing status from WebSocket events
+	$effect(() => {
+		if (roomSocket?.events.masterPlaying) {
+			console.log('[Room] Received master playing status:', roomSocket.events.masterPlaying);
+			remoteMasterPlaying = roomSocket.events.masterPlaying;
+
+			// For master tabs: if server has a playing status set, sync local state
+			// but DON'T set initialized flag (prevents immediate re-broadcast)
+			if (isMaster && !masterPlayingInitialized) {
+				const serverState = roomSocket.events.masterPlaying;
+				if (serverState.playing && serverState.playerName) {
+					masterPlaying = serverState.playing;
+					masterPlayerName = serverState.playerName;
+					console.log('[Room] Synced local master playing state from server:', serverState);
+				}
+			}
+		}
+	});
+
+	// Broadcast master playing status to server when master changes it (debounced)
+	// Only broadcasts after master has explicitly interacted with the control
+	let masterPlayingTimeout: number | null = null;
+	$effect(() => {
+		// Only broadcast if we're the master, in lobby, and have explicitly set the status
+		if (!isMaster || room?.status !== 'lobby' || !masterPlayingInitialized) return;
+
+		// Capture current values for the async operation
+		const playing = masterPlaying;
+		const playerName = masterPlayerName.trim();
+
+		// Debounce to avoid rapid API calls
+		if (masterPlayingTimeout) clearTimeout(masterPlayingTimeout);
+		masterPlayingTimeout = window.setTimeout(async () => {
+			try {
+				console.log('[Room] Broadcasting master playing status:', { playing, playerName });
+				await roomApi.setMasterPlaying(roomId, playing, playerName);
+			} catch (err) {
+				console.error('[Room] Failed to broadcast master playing status:', err);
+			}
+		}, 300);
 	});
 
 
@@ -145,8 +198,49 @@
 		finished: { label: 'Partie terminée', tone: 'neutral', icon: '🏁', blurb: 'Consulte les scores et relance un défi.' }
 	};
 
+	// Add master preview player when master is playing but game hasn't started yet
+	const playersWithMasterPreview = $derived.by(() => {
+		const list = [...players];
+
+		// Only show master preview in lobby
+		if (room?.status !== 'lobby') return list;
+
+		// Only show preview if master player isn't already in the list
+		const masterAlreadyInList = list.some(p => p.id === room?.masterPlayerId);
+		if (masterAlreadyInList) return list;
+
+		// For master: use local state
+		// For players: use remote state received via WebSocket
+		const effectivePlaying = isMaster ? masterPlaying : remoteMasterPlaying?.playing;
+		const effectiveName = isMaster ? masterPlayerName.trim() : remoteMasterPlaying?.playerName;
+
+		if (effectivePlaying && effectiveName) {
+			list.push({
+				id: 'master-preview',
+				name: effectiveName,
+				roomId: room.id,
+				role: 'player',
+				connected: true,
+				joinedAt: new Date(),
+				score: 0,
+				roundScore: 0,
+				isActive: false,
+				isLockedOut: false,
+				isMasterPreview: true, // Custom flag for styling
+				stats: {
+					totalAnswers: 0,
+					correctAnswers: 0,
+					wrongAnswers: 0,
+					buzzCount: 0,
+					averageAnswerTime: 0
+				}
+			} as Player & { isMasterPreview?: boolean });
+		}
+		return list;
+	});
+
 	const sortedPlayers = $derived(
-		players
+		playersWithMasterPreview
 			.slice()
 			.sort((a, b) => {
 				if (a.connected === b.connected) {
@@ -157,6 +251,11 @@
 				}
 				return Number(b.connected) - Number(a.connected);
 			})
+	);
+
+	// Master's player object when playing as participant
+	const masterPlayer = $derived(
+		room?.masterPlayerId ? players.find(p => p.id === room.masterPlayerId) ?? null : null
 	);
 
 	let codeCopied = $state(false);
@@ -368,19 +467,19 @@
 			error = null;
 
 			// Build request body with rounds
-			const body: any = {
-				rounds: rounds.map((r, i) => ({
-					...r,
-					params: {
-						...r.params,
-						...(audioPlayback !== 'master' && { audioPlayback })
-					}
-				}))
-			};
+			const configuredRounds = rounds.map((r, i) => ({
+				...r,
+				params: {
+					...r.params,
+					...(audioPlayback !== 'master' && { audioPlayback })
+				}
+			}));
 
 			console.log('🎮 Starting game with configuration:', {
-				totalRounds: body.rounds.length,
-				rounds: body.rounds.map((r: any, i: number) => ({
+				totalRounds: configuredRounds.length,
+				masterPlaying,
+				masterPlayerName: masterPlaying ? masterPlayerName : undefined,
+				rounds: configuredRounds.map((r: any, i: number) => ({
 					roundIndex: i + 1,
 					mode: r.modeType,
 					media: r.mediaType,
@@ -389,7 +488,12 @@
 				}))
 			});
 
-			const response = await gameApi.start(room.id, body.rounds);
+			// Pass masterPlayerName if master is playing
+			const response = await gameApi.start(
+				room.id,
+				configuredRounds,
+				masterPlaying ? masterPlayerName.trim() : undefined
+			);
 
 			if (response.data) {
 				console.log('Game started:', response.data);
@@ -547,6 +651,13 @@
 				console.log('[Room] Game ended - showing final scores', roomSocket.events.gameEnded);
 				finalScores = roomSocket.events.gameEnded.finalScores;
 				showFinalScores = true;
+				// Auto-scroll to final scores section
+				setTimeout(() => {
+					const finalWrapper = document.querySelector('.final-wrapper');
+					if (finalWrapper) {
+						finalWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+					}
+				}, 100);
 			}
 		});
 
@@ -603,8 +714,8 @@
 </svelte:head>
 
 <main class="room-page">
-	<!-- Hide navigation when in game mode or between rounds -->
-	{#if !((room?.status === 'playing' || room?.status === 'between_rounds') && currentPlayer && !isMaster)}
+	<!-- Hide navigation when in game mode, between rounds, or showing final scores -->
+	{#if !showFinalScores && !((room?.status === 'playing' || room?.status === 'between_rounds') && currentPlayer && !isMaster)}
 		<div class="room-nav">
 			<button type="button" class="nav-link" onclick={() => (window.location.href = '/')}>&larr; Toutes les salles</button>
 			{#if connected}
@@ -625,8 +736,8 @@
 		<div class="error-card">{error || socketError}</div>
 		<Button variant="primary" onclick={() => (window.location.href = '/')}>&larr; Retour à l'accueil</Button>
 	{:else if room}
-		<!-- Hide header and panels when player is in game mode or between rounds -->
-		{#if !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
+		<!-- Hide header and panels when player is in game mode, between rounds, or showing final scores -->
+		{#if !showFinalScores && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
 			<section class="room-header">
 				<div class="header-top">
 					<div>
@@ -650,23 +761,24 @@
 			{/if}
 		{/if}
 
-		<!-- Hide room panels when player is in game mode or between rounds -->
-		{#if !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
+		<!-- Hide room panels when player is in game mode, between rounds, or showing final scores -->
+		{#if !showFinalScores && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
 			<div class="room-panels">
-			<Card title={`Joueurs (${players.length}/${room.maxPlayers})`} subtitle={room.status === 'lobby' ? 'Invite encore plus de monde !' : 'Scores mis à jour en direct'} icon="👥">
-				{#if players.length === 0}
+			<Card title={`Joueurs (${sortedPlayers.length}/${room.maxPlayers})`} subtitle={room.status === 'lobby' ? 'Invite encore plus de monde !' : 'Scores mis à jour en direct'} icon="👥">
+				{#if sortedPlayers.length === 0}
 					<p class="empty">Aucun joueur pour l'instant. Partage le code !</p>
 				{:else}
 					<div class="player-grid">
 						{#each sortedPlayers as player (player.id)}
-							<div class="player-chip" class:offline={!player.connected}>
+							{@const isMasterPreview = (player as any).isMasterPreview}
+							<div class="player-chip" class:offline={!player.connected} class:master-preview={isMasterPreview}>
 								<div class="chip-avatar">{player.name.slice(0, 2).toUpperCase()}</div>
 								<div class="chip-info">
 									<strong>{player.name}</strong>
-									<span>{player.connected ? 'Connecté' : 'Hors ligne'}</span>
+									<span>{isMasterPreview ? '🎮 Hôte' : player.connected ? 'Connecté' : 'Hors ligne'}</span>
 								</div>
 								<span class="chip-score">{player.score} pts</span>
-								{#if room.status === 'lobby' && isMaster}
+								{#if room.status === 'lobby' && isMaster && !isMasterPreview}
 									<button type="button" class="chip-remove" onclick={() => removePlayer(player.id)} title="Retirer le joueur">✕</button>
 								{/if}
 							</div>
@@ -692,8 +804,31 @@
 								<img src={room.qrCode} alt={`QR pour ${room.name}`} />
 							{/if}
 							<Button variant="outline" size="sm" onclick={copyInviteLink}>
-								{inviteCopied ? 'Lien copié' : 'Copier le lien d’invitation'}
+								{inviteCopied ? 'Lien copié' : "Copier le lien d'invitation"}
 							</Button>
+						</div>
+					</Card>
+
+					<!-- Master Playing Toggle Card -->
+					<Card title="Je participe aussi" subtitle="Joue en tant que joueur" icon="🎮">
+						<div class="master-playing-card">
+							<label class="master-toggle">
+								<input type="checkbox" bind:checked={masterPlaying} onchange={() => masterPlayingInitialized = true} />
+								<span class="toggle-text">Activer le mode joueur</span>
+							</label>
+							{#if masterPlaying}
+								<div class="master-name-field">
+									<input
+										type="text"
+										bind:value={masterPlayerName}
+										placeholder="Ton pseudo"
+										maxlength="20"
+										class="master-name-input"
+										oninput={() => masterPlayingInitialized = true}
+									/>
+									<p class="master-hint">Seul le mode "Buzz + Choix" sera disponible</p>
+								</div>
+							{/if}
 						</div>
 					</Card>
 
@@ -751,6 +886,8 @@
 					bind:audioPlayback
 					{availableGenres}
 					{starting}
+					bind:masterPlaying
+					bind:masterPlayerName
 					onUpdateRounds={(newRounds) => (rounds = newRounds)}
 					onStartGame={startGame}
 					onCancel={() => (showConfig = false)}
@@ -780,19 +917,29 @@
 				/>
 			</div>
 		{:else if room.status === 'playing'}
-			<!-- Player Name Badge (Fixed Top Right for Players) -->
+			<!-- Player Name Badge (Fixed Top Right for Players and Master-as-Player) -->
 			{#if currentPlayer && !isMaster}
 				<div class="player-name-badge">
 					<span class="badge-icon">👤</span>
 					<span class="badge-name">{currentPlayer.name}</span>
 				</div>
+			{:else if isMaster && masterPlayer}
+				<div class="player-name-badge master-playing">
+					<span class="badge-icon">🎮</span>
+					<span class="badge-name">{masterPlayer.name}</span>
+				</div>
 			{/if}
 
-			<section class="game-stage" class:fullscreen={currentPlayer && !isMaster}>
+			<section class="game-stage" class:fullscreen={currentPlayer && !isMaster} class:master-fullscreen={isMaster && masterPlayer}>
 				{#if roomSocket}
-					{#if isMaster}
+					{#if isMaster && masterPlayer}
+						<!-- Master is playing - show hybrid interface -->
+						<MasterPlayerInterface {room} player={masterPlayer} socket={roomSocket} />
+					{:else if isMaster}
+						<!-- Master not playing - show control interface -->
 						<MasterGameControl {room} socket={roomSocket} />
 					{:else if currentPlayer}
+						<!-- Regular player -->
 						<PlayerGameInterface player={currentPlayer} socket={roomSocket} />
 					{:else}
 						<div class="spectator-note">Rejoins depuis ton mobile pour buzzer en live.</div>
@@ -963,6 +1110,16 @@
 		opacity: 0.6;
 	}
 
+	.player-chip.master-preview {
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.1), rgba(248, 192, 39, 0.1));
+		border: 2px solid rgba(239, 76, 131, 0.3);
+	}
+
+	.player-chip.master-preview .chip-avatar {
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		color: white;
+	}
+
 	.chip-avatar {
 		width: 48px;
 		height: 48px;
@@ -1056,6 +1213,64 @@
 		gap: 1rem;
 	}
 
+	/* Master Playing Card */
+	.master-playing-card {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.master-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		cursor: pointer;
+		font-weight: 600;
+		color: var(--aq-color-deep);
+	}
+
+	.master-toggle input[type="checkbox"] {
+		width: 1.25rem;
+		height: 1.25rem;
+		accent-color: var(--aq-color-primary);
+		cursor: pointer;
+	}
+
+	.toggle-text {
+		font-size: 0.95rem;
+	}
+
+	.master-name-field {
+		padding-top: 0.75rem;
+		border-top: 1px solid rgba(18, 43, 59, 0.1);
+	}
+
+	.master-name-input {
+		width: 100%;
+		padding: 0.75rem 1rem;
+		border: 2px solid rgba(18, 43, 59, 0.15);
+		border-radius: 12px;
+		font-size: 1rem;
+		transition: border-color 160ms ease;
+		background: white;
+	}
+
+	.master-name-input:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+	}
+
+	.master-name-input::placeholder {
+		color: rgba(18, 43, 59, 0.4);
+	}
+
+	.master-hint {
+		margin: 0.5rem 0 0;
+		font-size: 0.8rem;
+		color: var(--aq-color-muted);
+		line-height: 1.4;
+	}
+
 	.info-list {
 		margin: 0;
 		padding-left: 1.25rem;
@@ -1105,7 +1320,8 @@
 	}
 
 	.game-stage :global(.master-control),
-	.game-stage :global(.player-interface) {
+	.game-stage :global(.player-interface),
+	.game-stage :global(.master-player-interface) {
 		width: 100%;
 	}
 
@@ -1139,6 +1355,31 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 150px;
+	}
+
+	.player-name-badge.master-playing {
+		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
+		color: white;
+		box-shadow: 0 8px 24px rgba(239, 76, 131, 0.4);
+	}
+
+	/* Full-screen mode for master when playing */
+	.game-stage.master-fullscreen {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		margin: 0;
+		border-radius: 0;
+		width: 100vw;
+		height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		background: linear-gradient(135deg, #ef4c83 0%, #f8c027 100%);
+		padding: 1rem;
 	}
 
 	.spectator-note {

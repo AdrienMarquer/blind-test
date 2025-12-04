@@ -25,6 +25,24 @@ import { broadcastToRoom } from '../websocket/handler';
 
 const apiLogger = logger.child({ module: 'API:Rooms' });
 
+// In-memory store for master playing status during lobby (cleared when game starts)
+// Maps roomId -> { playing: boolean, playerName: string | null }
+export const masterPlayingStatus = new Map<string, { playing: boolean; playerName: string | null }>();
+
+/**
+ * Get master playing status for a room
+ */
+export function getMasterPlayingStatus(roomId: string): { playing: boolean; playerName: string | null } {
+  return masterPlayingStatus.get(roomId) || { playing: false, playerName: null };
+}
+
+/**
+ * Clear master playing status (called when game starts or room is deleted)
+ */
+export function clearMasterPlayingStatus(roomId: string): void {
+  masterPlayingStatus.delete(roomId);
+}
+
 export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
   // ============================================
   // Collection routes (no roomId)
@@ -188,6 +206,59 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
         set.status = 500;
         return { error: 'Failed to delete room' };
       }
+    })
+
+    // ============================================
+    // Master playing status (for lobby preview)
+    // ============================================
+
+    // Set master playing status
+    .post('/master-playing', async ({ params: { roomId }, body, set }) => {
+      const room = await roomRepository.findById(roomId);
+
+      if (!room) {
+        set.status = 404;
+        return { error: 'Room not found' };
+      }
+
+      if (room.status !== 'lobby') {
+        set.status = 400;
+        return { error: 'Cannot change master playing status after game started' };
+      }
+
+      // Store master playing status
+      const status = {
+        playing: body.playing,
+        playerName: body.playing ? body.playerName : null
+      };
+      masterPlayingStatus.set(roomId, status);
+
+      apiLogger.info('Master playing status updated', { roomId, ...status });
+
+      // Broadcast to all players in the room
+      broadcastToRoom(roomId, {
+        type: 'master:playing',
+        data: status
+      });
+
+      return status;
+    }, {
+      body: t.Object({
+        playing: t.Boolean(),
+        playerName: t.Optional(t.String({ maxLength: 20 })),
+      }),
+    })
+
+    // Get master playing status
+    .get('/master-playing', async ({ params: { roomId }, set }) => {
+      const room = await roomRepository.findById(roomId);
+
+      if (!room) {
+        set.status = 404;
+        return { error: 'Room not found' };
+      }
+
+      return getMasterPlayingStatus(roomId);
     })
 
     // ============================================

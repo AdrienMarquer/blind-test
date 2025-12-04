@@ -18,6 +18,7 @@ export const rooms = sqliteTable('rooms', {
   qrCode: text('qr_code').notNull(),
   masterIp: text('master_ip').notNull(),
   masterToken: text('master_token').notNull(), // Secret token for master authorization
+  masterPlayerId: text('master_player_id'), // Player ID when master is also playing (nullable)
   status: text('status').notNull().default('lobby'), // 'lobby' | 'playing' | 'between_rounds' | 'finished'
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),

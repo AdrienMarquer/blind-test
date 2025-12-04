@@ -13,6 +13,8 @@
 		audioPlayback: 'master' | 'players' | 'all';
 		availableGenres: string[];
 		starting: boolean;
+		masterPlaying?: boolean;
+		masterPlayerName?: string;
 		onUpdateRounds: (rounds: RoundConfig[]) => void;
 		onStartGame: () => void;
 		onCancel: () => void;
@@ -24,10 +26,17 @@
 		audioPlayback = $bindable(),
 		availableGenres,
 		starting,
+		masterPlaying = $bindable(false),
+		masterPlayerName = $bindable(''),
 		onUpdateRounds,
 		onStartGame,
 		onCancel
 	}: Props = $props();
+
+	// Validation: master name must be filled if playing
+	let canStart = $derived(
+		rounds.length > 0 && (!masterPlaying || masterPlayerName.trim().length > 0)
+	);
 </script>
 
 <section class="config-section">
@@ -41,6 +50,7 @@
 			bind:rounds
 			{songs}
 			{availableGenres}
+			{masterPlaying}
 			{onUpdateRounds}
 		/>
 	</div>
@@ -71,7 +81,7 @@
 		<button
 			class="start-button"
 			onclick={onStartGame}
-			disabled={starting || rounds.length === 0}
+			disabled={starting || !canStart}
 		>
 			{starting
 				? 'Lancement...'

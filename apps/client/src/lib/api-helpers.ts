@@ -143,6 +143,18 @@ export const roomApi = {
    */
   delete: (roomId: string) =>
     api.api.rooms({ roomId }).delete(),
+
+  /**
+   * Set master playing status (for lobby preview)
+   */
+  setMasterPlaying: (roomId: string, playing: boolean, playerName?: string) =>
+    api.api.rooms({ roomId })['master-playing'].post({ playing, playerName }),
+
+  /**
+   * Get master playing status
+   */
+  getMasterPlaying: (roomId: string) =>
+    api.api.rooms({ roomId })['master-playing'].get(),
 };
 
 // ============================================
@@ -183,9 +195,10 @@ interface GameActionResponse {
 export const gameApi = {
   /**
    * Start a game with the specified rounds configuration
+   * @param masterPlayerName - Optional: if provided, master joins as a player (only buzz_and_choice mode allowed)
    */
-  start: (roomId: string, rounds: RoundConfig[]) =>
-    api.api.game({ roomId }).start.post({ rounds }),
+  start: (roomId: string, rounds: RoundConfig[], masterPlayerName?: string) =>
+    api.api.game({ roomId }).start.post({ rounds, masterPlayerName }),
 
   /**
    * End the current game

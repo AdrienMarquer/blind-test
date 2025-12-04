@@ -81,13 +81,11 @@ export class GameService {
       gameStateManager.updateRound(roomId, round);
     }
 
-    // Start first song
-    await this.startSong(roomId, round, 0);
-
     // Get updated room to send with round:started event
     const updatedRoom = await roomRepository.findById(roomId);
 
-    // Broadcast round started with updated room
+    // Broadcast round:started BEFORE starting the first song
+    // This ensures clients initialize their round state before receiving song events
     broadcastToRoom(roomId, {
       type: 'round:started',
       data: {
@@ -98,6 +96,9 @@ export class GameService {
         songCount: round.songs.length,
       },
     });
+
+    // Start first song (broadcasts song:started)
+    await this.startSong(roomId, round, 0);
 
     return round;
   }

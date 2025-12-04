@@ -63,6 +63,9 @@ export class GameEvents {
   gamePaused = $state<{ timestamp: number } | null>(null);
   gameResumed = $state<{ timestamp: number; reason?: string } | null>(null);
 
+  // Master playing status (for lobby preview)
+  masterPlaying = $state<{ playing: boolean; playerName: string | null } | null>(null);
+
   /**
    * Clear an event after it's been processed
    */
@@ -238,6 +241,10 @@ export class RoomSocket {
       case 'state:synced':
         this.room.set(message.data.room);
         this.players.set(message.data.players || []);
+        // Update master playing status if provided
+        if (message.data.masterPlaying) {
+          this.events.masterPlaying = message.data.masterPlaying;
+        }
         break;
 
       case 'error':
@@ -274,9 +281,19 @@ export class RoomSocket {
         );
         break;
 
+      // Master playing status
+      case 'master:playing':
+        console.log('[WS] Master playing status updated', message.data);
+        this.events.masterPlaying = message.data;
+        break;
+
       // Game Flow
       case 'game:started':
         this.room.set(message.data.room);
+        // Update players list if provided (includes master player when they're playing)
+        if (message.data.players) {
+          this.players.set(message.data.players);
+        }
         break;
 
       case 'round:started':

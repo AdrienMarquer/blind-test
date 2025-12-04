@@ -20,6 +20,7 @@ interface RoomUpdateDTO {
   status?: Room['status'];
   maxPlayers?: number;
   masterIp?: string;
+  masterPlayerId?: string | null;
 }
 
 export class RoomRepository implements Repository<Room> {
@@ -60,6 +61,7 @@ export class RoomRepository implements Repository<Room> {
       code: dbRoom.code,
       qrCode: dbRoom.qrCode,
       masterIp: dbRoom.masterIp,
+      masterPlayerId: dbRoom.masterPlayerId ?? undefined,
       status: dbRoom.status as Room['status'],
       createdAt: new Date(dbRoom.createdAt),
       updatedAt: new Date(dbRoom.updatedAt),
@@ -175,6 +177,7 @@ export class RoomRepository implements Repository<Room> {
     if (data.status !== undefined) updateData.status = data.status;
     if (data.maxPlayers !== undefined) updateData.maxPlayers = data.maxPlayers;
     if (data.masterIp !== undefined) updateData.masterIp = data.masterIp;
+    if (data.masterPlayerId !== undefined) updateData.masterPlayerId = data.masterPlayerId;
 
     await db
       .update(schema.rooms)
@@ -233,6 +236,32 @@ export class RoomRepository implements Repository<Room> {
       .limit(1);
 
     return result.length > 0 ? result[0].masterToken : null;
+  }
+
+  /**
+   * Set master player ID for a room (when master joins as player)
+   */
+  async setMasterPlayerId(roomId: string, playerId: string | null): Promise<void> {
+    await db
+      .update(schema.rooms)
+      .set({
+        masterPlayerId: playerId,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(schema.rooms.id, roomId));
+  }
+
+  /**
+   * Get master player ID for a room
+   */
+  async getMasterPlayerId(roomId: string): Promise<string | null> {
+    const result = await db
+      .select({ masterPlayerId: schema.rooms.masterPlayerId })
+      .from(schema.rooms)
+      .where(eq(schema.rooms.id, roomId))
+      .limit(1);
+
+    return result.length > 0 ? result[0].masterPlayerId : null;
   }
 
   /**
