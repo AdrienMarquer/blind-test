@@ -6,11 +6,12 @@
 	 */
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import type { Player, AnswerChoice, Room } from '@blind-test/shared';
+	import type { Player, AnswerChoice, Room, ModeType, MediaType } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import { gameApi } from '$lib/api-helpers';
 	import BuzzAndChoiceUI from './game/BuzzAndChoiceUI.svelte';
 	import VolumeControl from './VolumeControl.svelte';
+	import RoundTutorial from './game/RoundTutorial.svelte';
 
 	// Props
 	const { room, player, socket }: { room: Room; player: Player; socket: RoomSocket } = $props();
@@ -64,6 +65,12 @@
 	let maxSongDuration = $state(15);
 	let countdownInterval: number | null = null;
 	let isPaused = $state(false);
+
+	// Tutorial state
+	let showTutorial = $state(false);
+	let currentRoundIndex = $state(0);
+	let currentModeType = $state<ModeType>('buzz_and_choice');
+	let currentMediaType = $state<MediaType>('music');
 
 	// Smooth timer animation
 	let timerAnimationKey = $state(0);
@@ -196,8 +203,12 @@
 		const event = socket.events.roundStarted;
 		if (event) {
 			totalSongsInRound = event.songCount;
+			currentRoundIndex = event.roundIndex;
+			currentModeType = event.modeType as ModeType;
+			currentMediaType = (event.mediaType || 'music') as MediaType;
 			gameState = { status: 'idle' };
 			feedbackMessage = null;
+			showTutorial = true;
 			socket.events.clear('roundStarted');
 		}
 	});
@@ -465,6 +476,17 @@
 </script>
 
 <div class="master-player-interface" class:loading-active={gameState.status === 'loading'}>
+	<!-- Round Tutorial -->
+	{#if showTutorial}
+		<RoundTutorial
+			roundIndex={currentRoundIndex}
+			modeType={currentModeType}
+			mediaType={currentMediaType}
+			songCount={totalSongsInRound}
+			onDismiss={() => showTutorial = false}
+		/>
+	{/if}
+
 	<!-- Master Controls Bar (always visible except during loading) -->
 	{#if gameState.status !== 'loading'}
 		<div class="master-controls-bar">

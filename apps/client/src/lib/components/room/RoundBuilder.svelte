@@ -21,9 +21,10 @@
 		onUpdateRounds: (rounds: RoundConfig[]) => void;
 		songs: any[];
 		masterPlaying?: boolean;
+		compact?: boolean;
 	}
 
-	let { rounds = $bindable(), availableGenres, onUpdateRounds, songs, masterPlaying = false }: Props = $props();
+	let { rounds = $bindable(), availableGenres, onUpdateRounds, songs, masterPlaying = false, compact = false }: Props = $props();
 
 	// When master starts playing, switch any fast_buzz rounds to buzz_and_choice
 	$effect(() => {
@@ -220,12 +221,185 @@
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
 	}
+
+	function getCompactFiltersSummary(index: number): string {
+		const filters = rounds[index].songFilters;
+		if (!filters) return 'Tous genres';
+
+		const parts: string[] = [];
+
+		// Genres
+		if (filters.genre) {
+			const genres = Array.isArray(filters.genre) ? filters.genre : [filters.genre];
+			if (genres.length <= 2) {
+				parts.push(genres.join(', '));
+			} else {
+				parts.push(`${genres.length} genres`);
+			}
+		} else {
+			parts.push('Tous genres');
+		}
+
+		// Years
+		if (filters.yearMin || filters.yearMax) {
+			if (filters.yearMin && filters.yearMax) {
+				parts.push(`${filters.yearMin}-${filters.yearMax}`);
+			} else if (filters.yearMin) {
+				parts.push(`depuis ${filters.yearMin}`);
+			} else if (filters.yearMax) {
+				parts.push(`avant ${filters.yearMax}`);
+			}
+		}
+
+		return parts.join(' • ');
+	}
 </script>
 
-<div class="round-builder">
+<div class="round-builder" class:compact>
 	<div class="rounds">
 		{#each rounds as round, index}
 			{@const modeInfo = getModeInfo(round.modeType)}
+			{#if compact}
+				<!-- Compact Mode Layout -->
+				<div class="round-card-compact">
+					<div class="compact-header">
+						<span class="compact-round-num">Manche {index + 1}</span>
+						<div class="compact-mode-pills">
+							{#each gameModes as mode}
+								{@const isDisabled = masterPlaying && mode.id === 'fast_buzz'}
+								<button
+									type="button"
+									class="compact-mode-pill"
+									class:active={round.modeType === mode.id}
+									class:disabled={isDisabled}
+									onclick={() => changeRoundMode(index, mode.id)}
+									disabled={isDisabled}
+								>
+									{mode.icon}
+								</button>
+							{/each}
+						</div>
+						<div class="compact-song-count">
+							<button
+								type="button"
+								class="compact-stepper-btn"
+								onclick={() => updateSongCount(index, (round.songFilters?.songCount || 5) - 1)}
+								disabled={(round.songFilters?.songCount || 5) <= 1}
+							>−</button>
+							<span class="compact-count-value">{round.songFilters?.songCount || 5}</span>
+							<button
+								type="button"
+								class="compact-stepper-btn"
+								onclick={() => updateSongCount(index, (round.songFilters?.songCount || 5) + 1)}
+								disabled={(round.songFilters?.songCount || 5) >= 30}
+							>+</button>
+						</div>
+						<button
+							type="button"
+							class="compact-remove-btn"
+							onclick={() => removeRound(index)}
+							disabled={rounds.length === 1}
+							title="Supprimer la manche"
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M18 6L6 18M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+
+					<button
+						type="button"
+						class="compact-filters-toggle"
+						class:expanded={expandedRound === index}
+						class:has-filters={round.songFilters?.genre || round.songFilters?.yearMin || round.songFilters?.yearMax}
+						onclick={() => (expandedRound = expandedRound === index ? null : index)}
+					>
+						<span class="compact-filters-text">{getCompactFiltersSummary(index)}</span>
+						<svg
+							class="compact-chevron"
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<path d="M6 9l6 6 6-6" />
+						</svg>
+					</button>
+
+					{#if expandedRound === index}
+						<div class="compact-filters-panel">
+							<!-- Year Range -->
+							<div class="filter-section">
+								<span class="field-label">Période</span>
+								<div class="year-range">
+									<input
+										type="number"
+										placeholder="Min"
+										value={round.songFilters?.yearMin || ''}
+										oninput={(e) => updateYearMin(index, e.currentTarget.value)}
+									/>
+									<span class="year-separator">à</span>
+									<input
+										type="number"
+										placeholder="Max"
+										value={round.songFilters?.yearMax || ''}
+										oninput={(e) => updateYearMax(index, e.currentTarget.value)}
+									/>
+								</div>
+							</div>
+
+							<!-- Penalty Toggle (compact) -->
+							<label class="compact-option-toggle">
+								<input
+									type="checkbox"
+									checked={round.params?.penaltyEnabled || false}
+									onchange={(e) => updatePenaltyEnabled(index, e.currentTarget.checked)}
+								/>
+								<span>Malus</span>
+								{#if round.params?.penaltyEnabled}
+									<span class="compact-penalty-value">-{round.params?.penaltyAmount || 1} pt</span>
+								{/if}
+							</label>
+
+							<!-- Niche Toggle -->
+							<label class="compact-option-toggle">
+								<input
+									type="checkbox"
+									checked={round.songFilters?.includeNiche || false}
+									onchange={(e) => updateIncludeNiche(index, e.currentTarget.checked)}
+								/>
+								<span>Titres niche</span>
+							</label>
+
+							<!-- Genre Selection -->
+							<div class="filter-section">
+								<div class="genre-header">
+									<span class="field-label">Genres</span>
+									<div class="genre-actions">
+										<button type="button" onclick={() => selectAllGenres(index)}>Tous</button>
+										<button type="button" onclick={() => clearAllGenres(index)}>Aucun</button>
+									</div>
+								</div>
+								<div class="genre-grid">
+									{#each CANONICAL_GENRES as genre}
+										<label class="genre-chip" class:selected={isGenreSelected(index, genre)}>
+											<input
+												type="checkbox"
+												checked={isGenreSelected(index, genre)}
+												onchange={() => toggleGenre(index, genre)}
+											/>
+											{genre}
+										</label>
+									{/each}
+								</div>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{:else}
+				<!-- Full Mode Layout -->
 				<div class="round-card">
 					<div class="round-header">
 						<span class="round-num">Manche {index + 1}</span>
@@ -279,22 +453,22 @@
 					<div class="round-body">
 
 					<!-- Media Type Selection -->
-					<div class="field">
-						<span class="field-label">Support</span>
-						<div class="media-toggle">
-							{#each mediaTypes as media}
-								{@const isSupported = media.id === 'music'}
-								<button
-									class="media-btn"
-									class:active={round.mediaType === media.id}
-									onclick={() => changeRoundMediaType(index, media.id)}
-									disabled={!isSupported}
-									title={isSupported ? '' : 'Bientôt disponible'}
-								>
-									<span class="media-icon">{media.icon}</span>
-									<span class="media-name">{media.name}</span>
-								</button>
-							{/each}
+					<div class="field field-inline">
+						<label class="field-label" for="media-type-{index}">Support</label>
+						<div class="media-select-control">
+							<select
+								id="media-type-{index}"
+								aria-label="Type de support"
+								value={round.mediaType}
+								onchange={(e) => changeRoundMediaType(index, e.currentTarget.value as MediaType)}
+							>
+								{#each mediaTypes as media}
+									{@const isSupported = media.id === 'music'}
+									<option value={media.id} disabled={!isSupported}>
+										{media.icon} {media.name}{!isSupported ? ' (bientôt)' : ''}
+									</option>
+								{/each}
+							</select>
 						</div>
 					</div>
 
@@ -455,6 +629,7 @@
 					{/if}
 				</div>
 			</div>
+			{/if}
 		{/each}
 	</div>
 
@@ -685,57 +860,36 @@
 		color: rgba(18, 43, 59, 0.7);
 	}
 
-	.media-toggle {
-		display: flex;
-		gap: 0.4rem;
-		flex-wrap: wrap;
+	.media-select-control {
+		min-width: 160px;
 	}
 
-	.media-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.6rem 0.9rem;
-		border: 2px solid rgba(18, 43, 59, 0.1);
-		background: white;
+	.media-select-control select {
+		width: 100%;
+		padding: 0.65rem 0.75rem;
+		padding-right: 2.5rem;
 		border-radius: 10px;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		flex: 1;
-		min-width: fit-content;
-		justify-content: center;
-	}
-
-	.media-btn:hover {
-		border-color: var(--aq-color-primary);
-	}
-
-	.media-btn.active {
-		border-color: var(--aq-color-primary);
-		background: linear-gradient(135deg, rgba(239, 76, 131, 0.1), rgba(248, 192, 39, 0.1));
-	}
-
-	.media-icon {
-		font-size: 1.1rem;
-	}
-
-	.media-name {
+		border: 1.5px solid rgba(18, 43, 59, 0.15);
+		background: white;
 		font-weight: 600;
-		font-size: 0.85rem;
+		font-size: 0.9rem;
+		font-family: inherit;
 		color: var(--aq-color-deep);
+		appearance: none;
+		background-image: linear-gradient(45deg, transparent 50%, rgba(18, 43, 59, 0.4) 50%),
+			linear-gradient(135deg, rgba(18, 43, 59, 0.4) 50%, transparent 50%);
+		background-position: calc(100% - 18px) calc(50% + 2px), calc(100% - 12px) calc(50% + 2px);
+		background-size: 6px 6px;
+		background-repeat: no-repeat;
 	}
 
-	.media-btn.active .media-name {
-		color: var(--aq-color-primary);
+	.media-select-control select:focus-visible {
+		outline: 2px solid var(--aq-color-primary);
+		outline-offset: 2px;
 	}
 
-	.media-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.media-btn:disabled:hover {
-		border-color: rgba(18, 43, 59, 0.1);
+	.media-select-control select option:disabled {
+		color: rgba(18, 43, 59, 0.4);
 	}
 
 	.song-count-input {
@@ -1093,6 +1247,254 @@
 		}
 
 		.add-buttons {
+			flex-direction: column;
+		}
+	}
+
+	/* ============================================
+	   Compact Mode Styles
+	   ============================================ */
+
+	.round-card-compact {
+		background: white;
+		border-radius: 12px;
+		border: 1px solid rgba(18, 43, 59, 0.1);
+		padding: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.compact-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.compact-round-num {
+		font-weight: 700;
+		font-size: 0.9rem;
+		color: var(--aq-color-deep);
+		min-width: 70px;
+	}
+
+	.compact-mode-pills {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.compact-mode-pill {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1.5px solid rgba(18, 43, 59, 0.12);
+		background: white;
+		border-radius: 8px;
+		font-size: 1rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.compact-mode-pill:hover:not(:disabled) {
+		border-color: var(--aq-color-primary);
+	}
+
+	.compact-mode-pill.active {
+		border-color: var(--aq-color-primary);
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.15), rgba(248, 192, 39, 0.15));
+	}
+
+	.compact-mode-pill.disabled,
+	.compact-mode-pill:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.compact-song-count {
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 8px;
+		padding: 0.15rem;
+	}
+
+	.compact-stepper-btn {
+		width: 26px;
+		height: 26px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: white;
+		border-radius: 6px;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--aq-color-deep);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.compact-stepper-btn:hover:not(:disabled) {
+		background: var(--aq-color-primary);
+		color: white;
+	}
+
+	.compact-stepper-btn:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+
+	.compact-count-value {
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: var(--aq-color-deep);
+		min-width: 24px;
+		text-align: center;
+	}
+
+	.compact-remove-btn {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: transparent;
+		color: rgba(18, 43, 59, 0.3);
+		cursor: pointer;
+		border-radius: 6px;
+		transition: all 0.15s ease;
+		margin-left: auto;
+	}
+
+	.compact-remove-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.1);
+		color: rgb(220, 38, 38);
+	}
+
+	.compact-remove-btn:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+
+	.compact-filters-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(18, 43, 59, 0.02);
+		border: 1px solid rgba(18, 43, 59, 0.08);
+		border-radius: 8px;
+		font-size: 0.8rem;
+		color: var(--aq-color-muted);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		width: 100%;
+		text-align: left;
+	}
+
+	.compact-filters-toggle:hover {
+		background: rgba(18, 43, 59, 0.04);
+		border-color: rgba(18, 43, 59, 0.12);
+	}
+
+	.compact-filters-toggle.expanded {
+		border-color: var(--aq-color-primary);
+		background: rgba(239, 76, 131, 0.04);
+	}
+
+	.compact-filters-toggle.has-filters .compact-filters-text {
+		color: var(--aq-color-primary);
+		font-weight: 500;
+	}
+
+	.compact-filters-text {
+		flex: 1;
+	}
+
+	.compact-chevron {
+		transition: transform 0.2s ease;
+		opacity: 0.5;
+	}
+
+	.compact-filters-toggle.expanded .compact-chevron {
+		transform: rotate(180deg);
+	}
+
+	.compact-filters-panel {
+		padding: 0.75rem;
+		background: rgba(18, 43, 59, 0.02);
+		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.compact-option-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.6rem;
+		background: white;
+		border: 1px solid rgba(18, 43, 59, 0.1);
+		border-radius: 8px;
+		cursor: pointer;
+		font-size: 0.85rem;
+		color: var(--aq-color-deep);
+		transition: all 0.15s ease;
+	}
+
+	.compact-option-toggle:hover {
+		border-color: rgba(18, 43, 59, 0.2);
+	}
+
+	.compact-option-toggle:has(input:checked) {
+		background: rgba(239, 76, 131, 0.05);
+		border-color: rgba(239, 76, 131, 0.2);
+	}
+
+	.compact-option-toggle input {
+		width: 16px;
+		height: 16px;
+		cursor: pointer;
+		accent-color: var(--aq-color-primary);
+	}
+
+	.compact-penalty-value {
+		margin-left: auto;
+		font-weight: 600;
+		color: rgb(239, 68, 68);
+		font-size: 0.8rem;
+	}
+
+	/* Compact mode add buttons */
+	.compact .add-buttons {
+		flex-direction: row;
+	}
+
+	.compact .add-btn {
+		padding: 0.75rem;
+		font-size: 0.85rem;
+	}
+
+	@media (max-width: 640px) {
+		.compact-header {
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+
+		.compact-round-num {
+			min-width: auto;
+		}
+
+		.compact-remove-btn {
+			margin-left: 0;
+		}
+
+		.compact .add-buttons {
 			flex-direction: column;
 		}
 	}

@@ -8,7 +8,7 @@
 	import MasterGameControl from '$lib/components/MasterGameControl.svelte';
 	import MasterPlayerInterface from '$lib/components/MasterPlayerInterface.svelte';
 	import PlayerGameInterface from '$lib/components/PlayerGameInterface.svelte';
-	import GameConfig from '$lib/components/room/GameConfig.svelte';
+	import CreateGameWizard from '$lib/components/room/CreateGameWizard.svelte';
 	import FinalScores from '$lib/components/room/FinalScores.svelte';
 	import BetweenRounds from '$lib/components/game/BetweenRounds.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -16,7 +16,6 @@
 	import InputField from '$lib/components/ui/InputField.svelte';
 	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 	import type { FinalScore, RoundConfig } from '@blind-test/shared';
-	import { readable, type Readable } from 'svelte/store';
 
 	const isApiErrorResponse = (data: unknown): data is { error: string } =>
 		!!data && typeof data === 'object' && 'error' in data && typeof (data as any).error === 'string';
@@ -52,18 +51,8 @@
 
 	// Game configuration
 	let songs = $state<any[]>([]);
-	let rounds = $state<RoundConfig[]>([]);
-	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
-	let showConfig = $state(true);
-	let showQr = $state(false);
+	let songsLoaded = $state(false);
 
-	// Master playing as participant
-	let masterPlaying = $state(false);
-	let masterPlayerName = $state('');
-	let masterPlayingInitialized = $state(false); // Track if master has explicitly set their playing status
-
-	// Remote master playing status (received from other clients via WebSocket)
-	let remoteMasterPlaying = $state<{ playing: boolean; playerName: string | null } | null>(null);
 
 	// Available genres (populated from songs)
 	let availableGenres = $derived.by(() => {
@@ -136,8 +125,6 @@
 	// Auto-scroll master to game controls when game starts
 	$effect(() => {
 		if (isMaster && room?.status === 'playing') {
-			// Hide config modal when game is in progress
-			showConfig = false;
 			// Small delay to ensure DOM has rendered
 			setTimeout(() => {
 				const gameStage = document.querySelector('.game-stage');
@@ -148,48 +135,13 @@
 		}
 	});
 
-	// Sync remote master playing status from WebSocket events
+	// Load songs for master when in lobby
 	$effect(() => {
-		if (roomSocket?.events.masterPlaying) {
-			console.log('[Room] Received master playing status:', roomSocket.events.masterPlaying);
-			remoteMasterPlaying = roomSocket.events.masterPlaying;
-
-			// For master tabs: if server has a playing status set, sync local state
-			// but DON'T set initialized flag (prevents immediate re-broadcast)
-			if (isMaster && !masterPlayingInitialized) {
-				const serverState = roomSocket.events.masterPlaying;
-				if (serverState.playing && serverState.playerName) {
-					masterPlaying = serverState.playing;
-					masterPlayerName = serverState.playerName;
-					console.log('[Room] Synced local master playing state from server:', serverState);
-				}
-			}
+		if (isMaster && room?.status === 'lobby' && !songsLoaded) {
+			loadSongs();
 		}
 	});
 
-	// Broadcast master playing status to server when master changes it (debounced)
-	// Only broadcasts after master has explicitly interacted with the control
-	let masterPlayingTimeout: number | null = null;
-	$effect(() => {
-		// Only broadcast if we're the master, in lobby, and have explicitly set the status
-		if (!roomId || !isMaster || room?.status !== 'lobby' || !masterPlayingInitialized) return;
-
-		// Capture current values for the async operation
-		const playing = masterPlaying;
-		const playerName = masterPlayerName.trim();
-		const currentRoomId = roomId;
-
-		// Debounce to avoid rapid API calls
-		if (masterPlayingTimeout) clearTimeout(masterPlayingTimeout);
-		masterPlayingTimeout = window.setTimeout(async () => {
-			try {
-				console.log('[Room] Broadcasting master playing status:', { playing, playerName });
-				await roomApi.setMasterPlaying(currentRoomId, playing, playerName);
-			} catch (err) {
-				console.error('[Room] Failed to broadcast master playing status:', err);
-			}
-		}, 300);
-	});
 
 
 	type StatusTone = 'primary' | 'success' | 'warning' | 'neutral';
@@ -200,49 +152,9 @@
 		finished: { label: 'Partie terminée', tone: 'neutral', icon: '🏁', blurb: 'Consulte les scores et relance un défi.' }
 	};
 
-	// Add master preview player when master is playing but game hasn't started yet
-	const playersWithMasterPreview = $derived.by(() => {
-		const list = [...players];
-
-		// Only show master preview in lobby
-		if (room?.status !== 'lobby') return list;
-
-		// Only show preview if master player isn't already in the list
-		const masterAlreadyInList = list.some(p => p.id === room?.masterPlayerId);
-		if (masterAlreadyInList) return list;
-
-		// For master: use local state
-		// For players: use remote state received via WebSocket
-		const effectivePlaying = isMaster ? masterPlaying : remoteMasterPlaying?.playing;
-		const effectiveName = isMaster ? masterPlayerName.trim() : remoteMasterPlaying?.playerName;
-
-		if (effectivePlaying && effectiveName) {
-			list.push({
-				id: 'master-preview',
-				name: effectiveName,
-				roomId: room.id,
-				role: 'player',
-				connected: true,
-				joinedAt: new Date(),
-				score: 0,
-				roundScore: 0,
-				isActive: false,
-				isLockedOut: false,
-				isMasterPreview: true, // Custom flag for styling
-				stats: {
-					totalAnswers: 0,
-					correctAnswers: 0,
-					wrongAnswers: 0,
-					buzzCount: 0,
-					averageAnswerTime: 0
-				}
-			} as Player & { isMasterPreview?: boolean });
-		}
-		return list;
-	});
-
+	// Sorted players for display (used by players/spectators, master uses wizard)
 	const sortedPlayers = $derived(
-		playersWithMasterPreview
+		players
 			.slice()
 			.sort((a, b) => {
 				if (a.connected === b.connected) {
@@ -260,36 +172,6 @@
 		room?.masterPlayerId ? players.find(p => p.id === room.masterPlayerId) ?? null : null
 	);
 
-	let codeCopied = $state(false);
-	let inviteCopied = $state(false);
-	let codeCopyTimeout: number | null = null;
-	let inviteCopyTimeout: number | null = null;
-
-	async function copyCode() {
-		if (!room) return;
-		try {
-			await navigator.clipboard?.writeText(room.code);
-			codeCopied = true;
-			if (codeCopyTimeout) clearTimeout(codeCopyTimeout);
-			codeCopyTimeout = window.setTimeout(() => (codeCopied = false), 2000);
-		} catch (err) {
-			console.warn('Clipboard unavailable', err);
-		}
-	}
-
-	async function copyInviteLink() {
-		if (!room) return;
-		try {
-			const origin = typeof window !== 'undefined' ? window.location.origin : '';
-			const shareUrl = `${origin}/room/${room.id}`;
-			await navigator.clipboard?.writeText(shareUrl);
-			inviteCopied = true;
-			if (inviteCopyTimeout) clearTimeout(inviteCopyTimeout);
-			inviteCopyTimeout = window.setTimeout(() => (inviteCopied = false), 2000);
-		} catch (err) {
-			console.warn('Clipboard unavailable', err);
-		}
-	}
 
 	async function loadRoom() {
 		if (!roomId) {
@@ -451,17 +333,19 @@
 	}
 
 	async function loadSongs() {
+		if (songsLoaded) return;
 		try {
 			const response = await songApi.list();
 			if (response.data) {
 				songs = response.data.songs || [];
+				songsLoaded = true;
 			}
 		} catch (err) {
 			console.error('Error loading songs:', err);
 		}
 	}
 
-	async function startGame() {
+	async function startGame(config: { rounds: RoundConfig[]; audioPlayback: 'master' | 'players' | 'all'; masterPlayerName?: string }) {
 		if (!room) return;
 
 		try {
@@ -469,18 +353,17 @@
 			error = null;
 
 			// Build request body with rounds
-			const configuredRounds = rounds.map((r, i) => ({
+			const configuredRounds: RoundConfig[] = config.rounds.map((r) => ({
 				...r,
 				params: {
 					...r.params,
-					...(audioPlayback !== 'master' && { audioPlayback })
+					...(config.audioPlayback !== 'master' && { audioPlayback: config.audioPlayback })
 				}
 			}));
 
 			console.log('🎮 Starting game with configuration:', {
 				totalRounds: configuredRounds.length,
-				masterPlaying,
-				masterPlayerName: masterPlaying ? masterPlayerName : undefined,
+				masterPlayerName: config.masterPlayerName,
 				rounds: configuredRounds.map((r: any, i: number) => ({
 					roundIndex: i + 1,
 					mode: r.modeType,
@@ -494,12 +377,11 @@
 			const response = await gameApi.start(
 				room.id,
 				configuredRounds,
-				masterPlaying ? masterPlayerName.trim() : undefined
+				config.masterPlayerName
 			);
 
 			if (response.data) {
 				console.log('Game started:', response.data);
-				showConfig = false;
 				// Game start will be broadcast via WebSocket
 			} else {
 				error = 'Impossible de lancer la partie';
@@ -555,15 +437,8 @@
 		}
 	}
 
-	function handleBackToLobby() {
-		// Send restart request to server - this will reset everyone to lobby
-		if (roomSocket) {
-			roomSocket.restartGame();
-		}
-	}
-
 	function handlePlayAgain() {
-		// Same as back to lobby - server will reset everyone
+		// Send restart request to server - this will reset everyone to lobby
 		if (roomSocket) {
 			roomSocket.restartGame();
 		}
@@ -692,9 +567,8 @@
 				showFinalScores = false;
 				finalScores = [];
 				betweenRoundsData = null;
-				// Show config for master to start new game
+				// Load songs for master to start new game
 				if (isMaster) {
-					showConfig = true;
 					loadSongs();
 				}
 				roomSocket.events.clear('gameRestarted');
@@ -705,8 +579,6 @@
 	onDestroy(() => {
 		// Cleanup WebSocket connection
 		roomSocket?.destroy();
-		if (codeCopyTimeout) clearTimeout(codeCopyTimeout);
-		if (inviteCopyTimeout) clearTimeout(inviteCopyTimeout);
 	});
 </script>
 
@@ -719,7 +591,7 @@
 	<!-- Hide navigation when in game mode, between rounds, or showing final scores -->
 	{#if !showFinalScores && !((room?.status === 'playing' || room?.status === 'between_rounds') && currentPlayer && !isMaster)}
 		<div class="room-nav">
-			<button type="button" class="nav-link" onclick={() => (window.location.href = '/')}>&larr; Toutes les salles</button>
+			<button type="button" class="nav-link" onclick={() => (window.location.href = '/')}>&larr; Accueil</button>
 			{#if connected}
 				<span class="connection-status ok">● Connecté</span>
 			{:else if reconnecting}
@@ -738,8 +610,8 @@
 		<div class="error-card">{error || socketError}</div>
 		<Button variant="primary" onclick={() => (window.location.href = '/')}>&larr; Retour à l'accueil</Button>
 	{:else if room}
-		<!-- Hide header and panels when player is in game mode, between rounds, or showing final scores -->
-		{#if !showFinalScores && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
+		<!-- Hide header when: master is in wizard, player is in game mode, between rounds, or showing final scores -->
+		{#if !showFinalScores && !(room.status === 'lobby' && isMaster) && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
 			<section class="room-header">
 				<div class="header-top">
 					<div>
@@ -763,154 +635,74 @@
 			{/if}
 		{/if}
 
-		<!-- Hide room panels when player is in game mode, between rounds, or showing final scores -->
-		{#if !showFinalScores && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer && !isMaster)}
-			<div class="room-panels">
-			<Card title={`Joueurs (${sortedPlayers.length}/${room.maxPlayers})`} subtitle={room.status === 'lobby' ? 'Invite encore plus de monde !' : 'Scores mis à jour en direct'} icon="👥">
-				{#if sortedPlayers.length === 0}
-					<p class="empty">Aucun joueur pour l'instant. Partage le code !</p>
-				{:else}
-					<div class="player-grid">
-						{#each sortedPlayers as player (player.id)}
-							{@const isMasterPreview = (player as any).isMasterPreview}
-							<div class="player-chip" class:offline={!player.connected} class:master-preview={isMasterPreview}>
-								<div class="chip-avatar">{player.name.slice(0, 2).toUpperCase()}</div>
-								<div class="chip-info">
-									<strong>{player.name}</strong>
-									<span>{isMasterPreview ? '🎮 Hôte' : player.connected ? 'Connecté' : 'Hors ligne'}</span>
-								</div>
-								<span class="chip-score">{player.score} pts</span>
-								{#if room.status === 'lobby' && isMaster && !isMasterPreview}
-									<button type="button" class="chip-remove" onclick={() => removePlayer(player.id)} title="Retirer le joueur">✕</button>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</Card>
-
-			<div class="side-stack">
-				{#if room.status === 'lobby' && isMaster}
-					<Card title="Inviter les joueurs" subtitle="Partage le code ou scanne le QR" icon="📣">
-						<div class="share-card">
-							<div class="code-banner">
-								<div>
-									<span>Code</span>
-									<strong>{room.code}</strong>
-								</div>
-							<Button variant="secondary" size="sm" onclick={copyCode}>
-									{codeCopied ? 'Copié' : 'Copier'}
-								</Button>
-							</div>
-							{#if room.qrCode}
-								{@const qrBlockId = room ? `room-qr-${room.id}` : 'room-qr-block'}
-								<div class="qr-preview">
-									<button
-										type="button"
-										class="qr-toggle-inline"
-										aria-expanded={showQr}
-										aria-controls={qrBlockId}
-										onclick={() => (showQr = !showQr)}
-									>
-										{showQr ? 'Masquer' : 'Afficher'} le QR code
-									</button>
-									{#if showQr}
-										<div id={qrBlockId} class="qr-visual-inline" aria-live="polite">
-											<img src={room.qrCode} alt={`QR pour ${room.name}`} />
-											<p class="qr-hint-inline">Les joueurs peuvent scanner ce QR code pour rejoindre plus vite.</p>
-										</div>
-									{/if}
-								</div>
-							{/if}
-							<Button variant="outline" size="sm" onclick={copyInviteLink}>
-								{inviteCopied ? 'Lien copié' : "Copier le lien d'invitation"}
-							</Button>
-						</div>
-					</Card>
-
-					<!-- Master Playing Toggle Card -->
-					<Card title="Je participe aussi" subtitle="Joue en tant que joueur" icon="🎮">
-						<div class="master-playing-card">
-							<label class="master-toggle">
-								<input type="checkbox" bind:checked={masterPlaying} onchange={() => masterPlayingInitialized = true} />
-								<span class="toggle-text">Activer le mode joueur</span>
-							</label>
-							{#if masterPlaying}
-								<div class="master-name-field">
-									<input
-										type="text"
-										bind:value={masterPlayerName}
-										placeholder="Ton pseudo"
-										maxlength="20"
-										class="master-name-input"
-										oninput={() => masterPlayingInitialized = true}
-									/>
-									<p class="master-hint">Seul le mode "Buzz + Choix" sera disponible</p>
-								</div>
-							{/if}
-						</div>
-					</Card>
-
-					{#if !showConfig}
-						<Card title="Préparer ta partie" subtitle="Rounds, playlists, timer" icon="⚙️">
-							<p class="card-text">Configure les manches et personnalise ton blind test avant de lancer la partie.</p>
-							<Button variant="primary" fullWidth onclick={() => {
-								showConfig = true;
-								loadSongs();
-							}}>
-								⚡ Configurer & démarrer
-							</Button>
-						</Card>
-					{/if}
-				{:else if room.status === 'lobby' && !isMaster}
-					{#if currentPlayer}
-						<Card title="Tu es prêt !" subtitle="Le maître démarre quand tout le monde est là" icon={READY_ICON}>
-							<p class="card-text">Tu joues en tant que <strong>{currentPlayer.name}</strong>. Reste connecté !</p>
-							<Button variant="outline" fullWidth onclick={leaveRoom}>Quitter la salle</Button>
-						</Card>
-					{:else}
-						<Card title="Rejoins la salle" subtitle="Choisis un pseudo fun" icon="🙋">
-							<form class="join-form" onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
-								<InputField
-									label="Pseudo"
-									placeholder="DJ Poppins 🎵"
-									bind:value={playerName}
-									error={playerNameError}
-									required
-								/>
-								<Button type="submit" variant="primary" fullWidth disabled={!playerName.trim() || !!playerNameError} loading={joining}>
-									{joining ? 'Connexion...' : 'Rejoindre la partie'}
-								</Button>
-							</form>
-						</Card>
-					{/if}
-				{:else}
-					<Card title="Infos match" subtitle="Tout le monde suit la même musique" icon="🎧">
-						<ul class="info-list">
-							<li>Scores synchronisés en direct</li>
-							<li>Buzz dès que tu reconnais l’extrait</li>
-							<li>Pause fun entre chaque manche</li>
-						</ul>
-					</Card>
-				{/if}
-			</div>
-		</div>
+		<!-- Master: Show wizard in lobby -->
+		{#if room.status === 'lobby' && isMaster && !showFinalScores}
+			<CreateGameWizard
+				{room}
+				{songs}
+				{players}
+				{availableGenres}
+				{starting}
+				onStartGame={startGame}
+				onRemovePlayer={removePlayer}
+			/>
 		{/if}
 
-		{#if showConfig && isMaster}
-			<div class="config-wrapper">
-				<GameConfig
-					{songs}
-					bind:rounds
-					bind:audioPlayback
-					{availableGenres}
-					{starting}
-					bind:masterPlaying
-					bind:masterPlayerName
-					onUpdateRounds={(newRounds) => (rounds = newRounds)}
-					onStartGame={startGame}
-					onCancel={() => (showConfig = false)}
-				/>
+		<!-- Players/Spectators: Show panels when not in game -->
+		{#if !showFinalScores && !isMaster && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer)}
+			<div class="room-panels">
+				<Card title={`Joueurs (${sortedPlayers.length}/${room.maxPlayers})`} subtitle={room.status === 'lobby' ? 'En attente du lancement' : 'Scores mis à jour en direct'} icon="👥">
+					{#if sortedPlayers.length === 0}
+						<p class="empty">Aucun joueur pour l'instant.</p>
+					{:else}
+						<div class="player-grid">
+							{#each sortedPlayers as player (player.id)}
+								<div class="player-chip" class:offline={!player.connected}>
+									<div class="chip-avatar">{player.name.slice(0, 2).toUpperCase()}</div>
+									<div class="chip-info">
+										<strong>{player.name}</strong>
+										<span>{player.connected ? 'Connecté' : 'Hors ligne'}</span>
+									</div>
+									<span class="chip-score">{player.score} pts</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</Card>
+
+				<div class="side-stack">
+					{#if room.status === 'lobby'}
+						{#if currentPlayer}
+							<Card title="Tu es prêt !" subtitle="Le maître démarre quand tout le monde est là" icon={READY_ICON}>
+								<p class="card-text">Tu joues en tant que <strong>{currentPlayer.name}</strong>. Reste connecté !</p>
+								<Button variant="outline" fullWidth onclick={leaveRoom}>Quitter la salle</Button>
+							</Card>
+						{:else}
+							<Card title="Rejoins la salle" subtitle="Choisis un pseudo fun" icon="🙋">
+								<form class="join-form" onsubmit={(e) => { e.preventDefault(); joinRoom(); }}>
+									<InputField
+										label="Pseudo"
+										placeholder="DJ Poppins"
+										bind:value={playerName}
+										error={playerNameError}
+										required
+									/>
+									<Button type="submit" variant="primary" fullWidth disabled={!playerName.trim() || !!playerNameError} loading={joining}>
+										{joining ? 'Connexion...' : 'Rejoindre la partie'}
+									</Button>
+								</form>
+							</Card>
+						{/if}
+					{:else}
+						<Card title="Infos match" subtitle="Tout le monde suit la même musique" icon="🎧">
+							<ul class="info-list">
+								<li>Scores synchronisés en direct</li>
+								<li>Buzz dès que tu reconnais l'extrait</li>
+								<li>Pause fun entre chaque manche</li>
+							</ul>
+						</Card>
+					{/if}
+				</div>
 			</div>
 		{/if}
 
@@ -975,7 +767,7 @@
 	.room-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
+		gap: 0.5rem;
 	}
 
 	.room-nav {
@@ -1129,16 +921,6 @@
 		opacity: 0.6;
 	}
 
-	.player-chip.master-preview {
-		background: linear-gradient(135deg, rgba(239, 76, 131, 0.1), rgba(248, 192, 39, 0.1));
-		border: 2px solid rgba(239, 76, 131, 0.3);
-	}
-
-	.player-chip.master-preview .chip-avatar {
-		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
-		color: white;
-	}
-
 	.chip-avatar {
 		width: 48px;
 		height: 48px;
@@ -1160,116 +942,10 @@
 		color: var(--aq-color-deep);
 	}
 
-	.chip-remove {
-		border: none;
-		background: rgba(239, 76, 131, 0.15);
-		color: var(--aq-color-primary);
-		border-radius: 50%;
-		width: 32px;
-		height: 32px;
-		display: grid;
-		place-items: center;
-		cursor: pointer;
-		font-size: 1rem;
-		font-weight: 700;
-		transition: all 0.2s ease;
-	}
-
-	.chip-remove:hover {
-		background: rgba(239, 76, 131, 0.25);
-		transform: scale(1.1);
-	}
-
-	.chip-remove:active {
-		transform: scale(0.95);
-	}
-
 	.side-stack {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-	}
-
-	.share-card {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		text-align: center;
-	}
-
-	.qr-preview {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		padding: 0.75rem;
-		border-radius: var(--aq-radius-md);
-		border: 1px dashed rgba(18, 43, 59, 0.2);
-		background: rgba(18, 43, 59, 0.02);
-	}
-
-	.qr-toggle-inline {
-		border: 1px solid rgba(18, 43, 59, 0.3);
-		border-radius: 999px;
-		background: transparent;
-		padding: 0.45rem 0.9rem;
-		font-weight: 600;
-		font-size: 0.9rem;
-		cursor: pointer;
-		color: var(--aq-color-deep);
-		transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
-	}
-
-	.qr-toggle-inline:hover,
-	.qr-toggle-inline:focus-visible {
-		background: var(--aq-color-primary);
-		color: white;
-		border-color: var(--aq-color-primary);
-	}
-
-	.qr-toggle-inline:focus-visible {
-		outline: 2px solid var(--aq-color-primary);
-		outline-offset: 3px;
-	}
-
-	.qr-visual-inline {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		align-items: center;
-	}
-
-	.share-card img {
-		max-width: 220px;
-		margin: 0 auto;
-		border-radius: var(--aq-radius-md);
-		border: 4px solid rgba(18, 43, 59, 0.08);
-	}
-
-	.qr-hint-inline {
-		font-size: 0.85rem;
-		color: var(--aq-color-muted);
-		margin: 0;
-	}
-
-	.qr-hint-inline.compact {
-		text-align: left;
-	}
-
-	.code-banner {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		align-items: center;
-		padding: 0.75rem 1rem;
-		border-radius: var(--aq-radius-md);
-		background: rgba(18, 43, 59, 0.05);
-	}
-
-	.code-banner span {
-		font-size: 0.85rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--aq-color-muted);
 	}
 
 	.card-text {
@@ -1283,64 +959,6 @@
 		gap: 1rem;
 	}
 
-	/* Master Playing Card */
-	.master-playing-card {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.master-toggle {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		cursor: pointer;
-		font-weight: 600;
-		color: var(--aq-color-deep);
-	}
-
-	.master-toggle input[type="checkbox"] {
-		width: 1.25rem;
-		height: 1.25rem;
-		accent-color: var(--aq-color-primary);
-		cursor: pointer;
-	}
-
-	.toggle-text {
-		font-size: 0.95rem;
-	}
-
-	.master-name-field {
-		padding-top: 0.75rem;
-		border-top: 1px solid rgba(18, 43, 59, 0.1);
-	}
-
-	.master-name-input {
-		width: 100%;
-		padding: 0.75rem 1rem;
-		border: 2px solid rgba(18, 43, 59, 0.15);
-		border-radius: 12px;
-		font-size: 1rem;
-		transition: border-color 160ms ease;
-		background: white;
-	}
-
-	.master-name-input:focus {
-		outline: none;
-		border-color: var(--aq-color-primary);
-	}
-
-	.master-name-input::placeholder {
-		color: rgba(18, 43, 59, 0.4);
-	}
-
-	.master-hint {
-		margin: 0.5rem 0 0;
-		font-size: 0.8rem;
-		color: var(--aq-color-muted);
-		line-height: 1.4;
-	}
-
 	.info-list {
 		margin: 0;
 		padding-left: 1.25rem;
@@ -1351,10 +969,6 @@
 		text-align: center;
 		padding: 1rem;
 		color: var(--aq-color-muted);
-	}
-
-	.config-wrapper {
-		margin-top: 2rem;
 	}
 
 	.final-wrapper,

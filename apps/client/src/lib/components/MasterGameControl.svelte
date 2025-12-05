@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import type { Room } from '@blind-test/shared';
+	import type { Room, ModeType, MediaType } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import { gameApi } from '$lib/api-helpers';
+	import RoundTutorial from './game/RoundTutorial.svelte';
 	import VolumeControl from './VolumeControl.svelte';
 
 	// Props
@@ -28,6 +29,12 @@
 	let loadingCountdown = $state(6);
 	let loadingGenre = $state<string | undefined>(undefined);
 	let countdownInterval: number | null = null;
+
+	// Tutorial state
+	let showTutorial = $state(false);
+	let currentRoundIndex = $state(0);
+	let currentModeType = $state<ModeType>('buzz_and_choice');
+	let currentMediaType = $state<MediaType>('music');
 
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
@@ -103,10 +110,18 @@
 			console.log('[Master] Round started, updating song count', {
 				roundIndex: event.roundIndex,
 				songCount: event.songCount,
-				modeType: event.modeType
+				modeType: event.modeType,
+				mediaType: event.mediaType
 			});
 			totalSongs = event.songCount;
+			currentRoundIndex = event.roundIndex;
+			currentModeType = event.modeType as ModeType;
+			currentMediaType = event.mediaType as MediaType;
 			isPlaying = true;
+
+			// Show tutorial at the start of each round
+			showTutorial = true;
+
 			socket.events.clear('roundStarted');
 		}
 	});
@@ -395,6 +410,17 @@
 </script>
 
 <div class="master-control">
+	<!-- Round Tutorial Overlay -->
+	{#if showTutorial}
+		<RoundTutorial
+			roundIndex={currentRoundIndex}
+			modeType={currentModeType}
+			mediaType={currentMediaType}
+			songCount={totalSongs}
+			onDismiss={() => showTutorial = false}
+		/>
+	{/if}
+
 	<!-- Loading Screen -->
 	{#if showLoadingScreen}
 		<div class="loading-screen">

@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import type { Player, AnswerChoice } from '@blind-test/shared';
+	import type { Player, AnswerChoice, ModeType, MediaType } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import BuzzAndChoiceUI from './game/BuzzAndChoiceUI.svelte';
 	import FastBuzzUI from './game/FastBuzzUI.svelte';
+	import RoundTutorial from './game/RoundTutorial.svelte';
 	import VolumeControl from './VolumeControl.svelte';
 
 	// Get players from socket store for leaderboard display (reactive subscription)
@@ -61,7 +62,10 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 
 	let currentSongIndex = $state(0);
 	let totalSongsInRound = $state(0);
-	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz'>('buzz_and_choice');
+	let currentModeType = $state<ModeType>('buzz_and_choice');
+	let currentMediaType = $state<MediaType>('music');
+	let currentRoundIndex = $state(0);
+	let showTutorial = $state(false);
 	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
 	let countdownInterval: number | null = null;
 	let isPaused = $state(false);
@@ -189,13 +193,19 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 			console.log('[Player] 🎮 NEW ROUND STARTED - Updating mode', {
 				roundIndex: event.roundIndex,
 				modeType: event.modeType,
+				mediaType: event.mediaType,
 				songCount: event.songCount,
 				playerId: player.id
 			});
 
-			// Update mode type and song count for the new round
-			currentModeType = event.modeType as 'buzz_and_choice' | 'fast_buzz';
+			// Update mode type, media type and song count for the new round
+			currentModeType = event.modeType as ModeType;
+			currentMediaType = event.mediaType as MediaType;
+			currentRoundIndex = event.roundIndex;
 			totalSongsInRound = event.songCount;
+
+			// Show tutorial at the start of each round
+			showTutorial = true;
 
 			// Reset to idle state between rounds
 			gameState = { status: 'idle' };
@@ -623,6 +633,17 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 </script>
 
 <div class="player-interface" class:loading-active={gameState.status === 'loading'}>
+	<!-- Round Tutorial Overlay -->
+	{#if showTutorial}
+		<RoundTutorial
+			roundIndex={currentRoundIndex}
+			modeType={currentModeType}
+			mediaType={currentMediaType}
+			songCount={totalSongsInRound}
+			onDismiss={() => showTutorial = false}
+		/>
+	{/if}
+
 	<!-- Reconnection Overlay -->
 	{#if isReconnecting}
 		<div class="reconnection-overlay">

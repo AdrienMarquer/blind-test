@@ -124,10 +124,6 @@
 		font-size: 0.875rem;
 	}
 
-	.qr-hint.compact {
-		margin: 0;
-	}
-
 	@media (max-width: 640px) {
 		.qr-header {
 			flex-direction: column;
