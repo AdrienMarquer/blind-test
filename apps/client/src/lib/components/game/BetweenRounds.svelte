@@ -141,58 +141,60 @@
 
 <style>
 	.between-rounds {
-		padding: 2rem;
-		border-radius: 32px;
+		padding: 1.5rem;
+		border-radius: 24px;
 		background: rgba(255, 255, 255, 0.95);
 		box-shadow: var(--aq-shadow-soft);
 		width: 100%;
-		max-width: 1200px;
+		max-width: 600px;
 		margin: 0 auto;
+		max-height: 90vh;
+		overflow-y: auto;
 	}
 
 	.header {
 		text-align: center;
-		margin-bottom: 2rem;
+		margin-bottom: 1.5rem;
 	}
 
 	.header h2 {
-		font-size: 2rem;
-		margin: 0 0 0.5rem 0;
+		font-size: 1.5rem;
+		margin: 0 0 0.25rem 0;
 		color: var(--aq-color-deep);
 	}
 
 	.content-grid {
-		display: grid;
-		gap: 2rem;
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
 	}
 
 	.leaderboard-section,
 	.next-round-section {
-		border-radius: 24px;
-		padding: 1.5rem;
+		border-radius: 16px;
+		padding: 1rem;
 		background: rgba(18, 43, 59, 0.04);
 	}
 
 	.leaderboard-section h3,
 	.next-round-section h3 {
-		margin: 0 0 1.25rem 0;
-		font-size: 1.3rem;
+		margin: 0 0 0.75rem 0;
+		font-size: 1.1rem;
 		color: var(--aq-color-deep);
 	}
 
 	.leaderboard {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.5rem;
 	}
 
 	.leaderboard-item {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem;
-		border-radius: 16px;
+		gap: 0.5rem;
+		padding: 0.6rem 0.75rem;
+		border-radius: 12px;
 		background: rgba(255, 255, 255, 0.9);
 		box-shadow: 0 2px 8px rgba(18, 43, 59, 0.06);
 	}
@@ -200,11 +202,11 @@
 	.next-round-card {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 1rem;
 	}
 
 	.round-number {
-		font-size: 1.5rem;
+		font-size: 1.25rem;
 		font-weight: 700;
 		color: var(--aq-color-primary);
 		text-align: center;
@@ -213,16 +215,17 @@
 	.round-details {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.5rem;
 	}
 
 	.detail-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.75rem;
+		padding: 0.5rem 0.75rem;
 		background: rgba(255, 255, 255, 0.7);
-		border-radius: 12px;
+		border-radius: 10px;
+		font-size: 0.95rem;
 	}
 
 	.label {
@@ -278,49 +281,53 @@
 	.subtitle {
 		color: var(--aq-color-muted);
 		margin: 0;
-		font-size: 1.1rem;
+		font-size: 0.95rem;
 	}
 
 	.rank-badge {
-		width: 48px;
-		height: 48px;
-		border-radius: 12px;
+		width: 36px;
+		height: 36px;
+		border-radius: 10px;
 		background: rgba(239, 76, 131, 0.1);
 		display: grid;
 		place-items: center;
-		font-size: 1.3rem;
+		font-size: 1.1rem;
 		flex-shrink: 0;
 	}
 
 	.player-info {
 		flex: 1;
+		min-width: 0;
 	}
 
 	.player-name {
 		font-weight: 600;
-		font-size: 1.05rem;
+		font-size: 0.95rem;
 		color: var(--aq-color-deep);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.player-time {
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 		color: var(--aq-color-muted);
-		margin-left: 0.5rem;
+		margin-left: 0.25rem;
 	}
 
 	.tiebreaker-note {
-		margin: 1rem 0 0 0;
-		padding: 0.75rem 1rem;
-		font-size: 0.9rem;
+		margin: 0.75rem 0 0 0;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.8rem;
 		color: var(--aq-color-muted);
 		background: rgba(18, 43, 59, 0.04);
-		border-radius: 12px;
+		border-radius: 10px;
 		text-align: center;
 	}
 
 	.player-score {
 		font-weight: 700;
-		font-size: 1.1rem;
+		font-size: 0.95rem;
 		color: var(--aq-color-primary);
 		white-space: nowrap;
 	}

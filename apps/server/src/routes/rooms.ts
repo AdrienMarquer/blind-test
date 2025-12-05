@@ -227,9 +227,9 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
       }
 
       // Store master playing status
-      const status = {
+      const status: { playing: boolean; playerName: string | null } = {
         playing: body.playing,
-        playerName: body.playing ? body.playerName : null
+        playerName: body.playing ? (body.playerName ?? null) : null
       };
       masterPlayingStatus.set(roomId, status);
 

@@ -36,24 +36,6 @@
 	let audioElement: HTMLAudioElement | null = $state(null);
 	let audioContext: AudioContext | null = $state(null);
 
-	function handlePause() {
-		isPaused = !isPaused;
-
-		if (audioElement) {
-			if (isPaused) {
-				audioElement.pause();
-			} else {
-				audioElement.play();
-			}
-		}
-
-		if (isPaused) {
-			socket.pauseGame();
-		} else {
-			socket.resumeGame();
-		}
-	}
-
 	function formatAnswerLabel(label: 'title' | 'artist', { withArticle = false } = {}) {
 		if (withArticle) {
 			return label === 'title' ? 'le titre' : 'l\'artiste';
@@ -483,23 +465,9 @@
 	</div>
 
 	<div class="controls">
-		<button class="control-btn pause-btn" onclick={handlePause}>
-			{isPaused ? '▶️ Reprendre' : '⏸️ Pause'}
-		</button>
 		<button class="control-btn end-btn" onclick={handleEndGame}>
-			🛑 Terminer la partie
+			🛑 Passer la partie
 		</button>
-	</div>
-
-	<div class="status-indicators">
-		<div class="indicator">
-			<span class="indicator-label">Statut :</span>
-			<span class="indicator-value">{isPaused ? 'En pause' : 'En lecture'}</span>
-		</div>
-		<div class="indicator">
-			<span class="indicator-label">Joueur actif :</span>
-			<span class="indicator-value">{activePlayerName}</span>
-		</div>
 	</div>
 
 	<!-- Audio player (hidden) -->
@@ -565,45 +533,32 @@
 	}
 
 	.controls {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-		gap: 0.75rem;
+		display: flex;
+		justify-content: center;
 	}
 
 	.control-btn {
 		border: none;
-		padding: 0.85rem 1rem;
+		padding: 1rem 2rem;
 		border-radius: 16px;
 		font-weight: 600;
+		font-size: 1.1rem;
 		cursor: pointer;
+		transition: transform 150ms ease, box-shadow 150ms ease;
 	}
 
-	.pause-btn { background: rgba(255,255,255,0.2); color:#fff; }
-	.end-btn { background: rgba(18,43,59,0.2); }
-
-	.status-indicators {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: 0.75rem;
+	.control-btn:active {
+		transform: scale(0.95);
 	}
 
-	.indicator {
-		background: rgba(255, 255, 255, 0.15);
-		border-radius: 14px;
-		padding: 0.75rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
+	.end-btn {
+		background: rgba(255, 255, 255, 0.95);
+		color: var(--aq-color-deep);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 	}
 
-	.indicator-label {
-		font-size: 0.85rem;
-		opacity: 0.8;
-	}
-
-	.indicator-value {
-		font-weight: 600;
-		font-size: 1.05rem;
+	.end-btn:hover {
+		box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 	}
 
 	/* Manual Validation Panel */

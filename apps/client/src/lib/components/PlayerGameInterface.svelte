@@ -64,12 +64,14 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 	let currentModeType = $state<'buzz_and_choice' | 'fast_buzz'>('buzz_and_choice');
 	let maxSongDuration = $state(15); // Track max duration for timer bar calculation
 	let countdownInterval: number | null = null;
+	let isPaused = $state(false);
 
 	// Smooth timer animation
 	let timerAnimationKey = $state(0); // Key to restart CSS animation
 	let timerStartTimestamp = $state(0);
 	let timerRafId: number | null = null;
 	let smoothProgress = $state(100); // 0-100 percentage
+	let pausedProgress = $state(0); // Store progress when paused
 
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
@@ -557,6 +559,13 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 	$effect(() => {
 		const event = socket.events.gamePaused;
 		if (event) {
+			console.log('[Player] Game paused - stopping timer');
+			isPaused = true;
+
+			// Store current progress and stop timer animation
+			pausedProgress = smoothProgress;
+			stopSmoothTimer();
+
 			// Pause audio playback when game is paused
 			if (audioElement && !audioElement.paused) {
 				audioElement.pause();
@@ -571,6 +580,16 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 	$effect(() => {
 		const event = socket.events.gameResumed;
 		if (event) {
+			console.log('[Player] Game resumed - restarting timer');
+			isPaused = false;
+
+			// Resume timer animation from where we left off
+			if (gameState.status === 'ready_to_buzz' && pausedProgress > 0) {
+				const remainingSeconds = (pausedProgress / 100) * maxSongDuration;
+				resumeSmoothTimerFromRemaining(remainingSeconds);
+				console.log('[Player] Timer resumed with', remainingSeconds.toFixed(1), 'seconds remaining');
+			}
+
 			// Resume audio playback when game is resumed
 			if (audioElement && audioElement.paused && audioElement.src) {
 				audioElement.play().catch(err => {

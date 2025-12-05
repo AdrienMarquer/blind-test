@@ -30,7 +30,7 @@
 				<div class="stats">
 					✓ {player.correctAnswers} · ✗ {player.wrongAnswers}
 					{#if player.averageAnswerTime > 0}
-						· ⏱ {(player.averageAnswerTime / 1000).toFixed(1)}s
+						· <span class="avg-time">⏱ {(player.averageAnswerTime / 1000).toFixed(1)}s en moyenne</span>
 					{/if}
 				</div>
 			{/each}

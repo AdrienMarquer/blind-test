@@ -172,18 +172,19 @@
 	let masterPlayingTimeout: number | null = null;
 	$effect(() => {
 		// Only broadcast if we're the master, in lobby, and have explicitly set the status
-		if (!isMaster || room?.status !== 'lobby' || !masterPlayingInitialized) return;
+		if (!roomId || !isMaster || room?.status !== 'lobby' || !masterPlayingInitialized) return;
 
 		// Capture current values for the async operation
 		const playing = masterPlaying;
 		const playerName = masterPlayerName.trim();
+		const currentRoomId = roomId;
 
 		// Debounce to avoid rapid API calls
 		if (masterPlayingTimeout) clearTimeout(masterPlayingTimeout);
 		masterPlayingTimeout = window.setTimeout(async () => {
 			try {
 				console.log('[Room] Broadcasting master playing status:', { playing, playerName });
-				await roomApi.setMasterPlaying(roomId, playing, playerName);
+				await roomApi.setMasterPlaying(currentRoomId, playing, playerName);
 			} catch (err) {
 				console.error('[Room] Failed to broadcast master playing status:', err);
 			}
@@ -948,7 +949,7 @@
 				</div>
 			{/if}
 
-			<section class="game-stage" class:fullscreen={currentPlayer && !isMaster} class:master-fullscreen={isMaster && masterPlayer}>
+			<section class="game-stage" class:fullscreen={currentPlayer && !isMaster} class:master-fullscreen={isMaster}>
 				{#if roomSocket}
 					{#if isMaster && masterPlayer}
 						<!-- Master is playing - show hybrid interface -->
@@ -1386,6 +1387,7 @@
 		z-index: 1000;
 		background: linear-gradient(135deg, #ef4c83 0%, #f8c027 100%);
 		padding: 1rem;
+		overflow-y: auto;
 	}
 
 	.game-stage :global(.master-control),
@@ -1449,6 +1451,7 @@
 		z-index: 1000;
 		background: linear-gradient(135deg, #ef4c83 0%, #f8c027 100%);
 		padding: 1rem;
+		overflow: hidden;
 	}
 
 	.spectator-note {
