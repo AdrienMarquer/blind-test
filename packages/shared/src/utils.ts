@@ -103,19 +103,6 @@ export function generateRoomJoinURL(roomId: string, serverIp: string, port: numb
 // ============================================================================
 
 /**
- * Validate room name
- * Uses ROOM_CONFIG constants for min/max length
- * Allowed: alphanumeric, spaces, hyphens, underscores
- */
-export function validateRoomName(name: string): boolean {
-  if (!name || name.length < ROOM_CONFIG.NAME_MIN_LENGTH || name.length > ROOM_CONFIG.NAME_MAX_LENGTH) {
-    return false;
-  }
-
-  return VALIDATION_PATTERNS.ROOM_NAME.test(name);
-}
-
-/**
  * Validate player name
  * Uses PLAYER_CONFIG constants for min/max length
  * Allowed: alphanumeric, spaces

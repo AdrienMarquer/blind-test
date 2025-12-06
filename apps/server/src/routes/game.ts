@@ -194,7 +194,7 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
 
       // Update room status
       const updated = await roomRepository.update(roomId, { status: 'playing' });
-      apiLogger.info('Game started', { roomId, roomName: room.name, roundCount: rounds.length });
+      apiLogger.info('Game started', { roomId, code: room.code, roundCount: rounds.length });
 
       // Clear the in-memory master playing status (no longer needed once game starts)
       clearMasterPlayingStatus(roomId);
@@ -302,7 +302,7 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
       // Force end the current game
       await gameService.endGame(roomId);
 
-      apiLogger.info('Game ended manually', { roomId, roomName: room.name });
+      apiLogger.info('Game ended manually', { roomId, code: room.code });
 
       return {
         roomId,
@@ -333,7 +333,7 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
     try {
       await gameService.startNextRound(roomId);
 
-      apiLogger.info('Started next round', { roomId, roomName: room.name });
+      apiLogger.info('Started next round', { roomId, code: room.code });
 
       return {
         roomId,

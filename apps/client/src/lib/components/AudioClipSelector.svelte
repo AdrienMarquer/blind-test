@@ -7,7 +7,8 @@
 	import { SONG_CONFIG } from '@blind-test/shared';
 
 	interface Props {
-		file: File;
+		file?: File | null;
+		audioSrc?: string | null;
 		defaultClipStart?: number;
 		defaultClipDuration?: number;
 		maxDuration?: number;
@@ -16,57 +17,123 @@
 	}
 
 	let {
-		file,
+		file = null,
+		audioSrc = null,
 		defaultClipStart = SONG_CONFIG.DEFAULT_CLIP_START,
-		defaultClipDuration = SONG_CONFIG.DEFAULT_CLIP_DURATION,
+		// Fix clipDuration to default, remove from direct control
 		maxDuration = SONG_CONFIG.MAX_CLIP_DURATION,
 		onSelect,
 		onCancel
 	}: Props = $props();
 
-	let audioElement: HTMLAudioElement;
+	let audioElement = $state<HTMLAudioElement>();
 	let audioUrl = $state<string>('');
 	let duration = $state(0);
 	let currentTime = $state(0);
 	let isPlaying = $state(false);
 	let clipStart = $state(defaultClipStart);
-	let clipDuration = $state(defaultClipDuration);
-	let waveformCanvas: HTMLCanvasElement;
+	let fixedClipDuration = SONG_CONFIG.DEFAULT_CLIP_DURATION; // Fixed duration
 
-	// Initialize audio URL from file
-	onMount(() => {
-		audioUrl = URL.createObjectURL(file);
+	// Waveform state
+	let audioContext: AudioContext | null = null;
+	let audioBuffer: AudioBuffer | null = null;
+	let waveformLoading = $state(false);
+	let loadError = $state<string | null>(null);
+	let waveformCanvas = $state<HTMLCanvasElement>();
+
+	// Handle audio source changes
+	$effect(() => {
+		loadError = null;
+		if (file) {
+			const url = URL.createObjectURL(file);
+			audioUrl = url;
+			loadAudioFromFile(file);
+			return () => URL.revokeObjectURL(url);
+		} else if (audioSrc) {
+			audioUrl = audioSrc;
+			loadAudioFromUrl(audioSrc);
+		}
 	});
 
 	// Cleanup
 	onDestroy(() => {
-		if (audioUrl) {
-			URL.revokeObjectURL(audioUrl);
+		if (audioContext) {
+			audioContext.close();
 		}
 	});
 
+	async function loadAudioFromFile(file: File) {
+		try {
+			waveformLoading = true;
+			const arrayBuffer = await file.arrayBuffer();
+			await decodeAudio(arrayBuffer);
+		} catch (err) {
+			console.error('Error loading audio file:', err);
+			loadError = 'Erreur de chargement du fichier';
+		} finally {
+			waveformLoading = false;
+		}
+	}
+
+	async function loadAudioFromUrl(url: string) {
+		try {
+			waveformLoading = true;
+			const response = await fetch(url);
+			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+			const arrayBuffer = await response.arrayBuffer();
+			await decodeAudio(arrayBuffer);
+		} catch (err) {
+			console.error('Error loading audio url:', err);
+			loadError = 'Erreur de chargement du flux audio';
+		} finally {
+			waveformLoading = false;
+		}
+	}
+
+	async function decodeAudio(arrayBuffer: ArrayBuffer) {
+		try {
+			if (!audioContext) {
+				audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+			}
+			audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+			drawWaveform();
+		} catch (err) {
+			console.error('Error decoding audio:', err);
+			loadError = 'Erreur de décodage audio';
+		}
+	}
+
 	function handleLoadedMetadata() {
+		if (!audioElement) return;
 		duration = audioElement.duration;
 
 		// Ensure clipStart doesn't exceed duration
-		if (clipStart > duration - clipDuration) {
-			clipStart = Math.max(0, duration - clipDuration);
+		if (clipStart > duration - fixedClipDuration) {
+			clipStart = Math.max(0, duration - fixedClipDuration);
 		}
 
 		drawWaveform();
 	}
 
+	function handleAudioError(e: Event) {
+		console.error('Audio element error:', audioElement?.error);
+		loadError = 'Impossible de lire le fichier audio';
+	}
+
 	function handleTimeUpdate() {
+		if (!audioElement) return;
 		currentTime = audioElement.currentTime;
 
 		// Stop playback at clip end if previewing clip
-		if (isPlaying && currentTime >= clipStart + clipDuration) {
+		if (isPlaying && currentTime >= clipStart + fixedClipDuration) {
 			audioElement.pause();
 			audioElement.currentTime = clipStart;
+			isPlaying = false;
 		}
 	}
 
 	function togglePlayPause() {
+		if (!audioElement) return;
 		if (isPlaying) {
 			audioElement.pause();
 		} else {
@@ -78,14 +145,14 @@
 	}
 
 	function handleSeek(event: MouseEvent) {
-		if (!waveformCanvas) return;
+		if (!waveformCanvas || !audioElement) return;
 
 		const rect = waveformCanvas.getBoundingClientRect();
 		const x = event.clientX - rect.left;
 		const percent = x / rect.width;
 		const newTime = percent * duration;
 
-		clipStart = Math.max(0, Math.min(newTime, duration - clipDuration));
+		clipStart = Math.max(0, Math.min(newTime, duration - fixedClipDuration));
 		audioElement.currentTime = clipStart;
 	}
 
@@ -107,7 +174,7 @@
 
 		// Draw clip region
 		const clipStartX = (clipStart / duration) * width;
-		const clipWidth = (clipDuration / duration) * width;
+		const clipWidth = (fixedClipDuration / duration) * width;
 		ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
 		ctx.fillRect(clipStartX, 0, clipWidth, height);
 
@@ -125,19 +192,56 @@
 		ctx.lineTo(clipStartX + clipWidth, height);
 		ctx.stroke();
 
-		// Draw simplified waveform (placeholder - would need actual audio analysis)
+		// Draw Waveform
 		ctx.strokeStyle = '#4ade80';
 		ctx.lineWidth = 1;
 		ctx.beginPath();
-		for (let i = 0; i < width; i++) {
-			const percent = i / width;
-			const amplitude = Math.sin(percent * Math.PI * 10) * 0.5 + 0.5;
-			const y = height / 2 + (amplitude - 0.5) * height * 0.8;
 
-			if (i === 0) {
-				ctx.moveTo(i, y);
-			} else {
-				ctx.lineTo(i, y);
+		if (audioBuffer) {
+			// Real waveform
+			const rawData = audioBuffer.getChannelData(0); // Use left channel
+			const samples = width; // One sample per pixel
+			const blockSize = Math.floor(rawData.length / samples); // Number of audio samples per canvas pixel
+			const scale = 0.8; // Scale factor
+
+			for (let i = 0; i < width; i++) {
+				const startSample = i * blockSize;
+				let min = 1.0;
+				let max = -1.0;
+
+				// Find min/max in this block (simple downsampling)
+				for (let j = 0; j < blockSize; j++) {
+					const datum = rawData[startSample + j];
+					if (datum < min) min = datum;
+					if (datum > max) max = datum;
+				}
+
+				// Fallback if block was empty
+				if (max === -1.0 && min === 1.0) {
+					max = 0;
+					min = 0;
+				}
+
+				// Draw a vertical line for this pixel column
+				// Centered vertically at height/2
+				const yMax = ((1 + max * scale) * height) / 2;
+				const yMin = ((1 + min * scale) * height) / 2;
+
+				ctx.moveTo(i, yMin);
+				ctx.lineTo(i, yMax);
+			}
+		} else {
+			// Placeholder sine wave while loading or if error
+			for (let i = 0; i < width; i++) {
+				const percent = i / width;
+				const amplitude = Math.sin(percent * Math.PI * 10) * 0.5 + 0.5;
+				const y = height / 2 + (amplitude - 0.5) * height * 0.8;
+
+				if (i === 0) {
+					ctx.moveTo(i, y);
+				} else {
+					ctx.lineTo(i, y);
+				}
 			}
 		}
 		ctx.stroke();
@@ -166,14 +270,18 @@
 	}
 
 	function handleConfirm() {
-		onSelect(clipStart, clipDuration);
+		onSelect(clipStart, fixedClipDuration);
 	}
 </script>
 
 <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="clip-selector-title" tabindex="-1" onclick={onCancel} onkeydown={(e) => e.key === 'Escape' && onCancel()}>
 	<div class="modal-content" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 		<h2 id="clip-selector-title">Sélectionne un extrait audio</h2>
-		<p class="filename">{file.name}</p>
+		<p class="filename">{file ? file.name : 'Extrait audio'}</p>
+
+		{#if loadError}
+			<div class="error-message">⚠️ {loadError}</div>
+		{/if}
 
 		<!-- Audio element (hidden) -->
 		<audio
@@ -181,15 +289,23 @@
 			src={audioUrl}
 			onloadedmetadata={handleLoadedMetadata}
 			ontimeupdate={handleTimeUpdate}
+			onerror={handleAudioError}
 		></audio>
 
 		<!-- Waveform display -->
 		<div class="waveform-container">
+			{#if waveformLoading}
+				<div class="waveform-loader">
+					<div class="spinner"></div>
+					<span>Génération de l'onde...</span>
+				</div>
+			{/if}
 			<canvas
 				bind:this={waveformCanvas}
 				width={800}
 				height={150}
 				onclick={handleSeek}
+				class:loading={waveformLoading}
 			></canvas>
 		</div>
 
@@ -211,22 +327,9 @@
 					<input
 						type="range"
 						min="0"
-						max={Math.max(0, duration - clipDuration)}
+						max={Math.max(0, duration - fixedClipDuration)}
 						step="1"
 						bind:value={clipStart}
-					/>
-				</label>
-			</div>
-
-			<div class="config-row">
-				<label>
-					Durée de l’extrait : <strong>{clipDuration}s</strong>
-					<input
-						type="range"
-						min="15"
-						max={Math.min(maxDuration, duration)}
-						step="5"
-						bind:value={clipDuration}
 					/>
 				</label>
 			</div>
@@ -275,12 +378,51 @@
 		font-size: 14px;
 	}
 
+	.error-message {
+		background: rgba(239, 68, 68, 0.1);
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		color: #fca5a5;
+		padding: 12px;
+		border-radius: 8px;
+		margin-bottom: 16px;
+		font-size: 14px;
+	}
+
 	.waveform-container {
 		background: #1a1a1a;
 		border-radius: 8px;
 		padding: 8px;
 		margin-bottom: 16px;
 		cursor: pointer;
+		position: relative;
+	}
+
+	.waveform-loader {
+		position: absolute;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.7);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		color: #9ca3af;
+		font-size: 14px;
+		z-index: 10;
+		border-radius: 8px;
+	}
+
+	.spinner {
+		width: 24px;
+		height: 24px;
+		border: 3px solid #374151;
+		border-top-color: #3b82f6;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 	canvas {
@@ -288,6 +430,10 @@
 		height: auto;
 		display: block;
 		border-radius: 4px;
+	}
+
+	canvas.loading {
+		opacity: 0.5;
 	}
 
 	.controls {

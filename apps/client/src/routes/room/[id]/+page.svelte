@@ -92,7 +92,7 @@
 
 	// Page title for SEO
 	const pageTitle = $derived(
-		room ? `${room.name} - Music Quiz` : 'Salle - Music Quiz'
+		room ? `Salle ${room.code} - Music Quiz` : 'Salle - Music Quiz'
 	);
 
 	// Subscribe to store changes and update reactive state
@@ -615,8 +615,7 @@
 			<section class="room-header">
 				<div class="header-top">
 					<div>
-						<h1>{room.name}</h1>
-						<p class="room-code">Code: <strong>{room.code}</strong></p>
+						<h1 class="room-code-title">Salle <strong>{room.code}</strong></h1>
 					</div>
 					<StatusBadge tone={statusMeta[room.status].tone} icon={statusMeta[room.status].icon}>
 						{statusMeta[room.status].label}
@@ -848,19 +847,14 @@
 
 	.room-header h1 {
 		font-size: clamp(1.5rem, 3vw, 2rem);
-		margin: 0 0 0.25rem 0;
+		margin: 0;
 		color: var(--aq-color-deep);
 	}
 
-	.room-code {
-		margin: 0;
-		font-size: 0.95rem;
-		color: var(--aq-color-muted);
-	}
-
-	.room-code strong {
+	.room-code-title strong {
 		color: var(--aq-color-primary);
 		font-weight: 700;
+		letter-spacing: 0.1em;
 	}
 
 	.header-meta {

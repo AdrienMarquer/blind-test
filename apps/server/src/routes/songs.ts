@@ -362,6 +362,7 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
       year: t.Optional(t.Number()),
       genre: t.Optional(t.String()),
       clipStart: t.Optional(t.Number({ minimum: 0 })),
+      clipDuration: t.Optional(t.Number({ minimum: 1, maximum: 180 })),
       niche: t.Optional(t.Boolean()),
     }),
   })
@@ -745,7 +746,7 @@ export const songRoutes = new Elysia({ prefix: '/api/songs' })
         year: enrichmentResult.enriched.year || new Date().getFullYear(),
         genre: enrichmentResult.enriched.genre,
         duration: body.spotify.duration,
-        clipStart,
+        clipStart: 0, // File is trimmed, so clip starts at 0 relative to the file
         clipDuration,
         fileSize: finalFileSize,
         format: 'mp3',

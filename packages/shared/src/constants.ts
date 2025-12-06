@@ -9,11 +9,9 @@
 
 export const ROOM_CONFIG = {
   CODE_LENGTH: 4,
-  NAME_MIN_LENGTH: 1,
-  NAME_MAX_LENGTH: 50,
-  DEFAULT_MAX_PLAYERS: 8,
+  DEFAULT_MAX_PLAYERS: 32,
   MIN_PLAYERS: 2,
-  MAX_PLAYERS: 20,
+  MAX_PLAYERS: 32,
 } as const;
 
 // ============================================================================
@@ -69,7 +67,6 @@ export const AUDIO_CONFIG = {
 // ============================================================================
 
 export const VALIDATION_PATTERNS = {
-  ROOM_NAME: /^[a-zA-Z0-9\s\-_]+$/,
   // Allow any printable characters except control chars and angle brackets (XSS prevention)
   PLAYER_NAME: /^[^\x00-\x1F<>]+$/u,
   ROOM_CODE: /^[A-Z0-9]{4}$/,

@@ -77,6 +77,9 @@
 	let pendingUploadClipStart = $state<number>(SONG_CONFIG.DEFAULT_CLIP_START);
 	let pendingUploadClipDuration = $state<number>(SONG_CONFIG.DEFAULT_CLIP_DURATION);
 
+	// Existing song clip editing
+	let editingClipSong = $state<Song | null>(null);
+
 	// YouTube import flow
 	let showYouTubeModal = $state(false);
 	let youtubeVideosForClipSelection = $state<any[]>([]);
@@ -412,6 +415,30 @@
 		if (fileInput) fileInput.value = '';
 	}
 
+	function handleEditClip(song: Song) {
+		editingClipSong = song;
+	}
+
+	async function handleClipUpdate(start: number, duration: number) {
+		if (!editingClipSong) return;
+
+		try {
+			await updateSong(editingClipSong.id, {
+				clipStart: start,
+				clipDuration: duration
+			});
+		} catch (err) {
+			console.error('Failed to update clip', err);
+			error = 'Impossible de mettre à jour l\'extrait';
+		} finally {
+			editingClipSong = null;
+		}
+	}
+
+	function handleClipUpdateCancel() {
+		editingClipSong = null;
+	}
+
 	async function uploadSong(force: boolean = false) {
 		if (!selectedFile) return;
 
@@ -678,6 +705,7 @@
 					{song}
 					onUpdate={updateSong}
 					onDelete={deleteSong}
+					onClipEdit={handleEditClip}
 					{formatDuration}
 					{formatFileSize}
 				/>
@@ -694,6 +722,18 @@
 		maxDuration={SONG_CONFIG.MAX_CLIP_DURATION}
 		onSelect={handleClipSelect}
 		onCancel={handleClipCancel}
+	/>
+{/if}
+
+{#if editingClipSong}
+	<AudioClipSelector
+		file={null}
+		audioSrc={`${getApiUrl()}/api/songs/${editingClipSong.id}/stream`}
+		defaultClipStart={editingClipSong.clipStart}
+		defaultClipDuration={editingClipSong.clipDuration || SONG_CONFIG.DEFAULT_CLIP_DURATION}
+		maxDuration={SONG_CONFIG.MAX_CLIP_DURATION}
+		onSelect={handleClipUpdate}
+		onCancel={handleClipUpdateCancel}
 	/>
 {/if}
 

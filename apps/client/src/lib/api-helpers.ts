@@ -117,8 +117,8 @@ export const roomApi = {
   /**
    * Create a new room
    */
-  create: (name: string, maxPlayers?: number) =>
-    api.api.rooms.post({ name, maxPlayers }),
+  create: (maxPlayers?: number) =>
+    api.api.rooms.post(maxPlayers ? { maxPlayers } : {}),
 
   /**
    * Find a room by its short code (e.g., "B7UN")
@@ -135,7 +135,7 @@ export const roomApi = {
   /**
    * Update a room's settings
    */
-  update: (roomId: string, data: { name?: string; maxPlayers?: number }) =>
+  update: (roomId: string, data: { maxPlayers?: number }) =>
     api.api.rooms({ roomId }).patch(data),
 
   /**

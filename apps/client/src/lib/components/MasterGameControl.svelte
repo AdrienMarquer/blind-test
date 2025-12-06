@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import type { Room, ModeType, MediaType } from '@blind-test/shared';
+	import type { Room } from '@blind-test/shared';
 	import type { RoomSocket } from '$lib/stores/socket.svelte';
 	import { gameApi } from '$lib/api-helpers';
-	import RoundTutorial from './game/RoundTutorial.svelte';
 	import VolumeControl from './VolumeControl.svelte';
 
 	// Props
@@ -30,12 +29,6 @@
 	let loadingGenre = $state<string | undefined>(undefined);
 	let countdownInterval: number | null = null;
 
-	// Tutorial state
-	let showTutorial = $state(false);
-	let currentRoundIndex = $state(0);
-	let currentModeType = $state<ModeType>('buzz_and_choice');
-	let currentMediaType = $state<MediaType>('music');
-
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
 
@@ -48,6 +41,24 @@
 			return label === 'title' ? 'le titre' : 'l\'artiste';
 		}
 		return label === 'title' ? 'titre' : 'artiste';
+	}
+
+	function handlePause() {
+		isPaused = !isPaused;
+
+		if (audioElement) {
+			if (isPaused) {
+				audioElement.pause();
+			} else {
+				audioElement.play();
+			}
+		}
+
+		if (isPaused) {
+			socket.pauseGame();
+		} else {
+			socket.resumeGame();
+		}
 	}
 
 	async function handleEndGame() {
@@ -114,13 +125,7 @@
 				mediaType: event.mediaType
 			});
 			totalSongs = event.songCount;
-			currentRoundIndex = event.roundIndex;
-			currentModeType = event.modeType as ModeType;
-			currentMediaType = event.mediaType as MediaType;
 			isPlaying = true;
-
-			// Show tutorial at the start of each round
-			showTutorial = true;
 
 			socket.events.clear('roundStarted');
 		}
@@ -410,17 +415,6 @@
 </script>
 
 <div class="master-control">
-	<!-- Round Tutorial Overlay -->
-	{#if showTutorial}
-		<RoundTutorial
-			roundIndex={currentRoundIndex}
-			modeType={currentModeType}
-			mediaType={currentMediaType}
-			songCount={totalSongs}
-			onDismiss={() => showTutorial = false}
-		/>
-	{/if}
-
 	<!-- Loading Screen -->
 	{#if showLoadingScreen}
 		<div class="loading-screen">
@@ -491,6 +485,9 @@
 	</div>
 
 	<div class="controls">
+		<button class="control-btn pause-btn" onclick={handlePause}>
+			{isPaused ? '▶️ Reprendre' : '⏸️ Pause'}
+		</button>
 		<button class="control-btn end-btn" onclick={handleEndGame}>
 			🛑 Passer la partie
 		</button>
@@ -561,6 +558,7 @@
 	.controls {
 		display: flex;
 		justify-content: center;
+		gap: 1rem;
 	}
 
 	.control-btn {
@@ -584,6 +582,17 @@
 	}
 
 	.end-btn:hover {
+		box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+	}
+
+	.pause-btn {
+		background: rgba(255, 255, 255, 0.25);
+		color: #fff;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	}
+
+	.pause-btn:hover {
+		background: rgba(255, 255, 255, 0.35);
 		box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 	}
 

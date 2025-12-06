@@ -38,7 +38,6 @@ export type AnswerType = 'title' | 'artist';
 
 export interface Room {
   id: string;
-  name: string;
   code: string;              // 4-character join code (uppercase alphanumeric)
   qrCode: string;            // Data URL for QR code
   masterIp: string;          // Master device IP

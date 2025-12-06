@@ -18,7 +18,7 @@ import { Elysia, t } from 'elysia';
 import { roomRepository, playerRepository } from '../repositories';
 import { ROOM_CONFIG } from '@blind-test/shared';
 import type { Room } from '@blind-test/shared';
-import { validateRoomName, validatePlayerName } from '@blind-test/shared';
+import { validatePlayerName } from '@blind-test/shared';
 import { logger } from '../utils/logger';
 import { gameService } from '../services/GameService';
 import { broadcastToRoom } from '../websocket/handler';
@@ -74,12 +74,11 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
   .post('/', async ({ body, set }) => {
     try {
       const room = await roomRepository.create({
-        name: body.name,
-        maxPlayers: body.maxPlayers || ROOM_CONFIG.DEFAULT_MAX_PLAYERS,
+        maxPlayers: body?.maxPlayers || ROOM_CONFIG.DEFAULT_MAX_PLAYERS,
         masterIp: 'localhost', // TODO: Extract from request in production
       });
 
-      apiLogger.info('Room created', { roomId: room.id, name: room.name, code: room.code });
+      apiLogger.info('Room created', { roomId: room.id, code: room.code });
 
       return room;
     } catch (err) {
@@ -88,18 +87,12 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
       return { error: 'Failed to create room' };
     }
   }, {
-    body: t.Object({
-      name: t.String({
-        minLength: ROOM_CONFIG.NAME_MIN_LENGTH,
-        maxLength: ROOM_CONFIG.NAME_MAX_LENGTH,
-        pattern: '^[a-zA-Z0-9\\s\\-_]+$',
-        error: 'Invalid room name. Must be 1-50 characters, alphanumeric, spaces, hyphens, underscores only.'
-      }),
+    body: t.Optional(t.Object({
       maxPlayers: t.Optional(t.Number({
         minimum: ROOM_CONFIG.MIN_PLAYERS,
         maximum: ROOM_CONFIG.MAX_PLAYERS
       })),
-    }),
+    })),
   })
 
   // Find room by code
@@ -116,7 +109,7 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
     const players = await playerRepository.findByRoom(room.id);
     room.players = players;
 
-    apiLogger.info('Found room by code', { code, roomId: room.id, roomName: room.name });
+    apiLogger.info('Found room by code', { code, roomId: room.id });
     return room;
   })
 
@@ -138,7 +131,7 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
       const players = await playerRepository.findByRoom(roomId);
       room.players = players;
 
-      apiLogger.info('Fetching room', { roomId, roomName: room.name });
+      apiLogger.info('Fetching room', { roomId, code: room.code });
       return room;
     })
 
@@ -156,14 +149,9 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
         return { error: 'Cannot update room while game is in progress' };
       }
 
-      if (body.name && !validateRoomName(body.name)) {
-        set.status = 400;
-        return { error: 'Invalid room name' };
-      }
-
       try {
         const updated = await roomRepository.update(roomId, body);
-        apiLogger.info('Updated room', { roomId, roomName: updated.name });
+        apiLogger.info('Updated room', { roomId, code: updated.code });
         return updated;
       } catch (err) {
         apiLogger.error('Failed to update room', err, { roomId });
@@ -172,7 +160,6 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
       }
     }, {
       body: t.Object({
-        name: t.Optional(t.String({ minLength: 1, maxLength: 50 })),
         maxPlayers: t.Optional(t.Number({ minimum: 2, maximum: 20 })),
       }),
     })
@@ -198,7 +185,7 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
         // Delete room
         await roomRepository.delete(roomId);
 
-        apiLogger.info('Deleted room', { roomId, roomName: room.name });
+        apiLogger.info('Deleted room', { roomId, code: room.code });
         set.status = 204;
         return;
       } catch (err) {

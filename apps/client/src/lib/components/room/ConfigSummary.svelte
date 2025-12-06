@@ -13,14 +13,16 @@
 		audioPlayback: 'master' | 'players' | 'all';
 		presetName: string;
 		penaltyEnabled: boolean;
+		penaltyAmount: number;
 		masterPlaying?: boolean;
 		onEditRounds: () => void;
 		onChangeAudio: (value: 'master' | 'players' | 'all') => void;
 		onChangePenalty: (enabled: boolean) => void;
+		onChangePenaltyAmount: (amount: number) => void;
 		onUpdateRounds?: (rounds: RoundConfig[]) => void;
 	}
 
-	let { rounds, audioPlayback, presetName, penaltyEnabled, masterPlaying = false, onEditRounds, onChangeAudio, onChangePenalty, onUpdateRounds }: Props = $props();
+	let { rounds, audioPlayback, presetName, penaltyEnabled, penaltyAmount, masterPlaying = false, onEditRounds, onChangeAudio, onChangePenalty, onChangePenaltyAmount, onUpdateRounds }: Props = $props();
 
 	// Track which round is expanded for editing
 	let expandedRoundIndex = $state<number | null>(null);
@@ -394,25 +396,42 @@
 			</div>
 		</div>
 
-		<div class="setting-group">
+		<div class="setting-group penalty-group">
 			<span class="setting-label">⚠️ Malus</span>
-			<div class="setting-chips">
-				<button
-					type="button"
-					class="setting-chip"
-					class:active={!penaltyEnabled}
-					onclick={() => onChangePenalty(false)}
-				>
-					Non
-				</button>
-				<button
-					type="button"
-					class="setting-chip"
-					class:active={penaltyEnabled}
-					onclick={() => onChangePenalty(true)}
-				>
-					Oui
-				</button>
+			<div class="penalty-controls">
+				<div class="penalty-amount" class:visible={penaltyEnabled}>
+					<button
+						type="button"
+						class="penalty-stepper-btn"
+						onclick={() => onChangePenaltyAmount(Math.max(1, penaltyAmount - 1))}
+						disabled={penaltyAmount <= 1}
+					>−</button>
+					<span class="penalty-value">-{penaltyAmount}</span>
+					<button
+						type="button"
+						class="penalty-stepper-btn"
+						onclick={() => onChangePenaltyAmount(Math.min(5, penaltyAmount + 1))}
+						disabled={penaltyAmount >= 5}
+					>+</button>
+				</div>
+				<div class="setting-chips">
+					<button
+						type="button"
+						class="setting-chip"
+						class:active={!penaltyEnabled}
+						onclick={() => onChangePenalty(false)}
+					>
+						Non
+					</button>
+					<button
+						type="button"
+						class="setting-chip"
+						class:active={penaltyEnabled}
+						onclick={() => onChangePenalty(true)}
+					>
+						Oui
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -863,6 +882,67 @@
 	.year-separator {
 		font-size: 0.85rem;
 		color: var(--aq-color-muted);
+	}
+
+	/* Penalty controls layout */
+	.penalty-group {
+		flex-wrap: nowrap;
+	}
+
+	.penalty-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	/* Penalty amount stepper */
+	.penalty-amount {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 0.15s ease, visibility 0.15s ease;
+	}
+
+	.penalty-amount.visible {
+		opacity: 1;
+		visibility: visible;
+	}
+
+	.penalty-stepper-btn {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		border: 1px solid rgba(18, 43, 59, 0.2);
+		background: white;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--aq-color-deep);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+	}
+
+	.penalty-stepper-btn:hover:not(:disabled) {
+		border-color: var(--aq-color-primary);
+		color: var(--aq-color-primary);
+	}
+
+	.penalty-stepper-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.penalty-value {
+		min-width: 1.5rem;
+		text-align: center;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: #dc2626;
 	}
 
 	@media (max-width: 640px) {

@@ -16,7 +16,6 @@ const roomLogger = logger.child({ module: 'RoomRepository' });
  * DTO for updating room fields
  */
 interface RoomUpdateDTO {
-  name?: string;
   status?: Room['status'];
   maxPlayers?: number;
   masterIp?: string;
@@ -57,7 +56,6 @@ export class RoomRepository implements Repository<Room> {
 
     return {
       id: dbRoom.id,
-      name: dbRoom.name,
       code: dbRoom.code,
       qrCode: dbRoom.qrCode,
       masterIp: dbRoom.masterIp,
@@ -138,7 +136,7 @@ export class RoomRepository implements Repository<Room> {
 
     const newRoom = {
       id,
-      name: data.name || 'New Room',
+      name: `Room ${code}`, // Auto-generated name for database (required column)
       code,
       qrCode,
       masterIp: localIP,
@@ -173,7 +171,6 @@ export class RoomRepository implements Repository<Room> {
     };
 
     // Only update allowed fields (explicit whitelisting)
-    if (data.name !== undefined) updateData.name = data.name;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.maxPlayers !== undefined) updateData.maxPlayers = data.maxPlayers;
     if (data.masterIp !== undefined) updateData.masterIp = data.masterIp;

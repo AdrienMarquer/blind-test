@@ -9,11 +9,12 @@
 		song: Song;
 		onUpdate: (songId: string, updates: Partial<Song>) => Promise<void>;
 		onDelete: (songId: string, title: string) => Promise<void>;
+		onClipEdit?: (song: Song) => void;
 		formatDuration: (seconds: number) => string;
 		formatFileSize: (bytes: number) => string;
 	}
 
-	let { song, onUpdate, onDelete, formatDuration, formatFileSize }: Props = $props();
+	let { song, onUpdate, onDelete, onClipEdit, formatDuration, formatFileSize }: Props = $props();
 
 	let editing = $state(false);
 	let discovering = $state(false);
@@ -169,6 +170,16 @@
 				>
 					✏️
 				</button>
+				{#if onClipEdit}
+					<button
+						class="action-btn clip-btn"
+						onclick={() => onClipEdit(song)}
+						aria-label={`Modifier l'extrait de ${song.title}`}
+						title="Modifier l'extrait"
+					>
+						✂️
+					</button>
+				{/if}
 				<button
 					class="action-btn discover-btn"
 					onclick={handleAutoDiscover}
@@ -301,6 +312,10 @@
 
 	.edit-btn {
 		background: rgba(66, 133, 244, 0.12);
+	}
+
+	.clip-btn {
+		background: rgba(168, 85, 247, 0.12);
 	}
 
 	.discover-btn {

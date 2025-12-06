@@ -13,20 +13,17 @@
 	const isApiErrorResponse = (data: unknown): data is { error: string } =>
 		!!data && typeof data === 'object' && 'error' in data && typeof (data as any).error === 'string';
 
-	let newRoomName = $state('');
 	let roomCode = $state('');
 	let error = $state<string | null>(null);
 	let creating = $state(false);
 	let joiningByCode = $state(false);
 
 	async function createRoom() {
-		if (!newRoomName.trim()) return;
-
 		try {
 			creating = true;
 			error = null;
 
-			const response = await roomApi.create(newRoomName.trim());
+			const response = await roomApi.create();
 			const data = response.data;
 
 			if (data && !isApiErrorResponse(data)) {
@@ -78,21 +75,10 @@
 </div>
 
 <div class="actions-grid">
-	<Card title="Lancer une partie" subtitle="Donne un nom à ta salle et invite tes amis" icon="🚀">
-		<form
-			class="quick-create"
-			onsubmit={(e) => { e.preventDefault(); createRoom(); }}
-		>
-			<InputField
-				label={null}
-				placeholder="Ex: Soirée Adri 🎵"
-				bind:value={newRoomName}
-				required
-			/>
-			<Button type="submit" variant="primary" size="lg" disabled={!newRoomName.trim()} loading={creating}>
-				{creating ? 'Création...' : '✨ Créer ma salle'}
-			</Button>
-		</form>
+	<Card title="Lancer une partie" subtitle="Crée une salle et invite tes amis" icon="🚀">
+		<Button variant="primary" size="lg" onclick={createRoom} loading={creating} fullWidth>
+			{creating ? 'Création...' : '✨ Créer ma salle'}
+		</Button>
 		<div class="quick-info">
 			<p>→ Tu obtiendras un <strong>QR code</strong> à scanner</p>
 			<p>→ Configure les rounds et lance quand tout le monde est prêt</p>

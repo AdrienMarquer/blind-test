@@ -14,6 +14,7 @@
  *   --no-download      Fetch metadata only, skip YouTube download
  *   --retry-failed     Only retry entries that previously failed
  *   --fix-album-art    Re-fetch albumArt for songs missing it in DB
+ *   --auto-crop        Detect and trim leading silence from existing audio files
  */
 
 import { SpotifyApi } from '@spotify/web-api-ts-sdk';
@@ -97,10 +98,14 @@ interface EnrichedSong {
 // Configuration
 // ============================================================================
 
+// Server root directory (apps/server/)
+// __dirname is apps/server/src/db/seed, so go up 3 levels
+const SERVER_ROOT = path.join(__dirname, '..', '..', '..');
+
 const CONFIG = {
   inputFile: path.join(__dirname, 'musiques.json'),
   outputFile: path.join(__dirname, 'musiques.json'), // Edit in place
-  uploadDir: process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads'),
+  uploadDir: process.env.UPLOAD_DIR || path.join(SERVER_ROOT, 'uploads'),
 
   // Rate limiting
   spotifyDelay: 100,     // ms between Spotify requests
@@ -331,6 +336,21 @@ class YouTubeClient {
 
       await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 });
 
+      // Auto-crop leading silence (> 1s)
+      const silenceDuration = await detectSilenceDuration(absoluteOutputPath, -40);
+      if (silenceDuration >= 1.0) {
+        console.log(`     🔇 Trimming ${silenceDuration.toFixed(2)}s of leading silence...`);
+        const trimResult = await trimSilenceFromFile(absoluteOutputPath, silenceDuration);
+        if (trimResult) {
+          return {
+            filePath: outputPath,
+            fileName,
+            fileSize: trimResult.fileSize,
+            duration: clipDuration,
+          };
+        }
+      }
+
       const stats = await fs.stat(outputPath);
 
       return {
@@ -461,6 +481,28 @@ class DatabaseService {
       .set({ albumArt })
       .where(eq(schema.songs.id, id));
   }
+
+  async getAllSongsWithFilePath(): Promise<{ id: string; title: string; artist: string; filePath: string; fileSize: number }[]> {
+    const result = await db
+      .select({
+        id: schema.songs.id,
+        title: schema.songs.title,
+        artist: schema.songs.artist,
+        filePath: schema.songs.filePath,
+        fileSize: schema.songs.fileSize,
+      })
+      .from(schema.songs);
+
+    // Filter out songs without filePath (shouldn't happen but be safe)
+    return result.filter(s => s.filePath) as { id: string; title: string; artist: string; filePath: string; fileSize: number }[];
+  }
+
+  async updateFileSize(id: string, fileSize: number): Promise<void> {
+    await db
+      .update(schema.songs)
+      .set({ fileSize })
+      .where(eq(schema.songs.id, id));
+  }
 }
 
 // ============================================================================
@@ -495,6 +537,80 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ============================================================================
+// Audio Processing Helpers
+// ============================================================================
+
+/**
+ * Detect the duration of leading silence in an audio file using ffmpeg
+ * @param filePath Path to the audio file
+ * @param threshold Silence threshold in dB (default: -40dB, conservative)
+ * @returns Duration of leading silence in seconds, or 0 if no silence detected
+ */
+async function detectSilenceDuration(filePath: string, threshold: number = -40): Promise<number> {
+  try {
+    // Use ffmpeg silencedetect filter
+    // d=0.1 means minimum silence duration of 0.1s to be detected
+    const cmd = `ffmpeg -i "${filePath}" -af "silencedetect=noise=${threshold}dB:d=0.1" -f null - 2>&1`;
+    const { stdout, stderr } = await execAsync(cmd, { maxBuffer: 10 * 1024 * 1024 });
+    const output = stdout + stderr;
+
+    // Parse output for silence_end (first occurrence = end of leading silence)
+    // Format: [silencedetect @ 0x...] silence_end: 1.23456 | silence_duration: 1.23456
+    const match = output.match(/silence_end:\s*([\d.]+)/);
+    if (match) {
+      return parseFloat(match[1]);
+    }
+
+    // No silence detected at the beginning
+    return 0;
+  } catch (error: any) {
+    // ffmpeg returns non-zero exit code even on success for this filter
+    const output = (error.stdout || '') + (error.stderr || '');
+    const match = output.match(/silence_end:\s*([\d.]+)/);
+    if (match) {
+      return parseFloat(match[1]);
+    }
+    console.error(`  ⚠️ Error detecting silence: ${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Trim leading silence from an audio file by re-encoding
+ * @param filePath Path to the audio file
+ * @param silenceDuration Duration to trim from the start (in seconds)
+ * @returns New file size after trimming
+ */
+async function trimSilenceFromFile(
+  filePath: string,
+  silenceDuration: number
+): Promise<{ fileSize: number } | null> {
+  try {
+    const tempPath = filePath + '.tmp.mp3';
+
+    // Re-encode with -ss to skip the silence
+    // Using libmp3lame with quality 2 (VBR ~190kbps) for good quality
+    const cmd = `ffmpeg -y -i "${filePath}" -ss ${silenceDuration.toFixed(3)} -c:a libmp3lame -q:a 2 "${tempPath}"`;
+    await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 });
+
+    // Replace original with trimmed version
+    await fs.unlink(filePath);
+    await fs.rename(tempPath, filePath);
+
+    // Get new file size
+    const stats = await fs.stat(filePath);
+    return { fileSize: stats.size };
+  } catch (error: any) {
+    console.error(`  ⚠️ Error trimming file: ${error.message}`);
+    // Clean up temp file if it exists
+    try {
+      await fs.unlink(filePath + '.tmp.mp3');
+    } catch {}
+    return null;
+  }
+}
+
 async function main() {
   console.log('🎵 Musiques Seed Script');
   console.log('========================\n');
@@ -505,6 +621,7 @@ async function main() {
   const noDownload = args.includes('--no-download');
   const retryFailed = args.includes('--retry-failed');
   const fixAlbumArt = args.includes('--fix-album-art');
+  const autoCrop = args.includes('--auto-crop');
 
   let limit = Infinity;
   let skip = 0;
@@ -521,6 +638,7 @@ async function main() {
   if (dryRun) console.log('🔍 Dry run mode - no files will be downloaded\n');
   if (noDownload) console.log('📋 Metadata only mode - skipping YouTube downloads\n');
   if (fixAlbumArt) console.log('🎨 Fix album art mode - re-fetching missing albumArt\n');
+  if (autoCrop) console.log('🔇 Auto-crop mode - trimming leading silence from audio files\n');
 
   // Initialize services
   const spotify = new SpotifyClient();
@@ -533,7 +651,7 @@ async function main() {
   }
 
   // Initialize database (skip in dry-run mode)
-  if (!dryRun && !noDownload || fixAlbumArt) {
+  if (!dryRun && !noDownload || fixAlbumArt || autoCrop) {
     await database.initialize();
   }
 
@@ -580,6 +698,88 @@ async function main() {
     console.log(`   Total processed: ${songsWithoutArt.length}`);
     console.log(`   Updated: ${updated}`);
     console.log(`   Not found: ${notFound}`);
+
+    if (dryRun) {
+      console.log('\n⚠️  Dry run - no changes were made.');
+    }
+    return;
+  }
+
+  // Handle --auto-crop mode
+  if (autoCrop) {
+    const songs = await database.getAllSongsWithFilePath();
+    console.log(`📊 Found ${songs.length} songs with audio files\n`);
+
+    if (songs.length === 0) {
+      console.log('✅ No songs to process!');
+      return;
+    }
+
+    let trimmed = 0;
+    let skippedNoSilence = 0;
+    let skippedMissing = 0;
+    let errors = 0;
+    const minSilence = 1.0; // Only trim if silence > 1s
+
+    for (let i = 0; i < songs.length; i++) {
+      const song = songs[i];
+      const fileName = path.basename(song.filePath);
+      // Resolve relative paths (e.g., "uploads/file.mp3") to absolute paths
+      const absolutePath = path.isAbsolute(song.filePath)
+        ? song.filePath
+        : path.join(SERVER_ROOT, song.filePath);
+      console.log(`[${i + 1}/${songs.length}] ${fileName}`);
+
+      // Check if file exists
+      try {
+        await fs.access(absolutePath);
+      } catch {
+        console.log('  ⚠️ File not found, skipping');
+        skippedMissing++;
+        continue;
+      }
+
+      // Detect leading silence
+      const silenceDuration = await detectSilenceDuration(absolutePath, -40);
+
+      if (silenceDuration < minSilence) {
+        console.log(`  ⏭️ No significant silence (${silenceDuration.toFixed(2)}s)`);
+        skippedNoSilence++;
+        continue;
+      }
+
+      console.log(`  🔇 Silence detected: ${silenceDuration.toFixed(2)}s`);
+
+      if (dryRun) {
+        console.log(`  📋 Would trim ${silenceDuration.toFixed(2)}s`);
+        trimmed++;
+        continue;
+      }
+
+      // Trim the file
+      console.log('  ✂️ Re-encoding...');
+      const result = await trimSilenceFromFile(absolutePath, silenceDuration);
+
+      if (result) {
+        // Update file size in database
+        await database.updateFileSize(song.id, result.fileSize);
+        const oldSize = Math.round(song.fileSize / 1024);
+        const newSize = Math.round(result.fileSize / 1024);
+        console.log(`  ✅ Trimmed (${oldSize}KB → ${newSize}KB)`);
+        trimmed++;
+      } else {
+        console.log('  ❌ Failed to trim');
+        errors++;
+      }
+    }
+
+    console.log('\n========================');
+    console.log('📊 Summary:');
+    console.log(`   Total processed: ${songs.length}`);
+    console.log(`   Trimmed: ${trimmed}`);
+    console.log(`   Skipped (no silence): ${skippedNoSilence}`);
+    console.log(`   Skipped (file missing): ${skippedMissing}`);
+    console.log(`   Errors: ${errors}`);
 
     if (dryRun) {
       console.log('\n⚠️  Dry run - no changes were made.');

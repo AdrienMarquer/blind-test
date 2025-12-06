@@ -41,6 +41,7 @@
 	let rounds = $state<RoundConfig[]>([]);
 	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
 	let penaltyEnabled = $state(false);
+	let penaltyAmount = $state(1);
 
 	// Step 2 sub-views (no presets selection, just summary or editing)
 	type Step2View = 'summary' | 'editing';
@@ -161,7 +162,20 @@
 			...round,
 			params: {
 				...round.params,
-				penaltyEnabled: enabled
+				penaltyEnabled: enabled,
+				penaltyAmount: penaltyAmount
+			}
+		}));
+	}
+
+	function handleChangePenaltyAmount(amount: number) {
+		penaltyAmount = amount;
+		// Update all rounds with the new penalty amount
+		rounds = rounds.map(round => ({
+			...round,
+			params: {
+				...round.params,
+				penaltyAmount: amount
 			}
 		}));
 	}
@@ -330,11 +344,13 @@
 						{rounds}
 						{audioPlayback}
 						{penaltyEnabled}
+						{penaltyAmount}
 						{masterPlaying}
 						presetName={masterPlaying ? 'Mode joueur' : 'Soirée classique'}
 						onEditRounds={handleEditRounds}
 						onChangeAudio={handleChangeAudio}
 						onChangePenalty={handleChangePenalty}
+						onChangePenaltyAmount={handleChangePenaltyAmount}
 						onUpdateRounds={(newRounds: RoundConfig[]) => (rounds = newRounds)}
 					/>
 				{:else}
@@ -708,6 +724,31 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.5rem;
+	}
+
+	/* Tablet+ layout: QR left, players right */
+	@media (min-width: 768px) {
+		.players-step {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			grid-template-rows: 1fr auto;
+			gap: 1.5rem;
+		}
+
+		.invite-section {
+			grid-row: 1;
+			grid-column: 1;
+		}
+
+		.players-section {
+			grid-row: 1;
+			grid-column: 2;
+		}
+
+		.config-summary {
+			grid-row: 2;
+			grid-column: 1 / -1;
+		}
 	}
 
 	.invite-section {

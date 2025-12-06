@@ -9,12 +9,14 @@ import { Database } from 'bun:sqlite';
 import * as schema from './schema';
 import { logger } from '../utils/logger';
 import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 
 const dbLogger = logger.child({ module: 'Database' });
 
 // Get DATABASE_URL from environment (file path for SQLite)
-const DATABASE_PATH = process.env.DATABASE_URL || './data/blind-test.db';
+// Use absolute path so database is always in apps/server/data/ regardless of working directory
+const DEFAULT_DB_PATH = join(import.meta.dir, '..', '..', 'data', 'blind-test.db');
+const DATABASE_PATH = process.env.DATABASE_URL || DEFAULT_DB_PATH;
 
 // Ensure the directory exists
 const dbDir = dirname(DATABASE_PATH);
@@ -41,9 +43,13 @@ export const db = drizzle(sqlite, {
 dbLogger.info('SQLite database initialized');
 
 // Run migrations using Drizzle's migration runner
+// Use absolute path so script works from any working directory
+// import.meta.dir in this file is apps/server/src/db, so go up 2 levels to apps/server
+const MIGRATIONS_FOLDER = join(import.meta.dir, '..', '..', 'drizzle');
+
 export function runMigrations() {
   try {
-    migrate(db, { migrationsFolder: './drizzle' });
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
     dbLogger.info('Database migrations completed');
   } catch (error) {
     dbLogger.error('Database migration failed', error);

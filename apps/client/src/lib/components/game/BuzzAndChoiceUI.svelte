@@ -8,9 +8,21 @@
 		answerType: 'title' | 'artist';
 		answerTimeRemaining: number;
 		onAnswer: (value: string) => void;
+		playerName?: string;
 	}
 
-	const { currentChoices, answerType, answerTimeRemaining, onAnswer }: Props = $props();
+	const { currentChoices, answerType, answerTimeRemaining, onAnswer, playerName }: Props = $props();
+
+	// Easter egg: If player is "rodrigue" (case-insensitive), show middle finger emoji
+	const isRodrigue = $derived(playerName?.toLowerCase() === 'rodrigue');
+
+	// Get display text for choices (with easter egg)
+	function getDisplayText(choice: AnswerChoice): string {
+		if (isRodrigue) {
+			return '🖕';
+		}
+		return choice.displayText;
+	}
 </script>
 
 <div class="buzz-and-choice-ui">
@@ -35,7 +47,7 @@
 					onAnswer(choice.displayText);
 				}}
 			>
-				{choice.displayText}
+				{getDisplayText(choice)}
 			</button>
 		{/each}
 	</div>
