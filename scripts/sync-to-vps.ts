@@ -3,11 +3,17 @@
  * Sync local data (SQLite DB + uploads) to VPS K8s pod
  *
  * Usage:
- *   bun scripts/sync-to-vps.ts [--dry-run]
+ *   bun scripts/sync-to-vps.ts [--dry-run] [--force]
+ *
+ * Options:
+ *   --dry-run  Show what would be synced without making changes
+ *   --force    Re-upload all files, even if they already exist
  *
  * This script uses kubectl cp to sync files directly into the running pod:
  * - SQLite database file (./apps/server/data/)
  * - Music files (./apps/server/uploads/)
+ *
+ * By default, only new files or files with different sizes are synced.
  */
 
 import { $ } from 'bun';
@@ -26,6 +32,7 @@ const REMOTE_UPLOADS_PATH = '/app/apps/server/uploads';
 
 // Parse arguments
 const dryRun = process.argv.includes('--dry-run');
+const forceUpload = process.argv.includes('--force');
 
 // Colors for terminal output
 const colors = {
@@ -60,6 +67,9 @@ ${colors.bold}${colors.blue}========================================
 
   if (dryRun) {
     log('DRY RUN MODE - No changes will be made\n', colors.yellow);
+  }
+  if (forceUpload) {
+    log('FORCE MODE - Re-uploading all files\n', colors.yellow);
   }
 
   // Step 1: Validate local directories exist
@@ -166,41 +176,64 @@ ${colors.bold}${colors.yellow}========================================
       log(`  Syncing ${uploadFiles.length} MP3 files...`, colors.gray);
 
       try {
-        // Get list of files already in pod
+        // Get list of files already in pod with their sizes
         log('  Checking existing files in pod...', colors.gray);
-        let existingFiles: Set<string> = new Set();
+        let existingFileSizes: Map<string, number> = new Map();
         try {
-          const podFiles = await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- ls ${REMOTE_UPLOADS_PATH}/ 2>/dev/null || echo ""`);
-          existingFiles = new Set(podFiles.split('\n').filter(f => f.endsWith('.mp3')));
-          log(`    Found ${existingFiles.size} files already in pod`, colors.gray);
+          // Get file sizes from pod: "filename size" per line
+          const podFilesOutput = await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- sh -c "cd ${REMOTE_UPLOADS_PATH} && ls -l *.mp3 2>/dev/null | awk '{print \\$NF, \\$5}'" || echo ""`);
+          for (const line of podFilesOutput.split('\n').filter(Boolean)) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 2) {
+              const filename = parts[0];
+              const size = parseInt(parts[1], 10);
+              if (filename.endsWith('.mp3') && !isNaN(size)) {
+                existingFileSizes.set(filename, size);
+              }
+            }
+          }
+          log(`    Found ${existingFileSizes.size} files already in pod`, colors.gray);
         } catch {
           log('    No existing files in pod', colors.gray);
         }
 
-        // Filter to only new files
-        const newFiles = uploadFiles.filter(f => !existingFiles.has(f));
-
-        if (newFiles.length === 0) {
-          log(`  ${colors.green}All ${uploadFiles.length} files already in pod, nothing to sync!${colors.reset}`);
+        // Filter to files that need syncing (new or different size)
+        let filesToSync: string[];
+        if (forceUpload) {
+          filesToSync = uploadFiles;
+          log(`  Force mode: syncing all ${filesToSync.length} files`, colors.gray);
         } else {
-          log(`  ${newFiles.length} new files to sync (${existingFiles.size} already exist)`, colors.gray);
+          filesToSync = uploadFiles.filter(f => {
+            if (!existingFileSizes.has(f)) return true; // New file
+            const localSize = statSync(`${LOCAL_UPLOADS_DIR}/${f}`).size;
+            const remoteSize = existingFileSizes.get(f)!;
+            return localSize !== remoteSize; // Modified file (different size)
+          });
+        }
 
-          // Create tar archive of only new files
-          log('  Creating tar archive of new files...', colors.gray);
+        if (filesToSync.length === 0) {
+          log(`  ${colors.green}All ${uploadFiles.length} files already in pod and up to date!${colors.reset}`);
+        } else {
+          const newCount = filesToSync.filter(f => !existingFileSizes.has(f)).length;
+          const modifiedCount = filesToSync.length - newCount;
+          log(`  ${filesToSync.length} files to sync (${newCount} new, ${modifiedCount} modified)`, colors.gray);
+
+          // Create tar archive of files to sync
+          log('  Creating tar archive...', colors.gray);
           const tarFile = '/tmp/blindtest-uploads.tar.gz';
 
           // Write file list to temp file for tar
           const fileListPath = '/tmp/blindtest-filelist.txt';
-          writeFileSync(fileListPath, newFiles.join('\n'));
+          writeFileSync(fileListPath, filesToSync.join('\n'));
 
-          // Create tar with only new files
+          // Create tar with files to sync
           await $`tar -czf ${tarFile} -C ${LOCAL_UPLOADS_DIR} -T ${fileListPath}`;
           unlinkSync(fileListPath);
 
           // Get tar size for progress info
           const tarStats = statSync(tarFile);
           const tarSizeMB = (tarStats.size / (1024 * 1024)).toFixed(2);
-          log(`    Archive created: ${tarSizeMB} MB (${newFiles.length} files)`, colors.gray);
+          log(`    Archive created: ${tarSizeMB} MB (${filesToSync.length} files)`, colors.gray);
 
           // Transfer tar to VPS (with progress)
           log('  Transferring archive to VPS...', colors.gray);
@@ -219,7 +252,7 @@ ${colors.bold}${colors.yellow}========================================
           await sshCmd('rm /tmp/blindtest-uploads.tar.gz');
           await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm -f /tmp/blindtest-uploads.tar.gz`);
 
-          log(`  ${colors.green}${newFiles.length} new files synced!${colors.reset}`);
+          log(`  ${colors.green}${filesToSync.length} files synced!${colors.reset}`);
         }
       } catch (error: any) {
         log(`  ${colors.red}Failed to sync uploads: ${error.message}${colors.reset}`, colors.red);
