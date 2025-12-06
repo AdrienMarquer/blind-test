@@ -43,9 +43,12 @@ export const db = drizzle(sqlite, {
 dbLogger.info('SQLite database initialized');
 
 // Run migrations using Drizzle's migration runner
-// Use absolute path so script works from any working directory
-// import.meta.dir in this file is apps/server/src/db, so go up 2 levels to apps/server
-const MIGRATIONS_FOLDER = join(import.meta.dir, '..', '..', 'drizzle');
+// In production (bundled), use cwd-relative path since Docker sets WORKDIR correctly
+// In development, import.meta.dir works correctly
+const isDev = process.env.NODE_ENV !== 'production';
+const MIGRATIONS_FOLDER = isDev
+  ? join(import.meta.dir, '..', '..', 'drizzle')
+  : join(process.cwd(), 'drizzle');
 
 export function runMigrations() {
   try {
