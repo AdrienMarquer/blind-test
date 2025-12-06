@@ -33,10 +33,15 @@
 		onRemovePlayer
 	}: Props = $props();
 
+	// Initialize master playing state from room data (for game restart)
+	const initialMasterPlayer = room.masterPlayerId
+		? players.find(p => p.id === room.masterPlayerId)
+		: null;
+
 	// Wizard state
 	let currentStep = $state(1);
-	let masterPlaying = $state(false);
-	let masterPlayerName = $state('');
+	let masterPlaying = $state(!!initialMasterPlayer);
+	let masterPlayerName = $state(initialMasterPlayer?.name ?? '');
 	let masterNameError = $state<string | null>(null);
 	let rounds = $state<RoundConfig[]>([]);
 	let audioPlayback = $state<'master' | 'players' | 'all'>('master');
@@ -207,7 +212,10 @@
 
 	// Players with master preview
 	const playersWithMasterPreview = $derived.by(() => {
-		const list = [...players];
+		// Filter out existing master player to avoid duplicates when showing preview
+		const list = room.masterPlayerId
+			? players.filter(p => p.id !== room.masterPlayerId)
+			: [...players];
 		if (masterPlaying && masterPlayerName.trim()) {
 			list.push({
 				id: 'master-preview',

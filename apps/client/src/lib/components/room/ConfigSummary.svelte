@@ -239,7 +239,6 @@
 					<div class="round-editor">
 						<!-- Mode selector -->
 						<div class="editor-row">
-							<span class="editor-label">Mode</span>
 							<div class="mode-chips">
 								{#each modeTypes as mode}
 									<button

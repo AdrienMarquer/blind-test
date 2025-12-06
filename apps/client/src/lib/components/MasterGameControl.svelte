@@ -436,7 +436,7 @@
 		<h2>🎮 Contrôles maître</h2>
 		<div class="song-progress">
 			{#if totalSongs > 0}
-				Morceau {currentSong + 1} / {totalSongs}
+				{currentSong + 1} / {totalSongs}
 			{:else}
 				En attente...
 			{/if}
@@ -784,5 +784,17 @@
 
 	.info-badge.year {
 		background: rgba(255, 255, 255, 0.3);
+	}
+
+	/* Mobile adjustments */
+	@media (max-width: 640px) {
+		.control-header h2 {
+			font-size: 1.1rem;
+		}
+
+		.control-btn {
+			padding: 0.75rem 1.25rem;
+			font-size: 0.95rem;
+		}
 	}
 </style>

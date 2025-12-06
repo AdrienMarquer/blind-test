@@ -70,6 +70,7 @@
 	let timerStartTimestamp = $state(0);
 	let timerRafId: number | null = null;
 	let smoothProgress = $state(100);
+	let pausedProgress = $state(0);
 
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
@@ -431,6 +432,9 @@
 		const event = socket.events.gamePaused;
 		if (event) {
 			isPaused = true;
+			// Store current progress and stop timer animation
+			pausedProgress = smoothProgress;
+			stopSmoothTimer();
 			if (audioElement && !audioElement.paused) {
 				audioElement.pause();
 			}
@@ -442,6 +446,11 @@
 		const event = socket.events.gameResumed;
 		if (event) {
 			isPaused = false;
+			// Resume timer animation from where we left off
+			if (gameState.status === 'ready_to_buzz' && pausedProgress > 0) {
+				const remainingSeconds = (pausedProgress / 100) * maxSongDuration;
+				resumeSmoothTimerFromRemaining(remainingSeconds);
+			}
 			if (audioElement && audioElement.paused && audioElement.src) {
 				audioElement.play().catch(err => {
 					console.error('[MasterPlayer Audio] Failed to resume:', err);
