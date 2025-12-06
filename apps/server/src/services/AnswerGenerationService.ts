@@ -34,6 +34,7 @@ export class AnswerGenerationService {
 
 		const targetGenre = correctSong.genre?.toLowerCase();
 		const targetYear = Number.isFinite(correctSong.year) ? correctSong.year : undefined;
+		const targetLanguage = correctSong.language?.toLowerCase();
 		const normalizedCorrectArtist = (correctSong.artist || 'Unknown Artist').toLowerCase();
 
 		type ArtistCandidate = {
@@ -41,6 +42,7 @@ export class AnswerGenerationService {
 			artist: string;
 			totalCount: number;
 			sameGenreCount: number;
+			sameLanguageCount: number;
 			closestYearDiff: number;
 			referenceSong: Song;
 		};
@@ -60,6 +62,7 @@ export class AnswerGenerationService {
 					artist: candidateArtist,
 					totalCount: 0,
 					sameGenreCount: 0,
+					sameLanguageCount: 0,
 					closestYearDiff: Number.POSITIVE_INFINITY,
 					referenceSong: candidateSong,
 				};
@@ -73,6 +76,17 @@ export class AnswerGenerationService {
 			if (sameGenre) {
 				candidate.sameGenreCount += 1;
 				if (candidate.referenceSong.genre?.toLowerCase() !== targetGenre) {
+					candidate.referenceSong = candidateSong;
+				}
+			}
+
+			// Track language matches (prioritize same language artists)
+			const candidateLanguage = candidateSong.language?.toLowerCase();
+			const sameLanguage = targetLanguage && candidateLanguage === targetLanguage;
+			if (sameLanguage) {
+				candidate.sameLanguageCount += 1;
+				// Prefer reference song with matching language
+				if (candidate.referenceSong.language?.toLowerCase() !== targetLanguage) {
 					candidate.referenceSong = candidateSong;
 				}
 			}
@@ -92,18 +106,26 @@ export class AnswerGenerationService {
 			return [];
 		}
 
+		// Combined score: artists matching genre + language + year together rank highest
+		const getScore = (c: ArtistCandidate) => {
+			let score = 0;
+			// Genre match (highest priority)
+			score += c.sameGenreCount * 20;
+			// Language match
+			score += c.sameLanguageCount * 15;
+			// Year proximity: closer = higher score (max 10 points for same year)
+			if (Number.isFinite(c.closestYearDiff)) {
+				score += Math.max(0, 10 - c.closestYearDiff * 2);
+			}
+			// Tiebreaker: more songs = more likely to be well-known
+			score += Math.min(c.totalCount, 5);
+			return score;
+		};
+
 		candidates.sort((a, b) => {
-			if (a.sameGenreCount !== b.sameGenreCount) {
-				return b.sameGenreCount - a.sameGenreCount;
-			}
-			const aYearDiff = Number.isFinite(a.closestYearDiff) ? a.closestYearDiff : Number.MAX_SAFE_INTEGER;
-			const bYearDiff = Number.isFinite(b.closestYearDiff) ? b.closestYearDiff : Number.MAX_SAFE_INTEGER;
-			if (aYearDiff !== bYearDiff) {
-				return aYearDiff - bYearDiff;
-			}
-			if (a.totalCount !== b.totalCount) {
-				return b.totalCount - a.totalCount;
-			}
+			const scoreDiff = getScore(b) - getScore(a);
+			if (scoreDiff !== 0) return scoreDiff;
+			// Final tiebreaker: alphabetical
 			return a.artist.localeCompare(b.artist);
 		});
 
@@ -504,37 +526,61 @@ export class AnswerGenerationService {
 
 	/**
 	 * Find similar songs from library based on metadata
+	 * Prioritizes same language songs first, then falls back to any language
 	 */
 	private async findSimilarFromLibrary(song: Song): Promise<Song[]> {
 		const allSongs = await this.repository.findAll();
+		const targetLanguage = song.language?.toLowerCase();
 
 		// Filter candidates based on similarity criteria
-		const candidates = allSongs.filter(candidate => {
-			// Exclude the song itself
-			if (candidate.id === song.id) return false;
+		const filterCandidates = (requireSameLanguage: boolean) => {
+			return allSongs.filter(candidate => {
+				// Exclude the song itself
+				if (candidate.id === song.id) return false;
 
-			// Same genre (required if both have genre)
-			if (song.genre && candidate.genre && song.genre !== candidate.genre) {
-				return false;
-			}
+				// Same genre (required if both have genre)
+				if (song.genre && candidate.genre && song.genre !== candidate.genre) {
+					return false;
+				}
 
-			// Similar year (±5 years)
-			const yearDiff = Math.abs(candidate.year - song.year);
-			if (yearDiff > 5) return false;
+				// Similar year (±5 years)
+				const yearDiff = Math.abs(candidate.year - song.year);
+				if (yearDiff > 5) return false;
 
-			// Same language (if both have language)
-			if (song.language && candidate.language && song.language !== candidate.language) {
-				return false;
-			}
+				// Language filtering
+				if (requireSameLanguage && targetLanguage) {
+					const candidateLanguage = candidate.language?.toLowerCase();
+					if (candidateLanguage !== targetLanguage) {
+						return false;
+					}
+				}
 
-			return true;
+				return true;
+			});
+		};
+
+		// First try: same language songs (makes guessing harder!)
+		const sameLanguageCandidates = filterCandidates(true);
+		if (sameLanguageCandidates.length >= REQUIRED_WRONG_ANSWERS) {
+			serviceLogger.debug('Using same-language candidates', {
+				language: targetLanguage,
+				count: sameLanguageCandidates.length
+			});
+			return sameLanguageCandidates;
+		}
+
+		// Fallback: any language (if not enough same-language songs)
+		const allCandidates = filterCandidates(false);
+		serviceLogger.debug('Falling back to all-language candidates', {
+			sameLanguageCount: sameLanguageCandidates.length,
+			totalCount: allCandidates.length
 		});
-
-		return candidates;
+		return allCandidates;
 	}
 
 	/**
 	 * Rank songs by similarity score
+	 * Genre is highest priority, then language, then year
 	 */
 	private rankBySimilarity(correct: Song, candidates: Song[]): Song[] {
 		const scored = candidates.map(candidate => {
@@ -542,18 +588,18 @@ export class AnswerGenerationService {
 
 			// Genre match (highest priority)
 			if (correct.genre && candidate.genre === correct.genre) {
-				score += 10;
+				score += 20;
+			}
+
+			// Language match (fr with fr, en with en makes it harder!)
+			if (correct.language && candidate.language === correct.language) {
+				score += 15;
 			}
 
 			// Year proximity
 			const yearDiff = Math.abs(candidate.year - correct.year);
 			if (yearDiff <= 5) {
 				score += (5 - yearDiff) * 2; // 10 points for same year, 8 for ±1, etc.
-			}
-
-			// Language match
-			if (correct.language && candidate.language === correct.language) {
-				score += 8;
 			}
 
 			// Artist similarity (same first word)
