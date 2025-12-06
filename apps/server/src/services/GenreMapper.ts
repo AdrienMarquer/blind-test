@@ -47,6 +47,9 @@ export const CANONICAL_GENRES = [
   'Reggae',
   'Reggaeton',
   'Afrobeat',
+
+  // Soundtrack/Kids
+  'Disney',
 ] as const;
 
 export type CanonicalGenre = typeof CANONICAL_GENRES[number];
@@ -296,6 +299,15 @@ const GENRE_MAPPING: Record<string, CanonicalGenre> = {
   'afro house': 'Afrobeat',
   'afrobeats': 'Afrobeat',
   'afro-fusion': 'Afrobeat',
+
+  // Disney/Soundtrack
+  'disney': 'Disney',
+  'walt disney': 'Disney',
+  'disney soundtrack': 'Disney',
+  'children\'s music': 'Disney',
+  'childrens music': 'Disney',
+  'kids music': 'Disney',
+  'musique pour enfants': 'Disney',
 };
 
 export class GenreMapper {

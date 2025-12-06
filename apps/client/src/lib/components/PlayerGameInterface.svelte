@@ -9,17 +9,24 @@
 
 	// Get players from socket store for leaderboard display (reactive subscription)
 	let allPlayers = $state<Player[]>([]);
+	let masterPlayerId = $state<string | undefined>(undefined);
 	$effect(() => {
-		const unsubscribe = socket.players.subscribe((players) => {
+		const unsubscribePlayers = socket.players.subscribe((players) => {
 			allPlayers = players;
 		});
-		return unsubscribe;
+		const unsubscribeRoom = socket.room.subscribe((room) => {
+			masterPlayerId = room?.masterPlayerId;
+		});
+		return () => {
+			unsubscribePlayers();
+			unsubscribeRoom();
+		};
 	});
 
-	// Sorted leaderboard (all players, sorted by score)
+	// Sorted leaderboard (all players + master if playing, sorted by score)
 	let leaderboard = $derived(
 		allPlayers
-			.filter((p) => p.role === 'player')
+			.filter((p) => p.role === 'player' || p.id === masterPlayerId)
 			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
 	);
 

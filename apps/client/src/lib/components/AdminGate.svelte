@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
+	import { dev } from '$app/environment';
 	import { api } from '$lib/api';
 	import Button from './ui/Button.svelte';
 	import Card from './ui/Card.svelte';
@@ -21,6 +22,13 @@
 	const STORAGE_KEY = 'admin_auth';
 
 	onMount(() => {
+		// Skip auth in dev mode
+		if (dev) {
+			isAuthenticated = true;
+			isLoading = false;
+			return;
+		}
+
 		// Check if already authenticated
 		const storedPassword = localStorage.getItem(STORAGE_KEY);
 		if (storedPassword) {

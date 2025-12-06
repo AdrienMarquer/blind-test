@@ -12,13 +12,24 @@ export type PlayerRole = 'master' | 'player';
 export type GameStatus = 'waiting' | 'playing' | 'paused' | 'finished';
 export type RoundStatus = 'pending' | 'active' | 'finished';
 
-// Music Genres - Canonical list for normalization across providers
+// Music Genres - Canonical list for normalization across providers (alphabetical)
 export const CANONICAL_GENRES = [
-  'Rock', 'Metal', 'Punk', 'Alternative', 'Indie',
-  'Pop', 'K-Pop', 'Chanson',
-  'Hip-Hop/Rap', 'R&B', 'Soul', 'Funk',
-  'Electronic', 'House', 'Techno', 'Trance', 'Drum & Bass', 'Dubstep', 'Ambient',
-  'Jazz', 'Blues', 'Country', 'Folk', 'Classical', 'Latin', 'Reggae', 'Reggaeton', 'Afrobeat',
+  'Afrobeat', 'Alternative', 'Ambient',
+  'Blues',
+  'Chanson', 'Classical', 'Country',
+  'Disney', 'Drum & Bass', 'Dubstep',
+  'Electronic',
+  'Folk', 'Funk',
+  'Hip-Hop/Rap', 'House',
+  'Indie',
+  'Jazz',
+  'K-Pop',
+  'Latin',
+  'Metal',
+  'Pop', 'Punk',
+  'R&B', 'Reggae', 'Reggaeton', 'Rock',
+  'Soul',
+  'Techno', 'Trance',
 ] as const;
 
 export type CanonicalGenre = typeof CANONICAL_GENRES[number];

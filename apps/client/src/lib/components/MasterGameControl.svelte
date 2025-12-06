@@ -414,7 +414,7 @@
 	});
 </script>
 
-<div class="master-control">
+<div class="master-control" class:loading={showLoadingScreen}>
 	<!-- Loading Screen -->
 	{#if showLoadingScreen}
 		<div class="loading-screen">
@@ -513,6 +513,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
+	}
+
+	.master-control.loading {
+		box-shadow: none;
 	}
 
 	.control-header {
