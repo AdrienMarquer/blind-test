@@ -324,17 +324,11 @@ export class SongRepository implements Repository<Song> {
 
   /**
    * Get random songs for a game round
-   * Excludes niche songs by default unless includeNiche is true
+   * nicheMode controls which songs are included (default: 'classical' = exclude niche)
    */
-  async getRandom(count: number, includeNiche: boolean = false): Promise<Song[]> {
-    // Get all songs (or non-niche songs)
-    let allSongs: Song[];
-    if (includeNiche) {
-      allSongs = await this.findAll();
-    } else {
-      // Use findByFilters with includeNiche: false to exclude niche songs
-      allSongs = await this.findByFilters({ includeNiche: false });
-    }
+  async getRandom(count: number, nicheMode: 'classical' | 'classical_and_niche' | 'niche_only' = 'classical'): Promise<Song[]> {
+    // Use findByFilters with nicheMode
+    const allSongs = await this.findByFilters({ nicheMode });
 
     // Shuffle using shared utility (Fisher-Yates algorithm)
     return shuffle([...allSongs]).slice(0, count);
@@ -351,7 +345,10 @@ export class SongRepository implements Repository<Song> {
   /**
    * Find songs by metadata filters
    * Combines genre, year range, artist, and language filters
-   * Excludes niche songs by default unless includeNiche is true
+   * nicheMode controls which songs are included:
+   *   - 'classical' (default): only non-niche songs
+   *   - 'classical_and_niche': all songs
+   *   - 'niche_only': only niche songs
    */
   async findByFilters(filters: {
     genre?: string | string[];
@@ -359,7 +356,7 @@ export class SongRepository implements Repository<Song> {
     yearMax?: number;
     artistName?: string;
     songCount?: number;
-    includeNiche?: boolean;
+    nicheMode?: 'classical' | 'classical_and_niche' | 'niche_only';
     language?: string | string[];
   }): Promise<Song[]> {
     songLogger.debug('Finding songs with filters', { filters });
@@ -402,10 +399,16 @@ export class SongRepository implements Repository<Song> {
       conditions.push(like(schema.songs.artist, `%${filters.artistName}%`));
     }
 
-    // Exclude niche songs by default unless includeNiche is true
-    if (!filters.includeNiche) {
+    // Handle nicheMode filter (default: 'classical' = exclude niche songs)
+    const nicheMode = filters.nicheMode ?? 'classical';
+    if (nicheMode === 'classical') {
+      // Only non-niche songs
       conditions.push(eq(schema.songs.niche, false));
+    } else if (nicheMode === 'niche_only') {
+      // Only niche songs
+      conditions.push(eq(schema.songs.niche, true));
     }
+    // 'classical_and_niche' = no filter, include all songs
 
     // Handle language filter (single or multiple with OR logic)
     if (filters.language) {

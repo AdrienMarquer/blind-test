@@ -51,6 +51,9 @@ export type MediaType = 'music' | 'picture' | 'video' | 'text_question';
 export type SongStatus = 'pending' | 'playing' | 'answering' | 'finished';
 export type AnswerType = 'title' | 'artist';
 
+// Niche Mode - Controls which songs are included based on niche flag
+export type NicheMode = 'classical' | 'classical_and_niche' | 'niche_only';
+
 // ============================================================================
 // Core Entities
 // ============================================================================
@@ -132,7 +135,7 @@ export interface Round {
     artistName?: string;     // Filter by artist name (partial match)
     songCount?: number;      // Number of songs to select (random if more available)
     songIds?: string[];      // Explicit song IDs to use (takes precedence)
-    includeNiche?: boolean;  // Include niche songs (default: false)
+    nicheMode?: NicheMode;   // 'classical' (default), 'classical_and_niche', or 'niche_only'
   };
 
   // Configuration (simplified - no game-level config)
@@ -342,7 +345,7 @@ export interface RoundConfig {
     artistName?: string;
     songCount?: number;
     songIds?: string[];
-    includeNiche?: boolean;  // Include niche songs (default: false)
+    nicheMode?: NicheMode;  // 'classical' (default), 'classical_and_niche', or 'niche_only'
     language?: string | string[];  // ISO 639-1 language codes (e.g., 'en', 'fr')
   };
   params?: ModeParams;

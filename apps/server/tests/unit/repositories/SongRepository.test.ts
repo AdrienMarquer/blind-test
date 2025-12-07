@@ -45,18 +45,25 @@ describe('SongRepository - Niche Filtering', () => {
     expect(songs.map(s => s.id)).toEqual(['song-1', 'song-2', 'song-3'])
   })
 
-  test('excludes niche songs when includeNiche is false', async () => {
-    const songs = await repository.findByFilters({ includeNiche: false })
+  test('excludes niche songs when nicheMode is classical', async () => {
+    const songs = await repository.findByFilters({ nicheMode: 'classical' })
 
     expect(songs.length).toBe(3)
     expect(songs.every(s => !s.niche)).toBe(true)
   })
 
-  test('includes niche songs when includeNiche is true', async () => {
-    const songs = await repository.findByFilters({ includeNiche: true })
+  test('includes all songs when nicheMode is classical_and_niche', async () => {
+    const songs = await repository.findByFilters({ nicheMode: 'classical_and_niche' })
 
     expect(songs.length).toBe(5)
     expect(songs.some(s => s.niche)).toBe(true)
+  })
+
+  test('includes only niche songs when nicheMode is niche_only', async () => {
+    const songs = await repository.findByFilters({ nicheMode: 'niche_only' })
+
+    expect(songs.length).toBe(2)
+    expect(songs.every(s => s.niche)).toBe(true)
   })
 
   test('getRandom excludes niche songs by default', async () => {
@@ -66,8 +73,8 @@ describe('SongRepository - Niche Filtering', () => {
     expect(songs.every(s => !s.niche)).toBe(true)
   })
 
-  test('getRandom includes niche songs when requested', async () => {
-    const songs = await repository.getRandom(5, true)
+  test('getRandom includes all songs when nicheMode is classical_and_niche', async () => {
+    const songs = await repository.getRandom(5, 'classical_and_niche')
 
     expect(songs.length).toBe(5)
     // Should potentially include some niche songs (though random)
@@ -264,11 +271,11 @@ describe('SongRepository - Combined Filters', () => {
     expect(songs[0].niche).toBe(false)
   })
 
-  test('combines genre, year, and niche filters', async () => {
+  test('combines genre, year, and nicheMode filters', async () => {
     const songs = await repository.findByFilters({
       genre: 'rock',
       yearMin: 2000,
-      includeNiche: true
+      nicheMode: 'classical_and_niche'
     })
 
     expect(songs.length).toBe(2)

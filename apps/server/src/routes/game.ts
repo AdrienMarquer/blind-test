@@ -258,6 +258,8 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
           artistName: t.Optional(t.String()),
           songCount: t.Optional(t.Number({ minimum: 1, maximum: 30 })),
           songIds: t.Optional(t.Array(t.String())),
+          nicheMode: t.Optional(t.Union([t.Literal('classical'), t.Literal('classical_and_niche'), t.Literal('niche_only')])),
+          language: t.Optional(t.Union([t.String(), t.Array(t.String())])),
         })),
         params: t.Optional(t.Object({
           // Universal parameters

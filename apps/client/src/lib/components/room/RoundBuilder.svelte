@@ -5,7 +5,7 @@
 	 */
 
 	import { onMount } from 'svelte';
-	import { CANONICAL_GENRES, SUPPORTED_LANGUAGES, type RoundConfig, type MediaType } from '@blind-test/shared';
+	import { CANONICAL_GENRES, SUPPORTED_LANGUAGES, type RoundConfig, type MediaType, type NicheMode } from '@blind-test/shared';
 	import {
 		gameModes,
 		mediaTypes,
@@ -187,11 +187,11 @@
 		return currentGenres;
 	}
 
-	function updateIncludeNiche(index: number, include: boolean) {
+	function updateNicheMode(index: number, mode: NicheMode) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
 			...updatedRounds[index],
-			songFilters: { ...updatedRounds[index].songFilters, includeNiche: include }
+			songFilters: { ...updatedRounds[index].songFilters, nicheMode: mode }
 		};
 		rounds = updatedRounds;
 		onUpdateRounds(rounds);
@@ -429,15 +429,30 @@
 								{/if}
 							</label>
 
-							<!-- Niche Toggle -->
-							<label class="compact-option-toggle">
-								<input
-									type="checkbox"
-									checked={round.songFilters?.includeNiche || false}
-									onchange={(e) => updateIncludeNiche(index, e.currentTarget.checked)}
-								/>
-								<span>Titres niche</span>
-							</label>
+							<!-- Niche Mode Selector (compact) -->
+							<div class="compact-niche-mode">
+								<span class="compact-niche-label">Titres</span>
+								<div class="compact-niche-buttons">
+									<button
+										type="button"
+										class="compact-niche-btn"
+										class:active={!round.songFilters?.nicheMode || round.songFilters?.nicheMode === 'classical'}
+										onclick={() => updateNicheMode(index, 'classical')}
+									>Classique</button>
+									<button
+										type="button"
+										class="compact-niche-btn"
+										class:active={round.songFilters?.nicheMode === 'classical_and_niche'}
+										onclick={() => updateNicheMode(index, 'classical_and_niche')}
+									>Tout</button>
+									<button
+										type="button"
+										class="compact-niche-btn"
+										class:active={round.songFilters?.nicheMode === 'niche_only'}
+										onclick={() => updateNicheMode(index, 'niche_only')}
+									>Niche</button>
+								</div>
+							</div>
 
 							<!-- Genre Selection -->
 							<div class="filter-section">
@@ -675,16 +690,35 @@
 									</div>
 								</div>
 
-								<!-- Niche Toggle -->
+								<!-- Niche Mode Selector -->
 								<div class="filter-section">
-									<label class="niche-toggle">
-										<input
-											type="checkbox"
-											checked={round.songFilters?.includeNiche || false}
-											onchange={(e) => updateIncludeNiche(index, e.currentTarget.checked)}
-										/>
-										<span>Inclure les titres niche</span>
-									</label>
+									<span class="field-label">Sélection des titres</span>
+									<div class="niche-mode-selector">
+										<button
+											type="button"
+											class="niche-mode-btn"
+											class:active={!round.songFilters?.nicheMode || round.songFilters?.nicheMode === 'classical'}
+											onclick={() => updateNicheMode(index, 'classical')}
+										>
+											Classique
+										</button>
+										<button
+											type="button"
+											class="niche-mode-btn"
+											class:active={round.songFilters?.nicheMode === 'classical_and_niche'}
+											onclick={() => updateNicheMode(index, 'classical_and_niche')}
+										>
+											Tout
+										</button>
+										<button
+											type="button"
+											class="niche-mode-btn"
+											class:active={round.songFilters?.nicheMode === 'niche_only'}
+											onclick={() => updateNicheMode(index, 'niche_only')}
+										>
+											Niche
+										</button>
+									</div>
 								</div>
 
 								<!-- Genre Selection -->
@@ -1112,29 +1146,37 @@
 		font-weight: 500;
 	}
 
-	.niche-toggle {
+	/* Niche Mode Selector */
+	.niche-mode-selector {
 		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0.6rem 0.75rem;
-		background: rgba(248, 192, 39, 0.1);
-		border: 1px solid rgba(248, 192, 39, 0.2);
+		gap: 0.25rem;
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 10px;
+		padding: 0.25rem;
+	}
+
+	.niche-mode-btn {
+		flex: 1;
+		padding: 0.5rem 0.75rem;
+		border: none;
+		background: transparent;
 		border-radius: 8px;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: rgba(18, 43, 59, 0.6);
 		cursor: pointer;
-		font-size: 0.9rem;
-		color: var(--aq-color-deep);
 		transition: all 0.15s ease;
 	}
 
-	.niche-toggle:hover {
-		background: rgba(248, 192, 39, 0.15);
+	.niche-mode-btn:hover:not(.active) {
+		background: rgba(18, 43, 59, 0.06);
+		color: rgba(18, 43, 59, 0.8);
 	}
 
-	.niche-toggle input {
-		width: 18px;
-		height: 18px;
-		cursor: pointer;
-		accent-color: var(--aq-color-secondary);
+	.niche-mode-btn.active {
+		background: white;
+		color: var(--aq-color-primary);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
 
 	/* Malus Configuration Styles */
@@ -1607,6 +1649,53 @@
 	.compact .add-btn {
 		padding: 0.75rem;
 		font-size: 0.85rem;
+	}
+
+	/* Compact Niche Mode Selector */
+	.compact-niche-mode {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.6rem;
+		background: white;
+		border: 1px solid rgba(18, 43, 59, 0.1);
+		border-radius: 8px;
+	}
+
+	.compact-niche-label {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: rgba(18, 43, 59, 0.7);
+	}
+
+	.compact-niche-buttons {
+		display: flex;
+		gap: 0.15rem;
+		background: rgba(18, 43, 59, 0.04);
+		border-radius: 6px;
+		padding: 0.15rem;
+	}
+
+	.compact-niche-btn {
+		padding: 0.3rem 0.5rem;
+		border: none;
+		background: transparent;
+		border-radius: 5px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: rgba(18, 43, 59, 0.5);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.compact-niche-btn:hover:not(.active) {
+		color: rgba(18, 43, 59, 0.7);
+	}
+
+	.compact-niche-btn.active {
+		background: white;
+		color: var(--aq-color-primary);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 	}
 
 	@media (max-width: 640px) {

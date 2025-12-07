@@ -252,14 +252,18 @@ export class MockSongRepository {
     yearMax?: number;
     artistName?: string;
     songCount?: number;
-    includeNiche?: boolean;
+    nicheMode?: 'classical' | 'classical_and_niche' | 'niche_only';
   } = {}): Promise<Song[]> {
     let songs = Array.from(this.songs.values())
 
-    // Filter by niche (exclude by default unless includeNiche is true)
-    if (!filters.includeNiche) {
+    // Filter by nicheMode (default: 'classical' = exclude niche)
+    const nicheMode = filters.nicheMode ?? 'classical';
+    if (nicheMode === 'classical') {
       songs = songs.filter(s => !s.niche)
+    } else if (nicheMode === 'niche_only') {
+      songs = songs.filter(s => s.niche)
     }
+    // 'classical_and_niche' = no filter
 
     // Filter by genre
     if (filters.genre) {
@@ -299,8 +303,8 @@ export class MockSongRepository {
     return songs
   }
 
-  async getRandom(count: number, includeNiche: boolean = false): Promise<Song[]> {
-    return this.findByFilters({ songCount: count, includeNiche })
+  async getRandom(count: number, nicheMode: 'classical' | 'classical_and_niche' | 'niche_only' = 'classical'): Promise<Song[]> {
+    return this.findByFilters({ songCount: count, nicheMode })
   }
 
   async update(id: string, data: Partial<Song>): Promise<Song> {
