@@ -147,6 +147,10 @@ ${colors.bold}${colors.yellow}========================================
     log('  Copying database to VPS...', colors.gray);
     await $`scp ${dbFile} ${VPS_HOST}:/tmp/blind-test.db`;
 
+    // Fix permissions on VPS before copying to pod (kubectl cp preserves ownership)
+    log('  Setting file permissions...', colors.gray);
+    await $`ssh ${VPS_HOST} "chmod 666 /tmp/blind-test.db"`;
+
     // Copy from VPS to pod
     log('  Copying database to pod...', colors.gray);
     await sshCmd(`kubectl cp /tmp/blind-test.db ${K8S_NAMESPACE}/${podName}:${REMOTE_DATA_PATH}/blind-test.db`);
