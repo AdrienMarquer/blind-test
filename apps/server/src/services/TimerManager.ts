@@ -54,6 +54,8 @@ interface AnswerTimerState {
 	endTime: number;
 	broadcastInterval: NodeJS.Timeout;
 	playerId: string;
+	paused: boolean;
+	pausedTimeRemaining?: number;
 	// Context
 	round: Round;
 	songIndex: number;
@@ -320,6 +322,7 @@ export class TimerManager {
 			endTime,
 			broadcastInterval,
 			playerId,
+			paused: false,
 			round,
 			songIndex,
 			durationSeconds,
@@ -357,6 +360,77 @@ export class TimerManager {
 	getAnswerTimerPlayerId(roomId: string): string | null {
 		const timer = this.answerTimers.get(roomId);
 		return timer?.playerId || null;
+	}
+
+	/**
+	 * Pause the answer timer
+	 * Preserves remaining time for resume
+	 */
+	pauseAnswerTimer(roomId: string): boolean {
+		const timer = this.answerTimers.get(roomId);
+		if (!timer || timer.paused) {
+			timerLogger.debug('Cannot pause answer timer - not found or already paused', { roomId });
+			return false;
+		}
+
+		// Calculate remaining time
+		const timeRemaining = Math.max(0, Math.ceil((timer.endTime - Date.now()) / 1000));
+
+		// Clear the timeout and interval
+		clearTimeout(timer.timerId);
+		clearInterval(timer.broadcastInterval);
+
+		// Update state to paused
+		timer.paused = true;
+		timer.pausedTimeRemaining = timeRemaining;
+
+		timerLogger.debug('Answer timer paused', { roomId, timeRemaining, playerId: timer.playerId });
+
+		// Broadcast pause to clients
+		broadcastToRoom(roomId, {
+			type: 'game:paused',
+			data: { timestamp: Date.now() }
+		});
+
+		return true;
+	}
+
+	/**
+	 * Resume the answer timer
+	 * Restarts with remaining time
+	 */
+	resumeAnswerTimer(roomId: string): boolean {
+		const timer = this.answerTimers.get(roomId);
+		if (!timer || !timer.paused || timer.pausedTimeRemaining === undefined) {
+			timerLogger.debug('Cannot resume answer timer - not found or not paused', { roomId });
+			return false;
+		}
+
+		const remainingTime = timer.pausedTimeRemaining;
+
+		timerLogger.debug('Resuming answer timer', { roomId, remainingTime, playerId: timer.playerId });
+
+		// Clear paused state
+		timer.paused = false;
+		delete timer.pausedTimeRemaining;
+
+		// Restart timer with remaining time
+		this.startAnswerTimer(
+			roomId,
+			timer.round,
+			timer.songIndex,
+			timer.playerId,
+			remainingTime,
+			timer.onExpire
+		);
+
+		// Broadcast resume to clients
+		broadcastToRoom(roomId, {
+			type: 'game:resumed',
+			data: { timestamp: Date.now() }
+		});
+
+		return true;
 	}
 
 	// ========================================================================

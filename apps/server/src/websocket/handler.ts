@@ -732,13 +732,20 @@ async function handleGamePause(
 
   wsLogger.info('Game paused', { roomId });
 
-  const paused = timerManager.pauseSongTimer(roomId);
+  // Try to pause song timer first (handles broadcast internally if successful)
+  const songPaused = timerManager.pauseSongTimer(roomId);
 
-  if (!paused) {
-    broadcastToRoom(roomId, {
-      type: 'game:paused',
-      data: { timestamp: Date.now() }
-    });
+  // If song timer wasn't paused (already paused or doesn't exist), try answer timer
+  if (!songPaused) {
+    const answerPaused = timerManager.pauseAnswerTimer(roomId);
+
+    // If neither timer was pausable, still broadcast pause for UI sync
+    if (!answerPaused) {
+      broadcastToRoom(roomId, {
+        type: 'game:paused',
+        data: { timestamp: Date.now() }
+      });
+    }
   }
 }
 
@@ -757,13 +764,20 @@ async function handleGameResume(
 
   wsLogger.info('Game resumed', { roomId });
 
-  const resumed = timerManager.resumeSongTimer(roomId);
+  // Try to resume song timer first (handles broadcast internally if successful)
+  const songResumed = timerManager.resumeSongTimer(roomId);
 
-  if (!resumed) {
-    broadcastToRoom(roomId, {
-      type: 'game:resumed',
-      data: { timestamp: Date.now() }
-    });
+  // If song timer wasn't resumed (not paused or doesn't exist), try answer timer
+  if (!songResumed) {
+    const answerResumed = timerManager.resumeAnswerTimer(roomId);
+
+    // If neither timer was resumable, still broadcast resume for UI sync
+    if (!answerResumed) {
+      broadcastToRoom(roomId, {
+        type: 'game:resumed',
+        data: { timestamp: Date.now() }
+      });
+    }
   }
 }
 
