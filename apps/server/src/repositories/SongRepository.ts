@@ -350,7 +350,7 @@ export class SongRepository implements Repository<Song> {
 
   /**
    * Find songs by metadata filters
-   * Combines genre, year range, and artist filters
+   * Combines genre, year range, artist, and language filters
    * Excludes niche songs by default unless includeNiche is true
    */
   async findByFilters(filters: {
@@ -360,6 +360,7 @@ export class SongRepository implements Repository<Song> {
     artistName?: string;
     songCount?: number;
     includeNiche?: boolean;
+    language?: string | string[];
   }): Promise<Song[]> {
     songLogger.debug('Finding songs with filters', { filters });
 
@@ -404,6 +405,26 @@ export class SongRepository implements Repository<Song> {
     // Exclude niche songs by default unless includeNiche is true
     if (!filters.includeNiche) {
       conditions.push(eq(schema.songs.niche, false));
+    }
+
+    // Handle language filter (single or multiple with OR logic)
+    if (filters.language) {
+      if (Array.isArray(filters.language)) {
+        // Multiple languages - use OR logic
+        if (filters.language.length > 0) {
+          const langConditions = filters.language.map(lang =>
+            eq(schema.songs.language, lang)
+          );
+          const langOrClause = langConditions.reduce((acc, condition, index) => {
+            if (index === 0) return condition;
+            return sql`${acc} OR ${condition}`;
+          });
+          conditions.push(sql`(${langOrClause})`);
+        }
+      } else {
+        // Single language
+        conditions.push(eq(schema.songs.language, filters.language));
+      }
     }
 
     // Apply all conditions with AND logic

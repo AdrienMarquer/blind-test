@@ -1,24 +1,13 @@
 # Blind Test - Database Schema & Data Models
 
-## 📊 Data Architecture Strategy
+## 📊 Data Architecture
 
-### Phase 1: In-Memory Storage
-- Store all data in TypeScript Maps
-- Fast development iteration
-- No persistence (data lost on restart)
-- Suitable for MVP testing
-
-### Phase 2: SQLite Persistence
-- Migrate to SQLite database
-- Persistent music library with metadata filtering
-- Optional game history
-- Easy backup and migration
-
-### Phase 3: PostgreSQL Migration (Future)
-- Scale to PostgreSQL for production
-- Schema designed to be PostgreSQL-compatible from the start
-- Use standard SQL (no SQLite-specific features)
-- Smooth migration path
+### Current Implementation: SQLite
+- **Database**: SQLite with WAL mode for concurrent reads
+- **ORM**: Drizzle ORM for type-safe database access
+- **Location**: `./data/blind-test.db` (configurable via `DATABASE_URL`)
+- **WAL Files**: `.db-shm` and `.db-wal` are temporary files created by WAL mode
+- **Migrations**: Managed by Drizzle Kit in `drizzle/` folder
 
 ## 🗂 TypeScript Data Models
 

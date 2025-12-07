@@ -11,7 +11,7 @@ This is a **local blind test system** where players compete to guess songs in re
 - **Runtime**: Bun (JavaScript/TypeScript runtime and package manager)
 - **Backend**: Elysia (high-performance web framework) + Native WebSockets
 - **Frontend**: SvelteKit + Svelte 5 (modern reactive framework)
-- **Database**: PostgreSQL 18 + Drizzle ORM
+- **Database**: SQLite + Drizzle ORM (with WAL mode)
 - **Type Safety**: Eden Treaty (end-to-end type safety between frontend and backend)
 - **Architecture**: Monorepo with workspaces
 
@@ -19,13 +19,6 @@ This is a **local blind test system** where players compete to guess songs in re
 
 ### Start Development Environment
 ```bash
-# Prerequisites: Make sure you have PostgreSQL 18 running globally
-# Create a database: createdb blind_test
-# Configure DATABASE_URL in apps/server/.env (see .env.example)
-
-# Apply migrations (first time only)
-bun run db:migrate
-
 # Run both server and client
 bun run dev
 
@@ -45,7 +38,7 @@ bun run db:migrate
 bun run db:studio
 ```
 
-**Note**: This project expects PostgreSQL 18 to be running globally on your system. Configure your database connection in `apps/server/.env` using the `DATABASE_URL` variable.
+**Note**: SQLite database is stored at `./data/blind-test.db` by default (or configure via `DATABASE_URL` env var). WAL mode is enabled for better concurrent read performance.
 
 ### Build
 ```bash
@@ -98,18 +91,18 @@ blind-test/
 
 2. **Shared Package**: The `@blind-test/shared` workspace package contains all shared TypeScript types and utilities. Both server and client import from this package to ensure consistency.
 
-3. **Repository Pattern**: The server uses repository classes (RoomRepository, PlayerRepository, SongRepository) for data access with PostgreSQL 18 via Drizzle ORM.
+3. **Repository Pattern**: The server uses repository classes (RoomRepository, PlayerRepository, SongRepository) for data access with SQLite via Drizzle ORM.
 
 4. **WebSocket Architecture**: Real-time communication uses native browser WebSockets with room-specific endpoints (`/ws/rooms/:roomId`). The server uses Elysia's built-in WebSocket support. Messages are JSON-formatted with a `type` field for event routing.
 
 ## Data Layer Details
 
-### Current Implementation: PostgreSQL 18
-- **Database**: PostgreSQL 18 (requires global installation on your system)
+### Current Implementation: SQLite
+- **Database**: SQLite with WAL mode (no external dependencies)
 - **ORM**: Drizzle ORM for type-safe database access
 - **Migrations**: Managed by Drizzle Kit (`drizzle/` folder)
-- **Connection**: Via `DATABASE_URL` environment variable in `apps/server/.env`
-- **Setup**: Create a database (e.g., `blind_test`) and configure the connection string
+- **Location**: `./data/blind-test.db` by default (configurable via `DATABASE_URL`)
+- **Files**: Main `.db` file + `.db-shm` and `.db-wal` (WAL mode temporary files)
 
 ### Core Data Models
 All TypeScript interfaces are defined in `packages/shared/src/types.ts`:
@@ -188,8 +181,9 @@ When implementing features, **always consult the relevant documentation first** 
 ### Modifying Data Models
 1. Update TypeScript interfaces in `packages/shared/src/types.ts`
 2. Update repository implementations in `apps/server/src/repositories/`
-3. Consider future database migration - keep schema PostgreSQL-compatible
-4. Update relevant documentation in `docs/`
+3. Update Drizzle schema in `apps/server/src/db/schema.ts`
+4. Run `bun run db:migrate` to apply changes
+5. Update relevant documentation in `docs/`
 
 ### Adding Validation
 Validation utilities live in `packages/shared/src/utils.ts`:
@@ -208,11 +202,8 @@ Validation utilities live in `packages/shared/src/utils.ts`:
 - Clean, responsive UI
 
 **Not Yet Implemented**:
-- Music playback integration (Phase 2)
-- Game modes and scoring logic (Phase 2)
-- Database persistence (Phase 2: SQLite, Phase 3: PostgreSQL)
-- Full WebSocket event handlers for gameplay (Phase 2)
-- Music library upload UI (future - currently place MP3s in `apps/server/uploads/`)
+- Some advanced game modes (Phase 2)
+- Full game history and statistics tracking
 
 ## Common Pitfalls
 

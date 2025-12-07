@@ -250,25 +250,12 @@ If NO:
 
 ### Server State
 
-**Phase 1: In-Memory (MVP)**:
-```typescript
-const rooms = new Map<string, Room>();
-const activeSessions = new Map<string, GameSession>();
-const musicLibrary = new Map<string, Song>();
-const playlists = new Map<string, Playlist>();
-```
-
-**Phase 2: SQLite (Local Persistence)**:
+**SQLite with WAL Mode**:
 - Persistent storage for rooms, playlists, music library
 - Game history and statistics
 - Player profiles
-- Easy backup and migration
-
-**Phase 3: PostgreSQL (Production Scale)**:
-- Migrate to PostgreSQL for production deployment
-- Schema designed to be PostgreSQL-compatible from the start
-- Use standard SQL (no SQLite-specific features)
-- Smooth migration path with minimal code changes
+- WAL mode for concurrent reads
+- Easy backup (copy the `.db` file)
 
 ### Client State (Svelte Stores)
 

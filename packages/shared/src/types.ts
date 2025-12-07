@@ -34,6 +34,14 @@ export const CANONICAL_GENRES = [
 
 export type CanonicalGenre = typeof CANONICAL_GENRES[number];
 
+// Supported Languages - ISO 639-1 codes with display names
+export const SUPPORTED_LANGUAGES = [
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+] as const;
+
+export type SupportedLanguageCode = typeof SUPPORTED_LANGUAGES[number]['code'];
+
 // Game Mechanics - HOW players interact
 export type ModeType = 'buzz_and_choice' | 'fast_buzz';
 
@@ -335,6 +343,7 @@ export interface RoundConfig {
     songCount?: number;
     songIds?: string[];
     includeNiche?: boolean;  // Include niche songs (default: false)
+    language?: string | string[];  // ISO 639-1 language codes (e.g., 'en', 'fr')
   };
   params?: ModeParams;
 }

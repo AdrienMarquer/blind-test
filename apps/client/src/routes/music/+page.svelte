@@ -44,6 +44,7 @@
 	let searchQuery = $state('');
 	let selectedGenre = $state('');
 	let selectedLanguage = $state('');
+	let nicheFilter = $state<'all' | 'niche' | 'mainstream'>('all');
 	let metadataFilter = $state<'all' | 'incomplete-metadata' | 'missing-file'>('all');
 	let selectedFile = $state<File | null>(null);
 	let showClipSelector = $state(false);
@@ -110,7 +111,14 @@
 				? song.language === selectedLanguage
 				: true;
 
-			return matchesSearch && matchesGenre && matchesLanguage;
+			// Niche filter
+			const matchesNiche = nicheFilter === 'all'
+				? true
+				: nicheFilter === 'niche'
+					? song.niche === true
+					: song.niche !== true;
+
+			return matchesSearch && matchesGenre && matchesLanguage && matchesNiche;
 		})
 	);
 
@@ -677,6 +685,12 @@
 			<option value="fr">🇫🇷 Français</option>
 		</select>
 
+		<select class="niche-filter" bind:value={nicheFilter}>
+			<option value="all">Tous les titres</option>
+			<option value="niche">🎯 Niche uniquement</option>
+			<option value="mainstream">🌟 Mainstream uniquement</option>
+		</select>
+
 		<select class="metadata-filter" bind:value={metadataFilter}>
 			<option value="all">Toutes les musiques</option>
 			<option value="incomplete-metadata">🔍 Métadonnées incomplètes</option>
@@ -1095,6 +1109,29 @@
 		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
 	}
 
+	.niche-filter {
+		min-width: 170px;
+		padding: 0.65rem 1rem;
+		border-radius: var(--aq-radius-md);
+		border: 2px solid rgba(255, 255, 255, 0.7);
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--aq-color-deep);
+		font-size: 1rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: border-color 180ms ease, box-shadow 180ms ease;
+	}
+
+	.niche-filter:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.niche-filter:focus {
+		outline: none;
+		border-color: var(--aq-color-primary);
+		box-shadow: 0 0 0 3px rgba(239, 76, 131, 0.1);
+	}
+
 	@media (max-width: 768px) {
 		.library-toolbar {
 			flex-wrap: wrap;
@@ -1102,6 +1139,7 @@
 
 		.genre-filter,
 		.language-filter,
+		.niche-filter,
 		.metadata-filter {
 			flex: 1;
 			min-width: 150px;

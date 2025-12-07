@@ -5,7 +5,7 @@
 	 */
 
 	import { onMount } from 'svelte';
-	import { CANONICAL_GENRES, type RoundConfig, type MediaType } from '@blind-test/shared';
+	import { CANONICAL_GENRES, SUPPORTED_LANGUAGES, type RoundConfig, type MediaType } from '@blind-test/shared';
 	import {
 		gameModes,
 		mediaTypes,
@@ -197,6 +197,46 @@
 		onUpdateRounds(rounds);
 	}
 
+	function toggleLanguage(index: number, langCode: string) {
+		const updatedRounds = [...rounds];
+		const currentLangs = updatedRounds[index].songFilters?.language;
+		let langArray: string[] = Array.isArray(currentLangs)
+			? [...currentLangs]
+			: currentLangs
+				? [currentLangs]
+				: [];
+
+		const langIndex = langArray.indexOf(langCode);
+		if (langIndex > -1) langArray.splice(langIndex, 1);
+		else langArray.push(langCode);
+
+		updatedRounds[index] = {
+			...updatedRounds[index],
+			songFilters: {
+				...updatedRounds[index].songFilters,
+				language: langArray.length > 0 ? langArray : undefined
+			}
+		};
+		rounds = updatedRounds;
+		onUpdateRounds(rounds);
+	}
+
+	function isLanguageSelected(index: number, langCode: string): boolean {
+		const currentLangs = rounds[index].songFilters?.language;
+		if (!currentLangs) return false;
+		return Array.isArray(currentLangs) ? currentLangs.includes(langCode) : currentLangs === langCode;
+	}
+
+	function getSelectedLanguagesText(index: number): string {
+		const currentLangs = rounds[index].songFilters?.language;
+		if (!currentLangs) return 'Toutes les langues';
+		const langs = Array.isArray(currentLangs) ? currentLangs : [currentLangs];
+		if (langs.length === SUPPORTED_LANGUAGES.length) return 'Toutes les langues';
+		return langs
+			.map(code => SUPPORTED_LANGUAGES.find(l => l.code === code)?.flag || code)
+			.join(' ');
+	}
+
 	function updatePenaltyEnabled(index: number, enabled: boolean) {
 		const updatedRounds = [...rounds];
 		updatedRounds[index] = {
@@ -227,6 +267,14 @@
 		if (!filters) return 'Tous genres';
 
 		const parts: string[] = [];
+
+		// Languages
+		if (filters.language) {
+			const langs = Array.isArray(filters.language) ? filters.language : [filters.language];
+			if (langs.length < SUPPORTED_LANGUAGES.length) {
+				parts.push(langs.map(code => SUPPORTED_LANGUAGES.find(l => l.code === code)?.flag || code).join(''));
+			}
+		}
 
 		// Genres
 		if (filters.genre) {
@@ -330,6 +378,24 @@
 
 					{#if expandedRound === index}
 						<div class="compact-filters-panel">
+							<!-- Language Selection -->
+							<div class="filter-section">
+								<span class="field-label">Langues</span>
+								<div class="language-chips">
+									{#each SUPPORTED_LANGUAGES as lang}
+										<label class="language-chip" class:selected={isLanguageSelected(index, lang.code)}>
+											<input
+												type="checkbox"
+												checked={isLanguageSelected(index, lang.code)}
+												onchange={() => toggleLanguage(index, lang.code)}
+											/>
+											<span class="lang-flag">{lang.flag}</span>
+											<span class="lang-name">{lang.name}</span>
+										</label>
+									{/each}
+								</div>
+							</div>
+
 							<!-- Year Range -->
 							<div class="filter-section">
 								<span class="field-label">Période</span>
@@ -548,11 +614,12 @@
 							class:expanded={expandedRound === index}
 							class:has-filters={round.songFilters?.genre ||
 								round.songFilters?.yearMin ||
-								round.songFilters?.yearMax}
+								round.songFilters?.yearMax ||
+								round.songFilters?.language}
 							onclick={() => (expandedRound = expandedRound === index ? null : index)}
 						>
 							<span>Filtres avancés</span>
-							{#if round.songFilters?.genre || round.songFilters?.yearMin || round.songFilters?.yearMax}
+							{#if round.songFilters?.genre || round.songFilters?.yearMin || round.songFilters?.yearMax || round.songFilters?.language}
 								<span class="filter-badge">Actifs</span>
 							{/if}
 							<svg
@@ -570,6 +637,24 @@
 
 						{#if expandedRound === index}
 							<div class="filters-panel">
+								<!-- Language Selection -->
+								<div class="filter-section">
+									<span class="field-label">Langues: {getSelectedLanguagesText(index)}</span>
+									<div class="language-chips">
+										{#each SUPPORTED_LANGUAGES as lang}
+											<label class="language-chip" class:selected={isLanguageSelected(index, lang.code)}>
+												<input
+													type="checkbox"
+													checked={isLanguageSelected(index, lang.code)}
+													onchange={() => toggleLanguage(index, lang.code)}
+												/>
+												<span class="lang-flag">{lang.flag}</span>
+												<span class="lang-name">{lang.name}</span>
+											</label>
+										{/each}
+									</div>
+								</div>
+
 								<!-- Year Range -->
 								<div class="filter-section">
 									<span class="field-label">Période</span>
@@ -1191,6 +1276,50 @@
 
 	.genre-chip input {
 		display: none;
+	}
+
+	/* Language chip styles */
+	.language-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.language-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.5rem 0.85rem;
+		border: 1.5px solid rgba(18, 43, 59, 0.12);
+		border-radius: 999px;
+		font-size: 0.9rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		background: white;
+		color: rgba(18, 43, 59, 0.8);
+	}
+
+	.language-chip:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.language-chip.selected {
+		background: rgba(239, 76, 131, 0.12);
+		border-color: var(--aq-color-primary);
+		color: var(--aq-color-primary);
+		font-weight: 500;
+	}
+
+	.language-chip input {
+		display: none;
+	}
+
+	.language-chip .lang-flag {
+		font-size: 1.1rem;
+	}
+
+	.language-chip .lang-name {
+		font-weight: 500;
 	}
 
 	.add-buttons {

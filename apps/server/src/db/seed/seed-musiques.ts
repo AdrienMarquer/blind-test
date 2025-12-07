@@ -27,6 +27,14 @@ import { db, schema, runMigrations } from '../index';
 import { generateId } from '@blind-test/shared';
 import { sql, isNull, eq } from 'drizzle-orm';
 import { GenreMapper } from '../../services/GenreMapper';
+import {
+  getAllSeedEntries,
+  getExistingDataMap,
+  getNewEntries,
+  getFailedEntries,
+  type SeedEntry,
+  type EnrichedSong,
+} from './musiques';
 
 const execAsync = promisify(exec);
 
@@ -50,49 +58,7 @@ function sanitizeFilename(str: string): string {
     .substring(0, 50);               // Limit length
 }
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface MusiqueEntry {
-  title: string;
-  artist: string;
-  lang?: string; // ISO 639-1 language code (e.g., 'en', 'fr')
-}
-
-interface EnrichedSong {
-  // Original
-  title: string;
-  artist: string;
-  lang?: string; // ISO 639-1 language code (e.g., 'en', 'fr')
-
-  // From Spotify
-  spotifyId?: string;
-  album?: string;
-  year?: number;
-  genre?: string;
-  duration?: number; // Full track length in seconds
-  albumArt?: string; // Spotify album cover URL
-
-  // From YouTube
-  youtubeId?: string;
-  youtubeTitle?: string;
-
-  // File info (after download)
-  filePath?: string;
-  fileName?: string;
-  fileSize?: number;
-  format?: string;
-
-  // Playback configuration
-  clipStart?: number;
-  clipDuration?: number;
-
-  // Processing status
-  status?: 'pending' | 'spotify_done' | 'youtube_found' | 'downloaded' | 'failed';
-  error?: string;
-  processedAt?: string;
-}
+// Types are imported from ./musiques.ts
 
 // ============================================================================
 // Configuration
@@ -447,7 +413,7 @@ class DatabaseService {
       genre: song.genre || null,
       duration: song.duration,
       language: song.lang || null,
-      niche: false,
+      niche: song.niche ?? false,
       spotifyId: song.spotifyId || null,
       youtubeId: song.youtubeId || null,
       albumArt: song.albumArt || null,
@@ -509,24 +475,14 @@ class DatabaseService {
 // Main Processing
 // ============================================================================
 
-async function loadMusiques(): Promise<MusiqueEntry[]> {
-  const content = await fs.readFile(CONFIG.inputFile, 'utf-8');
-  return JSON.parse(content);
+function loadMusiques(): SeedEntry[] {
+  // Now loads from the aggregated seed sources (musiques.ts)
+  return getAllSeedEntries();
 }
 
-async function loadProgress(): Promise<Map<string, EnrichedSong>> {
-  try {
-    const content = await fs.readFile(CONFIG.outputFile, 'utf-8');
-    const data = JSON.parse(content) as EnrichedSong[];
-    const map = new Map<string, EnrichedSong>();
-    for (const song of data) {
-      const key = `${song.artist}|${song.title}`;
-      map.set(key, song);
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
+function loadProgress(): Map<string, EnrichedSong> {
+  // Now loads from the musiques.ts module which imports musiques.json
+  return getExistingDataMap();
 }
 
 async function saveProgress(songs: EnrichedSong[]): Promise<void> {
@@ -787,11 +743,11 @@ async function main() {
     return;
   }
 
-  // Load data
-  const musiques = await loadMusiques();
-  const progress = await loadProgress();
+  // Load data from seed sources and existing progress
+  const musiques = loadMusiques();
+  const progress = loadProgress();
 
-  console.log(`📂 Loaded ${musiques.length} songs from musiques.json`);
+  console.log(`📂 Loaded ${musiques.length} songs from seed sources`);
   console.log(`📊 Progress: ${progress.size} songs already processed\n`);
 
   // Process songs
@@ -822,6 +778,7 @@ async function main() {
       title: entry.title,
       artist: entry.artist,
       lang: entry.lang,
+      niche: entry.niche,
       status: 'pending',
       processedAt: new Date().toISOString(),
     };

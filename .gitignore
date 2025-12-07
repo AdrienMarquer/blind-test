@@ -52,6 +52,7 @@ apps/server/uploads/
 apps/server/db/
 # Note: apps/server/drizzle/ is NOT ignored - it contains migration files which are source code
 .playwright-mcp# SQLite database files
+data/
 apps/server/data/*.db
 apps/server/data/*.db-*
 .playwright-mcp/
