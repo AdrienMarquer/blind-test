@@ -708,7 +708,7 @@
 											class:active={round.songFilters?.nicheMode === 'classical_and_niche'}
 											onclick={() => updateNicheMode(index, 'classical_and_niche')}
 										>
-											Tout
+											Classique + Niche
 										</button>
 										<button
 											type="button"

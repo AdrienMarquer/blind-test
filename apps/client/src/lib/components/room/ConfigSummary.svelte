@@ -4,7 +4,7 @@
 	 * Compact visual summary of game configuration with inline editing
 	 */
 
-	import { DEFAULT_SONG_DURATION, CANONICAL_GENRES, type RoundConfig } from '@blind-test/shared';
+	import { DEFAULT_SONG_DURATION, CANONICAL_GENRES, type RoundConfig, type NicheMode } from '@blind-test/shared';
 	import { getTotalSongs, estimateDuration } from '$lib/gamePresets';
 	import { getModeInfo } from '$lib/presets';
 
@@ -200,6 +200,32 @@
 		return `Jusqu'à ${max}`;
 	}
 
+	// Niche mode options
+	const nicheModeOptions: { value: NicheMode; label: string }[] = [
+		{ value: 'classical', label: 'Classique' },
+		{ value: 'classical_and_niche', label: 'Classique + Niche' },
+		{ value: 'niche_only', label: 'Niche' }
+	];
+
+	// Helper to get niche mode label
+	function getNicheModeLabel(round: RoundConfig): string {
+		const mode = round.songFilters?.nicheMode ?? 'classical';
+		const option = nicheModeOptions.find(o => o.value === mode);
+		return option?.label ?? 'Classique';
+	}
+
+	// Update niche mode for a round
+	function updateNicheMode(index: number, mode: NicheMode) {
+		const newRounds = [...rounds];
+		const round = { ...newRounds[index] };
+		round.songFilters = {
+			...round.songFilters,
+			nicheMode: mode
+		};
+		newRounds[index] = round;
+		onUpdateRounds?.(newRounds);
+	}
+
 	const audioOptions = [
 		{ value: 'master' as const, label: 'Maître' },
 		{ value: 'players' as const, label: 'Joueurs' },
@@ -346,6 +372,26 @@
 										onchange={(e) => updateYearMax(index, e.currentTarget.value)}
 									/>
 								</div>
+							</div>
+						</div>
+
+						<!-- Niche mode filter -->
+						<div class="filter-section">
+							<div class="filter-header">
+								<span class="filter-label">💎 Difficulté</span>
+								<span class="filter-summary">{getNicheModeLabel(round)}</span>
+							</div>
+							<div class="niche-mode-selector">
+								{#each nicheModeOptions as option}
+									<button
+										type="button"
+										class="niche-mode-btn"
+										class:active={((round.songFilters?.nicheMode ?? 'classical') === option.value)}
+										onclick={(e) => { e.stopPropagation(); updateNicheMode(index, option.value); }}
+									>
+										{option.label}
+									</button>
+								{/each}
 							</div>
 						</div>
 
@@ -881,6 +927,36 @@
 	.year-separator {
 		font-size: 0.85rem;
 		color: var(--aq-color-muted);
+	}
+
+	/* Niche mode selector */
+	.niche-mode-selector {
+		display: flex;
+		gap: 0.35rem;
+	}
+
+	.niche-mode-btn {
+		flex: 1;
+		padding: 0.4rem 0.6rem;
+		border-radius: 999px;
+		border: 1.5px solid rgba(18, 43, 59, 0.15);
+		background: white;
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--aq-color-deep);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.niche-mode-btn:hover {
+		border-color: var(--aq-color-primary);
+	}
+
+	.niche-mode-btn.active {
+		border-color: var(--aq-color-primary);
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.15), rgba(248, 192, 39, 0.15));
+		color: var(--aq-color-primary);
+		font-weight: 600;
 	}
 
 	/* Penalty controls layout */

@@ -650,7 +650,7 @@
 		<!-- Players/Spectators: Show panels when not in game -->
 		{#if !showFinalScores && !isMaster && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer)}
 			<div class="room-panels">
-				<Card title={`Joueurs (${sortedPlayers.length}/${room.maxPlayers})`} subtitle={room.status === 'lobby' ? 'En attente du lancement' : 'Scores mis à jour en direct'} icon="👥">
+				<Card title={`Joueurs`} subtitle={room.status === 'lobby' ? 'En attente du lancement' : 'Scores mis à jour en direct'} icon="👥">
 					{#if sortedPlayers.length === 0}
 						<p class="empty">Aucun joueur pour l'instant.</p>
 					{:else}
