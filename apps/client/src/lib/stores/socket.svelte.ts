@@ -258,6 +258,10 @@ export class RoomSocket {
         if (message.data.player && !get(this.players).find((p) => p.id === message.data.player.id)) {
           this.players.update((players) => [...players, message.data.player]);
         }
+        // Update master playing status if provided (for newly joined players)
+        if (message.data.masterPlaying) {
+          this.events.masterPlaying = message.data.masterPlaying;
+        }
         break;
 
       case 'player:left':

@@ -29,6 +29,7 @@ export class AnswerGenerationService {
 	private async getArtistDistractors(correctSong: Song, desiredCount: number): Promise<WrongAnswer[]> {
 		const allSongs = await this.repository.findAll();
 		if (!allSongs.length) {
+			serviceLogger.warn('No songs in repository for artist distractors');
 			return [];
 		}
 
@@ -107,17 +108,19 @@ export class AnswerGenerationService {
 		}
 
 		// Combined score: artists matching genre + language + year together rank highest
+		// IMPORTANT: Genre match is the PRIMARY factor - language is secondary
 		const getScore = (c: ArtistCandidate) => {
 			let score = 0;
-			// Genre match (highest priority)
-			score += c.sameGenreCount * 20;
-			// Language match
-			score += c.sameLanguageCount * 15;
+			// Genre match (HIGHEST priority - must dominate other factors)
+			// Each same-genre song adds 100 points to ensure genre always wins
+			score += c.sameGenreCount * 100;
+			// Language match (secondary, capped at 30 points max to not overwhelm genre)
+			score += Math.min(c.sameLanguageCount * 10, 30);
 			// Year proximity: closer = higher score (max 10 points for same year)
 			if (Number.isFinite(c.closestYearDiff)) {
 				score += Math.max(0, 10 - c.closestYearDiff * 2);
 			}
-			// Tiebreaker: more songs = more likely to be well-known
+			// Tiebreaker: more songs = more likely to be well-known (capped at 5)
 			score += Math.min(c.totalCount, 5);
 			return score;
 		};

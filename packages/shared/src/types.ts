@@ -398,7 +398,7 @@ export type ServerMessage =
   | { type: 'error'; data: { code?: string; message: string } }
 
   // Player Events
-  | { type: 'player:joined'; data: { room: Room; player: Player } }
+  | { type: 'player:joined'; data: { room: Room; player: Player; masterPlaying?: { playing: boolean; playerName: string | null } } }
   | { type: 'player:left'; data: { playerId: string; playerName: string; remainingPlayers: number } }
   | { type: 'player:kicked'; data: { reason: string } }
   | { type: 'player:disconnected'; data: { playerId: string; playerName: string; canRejoin: boolean } }

@@ -266,13 +266,17 @@ async function handlePlayerJoin(
     // Store player ID in WebSocket data
     ws.data.playerId = player.id;
 
-    // Send confirmation to joining player
+    // Get master playing status to include in join response
+    const masterPlaying = getMasterPlayingStatus(roomId);
+    const masterPlayingData = masterPlaying.playing ? masterPlaying : undefined;
+
+    // Send confirmation to joining player (include masterPlaying so they see the master in player list)
     sendMessage(ws, {
       type: 'player:joined',
-      data: { player, room }
+      data: { player, room, masterPlaying: masterPlayingData }
     });
 
-    // Broadcast to others in the room
+    // Broadcast to others in the room (they already have masterPlaying status)
     broadcastToRoom(roomId, {
       type: 'player:joined',
       data: { player, room }
