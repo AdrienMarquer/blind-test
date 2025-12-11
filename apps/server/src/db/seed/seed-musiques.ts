@@ -28,6 +28,7 @@ import { generateId } from "@blind-test/shared";
 import { sql, isNull, eq } from "drizzle-orm";
 import { artistRepository } from "../../repositories";
 import { GenreMapper } from "../../services/GenreMapper";
+import { AIMetadataProvider } from "../../services/enrichment/AIMetadataProvider";
 import {
   getAllSeedEntries,
   getExistingDataMap,
@@ -864,6 +865,24 @@ async function main() {
     );
   }
 
+  // Initialize AI provider for language detection
+  const aiProvider = new AIMetadataProvider({
+    provider: 'google',
+    apiKey: process.env.GEMINI_API_KEY || '',
+    model: 'gemini-2.0-flash-exp',
+    enabled: true,
+    temperature: 0.1
+  });
+
+  const aiReady = aiProvider.isReady();
+  if (!aiReady) {
+    console.error(
+      "\n⚠️ Continuing without AI language detection (GEMINI_API_KEY not set)"
+    );
+  } else {
+    console.log("✅ AI language detection initialized (Gemini)");
+  }
+
   // Initialize database (skip in dry-run mode)
   if ((!dryRun && !noDownload) || fixAlbumArt || autoCrop) {
     await database.initialize();
@@ -1041,7 +1060,7 @@ async function main() {
     const song: EnrichedSong & { artistId?: string } = {
       title: entry.title,
       artist: entry.artist,
-      lang: entry.lang,
+      lang: entry.lang, // Will be auto-detected later if not set
       niche: entry.niche,
       status: "pending",
       processedAt: new Date().toISOString(),
@@ -1119,6 +1138,19 @@ async function main() {
       }
 
       await sleep(CONFIG.spotifyDelay);
+    }
+
+    // Step 1c: Detect language via AI if not already set
+    if (!song.lang && aiReady) {
+      console.log("  🌐 Detecting language via AI...");
+      try {
+        const detectedLang = await aiProvider.detectLanguage(entry.title, entry.artist);
+        song.lang = detectedLang;
+        console.log(`     ✓ Detected: ${detectedLang}`);
+      } catch (error) {
+        console.log(`     ⚠️ Language detection failed: ${error}`);
+        song.lang = 'en'; // Default to English
+      }
     }
 
     // Step 2: Check if already in database (skip download if exists)

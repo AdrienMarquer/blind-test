@@ -290,6 +290,106 @@ JSON array response:`;
 	}
 
 	/**
+	 * Detect language for a batch of songs
+	 * Returns ISO 639-1 language codes (en, fr, es, it, etc.)
+	 */
+	async detectLanguageBatch(songs: Array<{ title: string; artist: string }>): Promise<Array<{ language: string; confidence: number }>> {
+		if (!this.isReady()) {
+			throw new Error(`AI provider ${this.config.provider} not ready`);
+		}
+
+		if (songs.length === 0) {
+			return [];
+		}
+
+		const prompt = this.buildLanguageDetectionPrompt(songs);
+		const response = await this.callAI(prompt);
+		return this.parseLanguageResponse(response, songs);
+	}
+
+	/**
+	 * Detect language for a single song
+	 */
+	async detectLanguage(title: string, artist: string): Promise<string> {
+		const results = await this.detectLanguageBatch([{ title, artist }]);
+		return results[0]?.language || 'en';
+	}
+
+	/**
+	 * Build prompt for language detection
+	 */
+	private buildLanguageDetectionPrompt(songs: Array<{ title: string; artist: string }>): string {
+		const songList = songs.map((s, i) => `${i + 1}. "${s.title}" by ${s.artist}`).join('\n');
+
+		return `You are a music language expert. For each song, determine the primary language the lyrics are sung in.
+
+Songs to analyze:
+${songList}
+
+For each song, identify the language using ISO 639-1 codes:
+- en = English
+- fr = French
+- es = Spanish
+- it = Italian
+- de = German
+- pt = Portuguese
+- etc.
+
+Consider:
+1. The artist's nationality and typical language
+2. The song title language
+3. Your knowledge of the actual song
+
+Respond ONLY with a JSON array, no explanation:
+[
+  {"index": 1, "language": "en", "confidence": 95},
+  {"index": 2, "language": "fr", "confidence": 90},
+  ...
+]
+
+JSON response:`;
+	}
+
+	/**
+	 * Parse language detection response
+	 */
+	private parseLanguageResponse(
+		response: string,
+		songs: Array<{ title: string; artist: string }>
+	): Array<{ language: string; confidence: number }> {
+		try {
+			// Extract JSON from markdown code blocks if present
+			let jsonStr = response.trim();
+			const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+			if (codeBlockMatch) {
+				jsonStr = codeBlockMatch[1];
+			}
+
+			const parsed = JSON.parse(jsonStr);
+
+			if (!Array.isArray(parsed)) {
+				throw new Error('Expected JSON array');
+			}
+
+			// Map results back to songs
+			return songs.map((_, i) => {
+				const result = parsed.find((r: any) => r.index === i + 1) || parsed[i];
+				return {
+					language: result?.language || 'en',
+					confidence: result?.confidence || 50
+				};
+			});
+		} catch (error) {
+			console.error('Failed to parse language response:', error, response);
+			// Default to English for all songs on parse failure
+			return songs.map(() => ({
+				language: 'en',
+				confidence: 0
+			}));
+		}
+	}
+
+	/**
 	 * Parse batch AI response
 	 */
 	private parseBatchResponse(response: string, queries: SearchQuery[]): EnrichedTrackMetadata[] {

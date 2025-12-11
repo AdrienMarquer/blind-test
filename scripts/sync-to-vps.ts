@@ -185,7 +185,8 @@ ${colors.bold}${colors.yellow}========================================
         let existingFileSizes: Map<string, number> = new Map();
         try {
           // Get file sizes from pod: "filename size" per line
-          const podFilesOutput = await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- sh -c "cd ${REMOTE_UPLOADS_PATH} && ls -l *.mp3 2>/dev/null | awk '{print \\$NF, \\$5}'" || echo ""`);
+          // Use find instead of ls to handle files starting with - correctly
+          const podFilesOutput = await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- sh -c "cd ${REMOTE_UPLOADS_PATH} && find . -maxdepth 1 -name '*.mp3' -type f -printf '%f %s\\n'" 2>/dev/null || echo ""`);
           for (const line of podFilesOutput.split('\n').filter(Boolean)) {
             const parts = line.trim().split(/\s+/);
             if (parts.length >= 2) {
@@ -222,39 +223,52 @@ ${colors.bold}${colors.yellow}========================================
           const modifiedCount = filesToSync.length - newCount;
           log(`  ${filesToSync.length} files to sync (${newCount} new, ${modifiedCount} modified)`, colors.gray);
 
-          // Create tar archive of files to sync
-          log('  Creating tar archive...', colors.gray);
-          const tarFile = '/tmp/blindtest-uploads.tar.gz';
+          // Batch files to avoid shell file size limits (ulimit -f, typically 1GB)
+          // Each batch targets ~500MB uncompressed to stay well under limit after compression
+          const BATCH_SIZE = 500; // files per batch
+          const batches: string[][] = [];
+          for (let i = 0; i < filesToSync.length; i += BATCH_SIZE) {
+            batches.push(filesToSync.slice(i, i + BATCH_SIZE));
+          }
 
-          // Write file list to temp file for tar
-          const fileListPath = '/tmp/blindtest-filelist.txt';
-          writeFileSync(fileListPath, filesToSync.join('\n'));
+          log(`  Syncing in ${batches.length} batch(es)...`, colors.gray);
 
-          // Create tar with files to sync
-          await $`tar -czf ${tarFile} -C ${LOCAL_UPLOADS_DIR} -T ${fileListPath}`;
-          unlinkSync(fileListPath);
+          for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+            const batch = batches[batchIdx];
+            log(`  Batch ${batchIdx + 1}/${batches.length}: ${batch.length} files`, colors.gray);
 
-          // Get tar size for progress info
-          const tarStats = statSync(tarFile);
-          const tarSizeMB = (tarStats.size / (1024 * 1024)).toFixed(2);
-          log(`    Archive created: ${tarSizeMB} MB (${filesToSync.length} files)`, colors.gray);
+            // Create tar archive of files to sync
+            const tarFile = '/tmp/blindtest-uploads.tar.gz';
 
-          // Transfer tar to VPS (with progress)
-          log('  Transferring archive to VPS...', colors.gray);
-          await $`rsync -avz --progress ${tarFile} ${VPS_HOST}:/tmp/blindtest-uploads.tar.gz`.quiet(false);
+            // Write file list to temp file for tar (use ./ prefix to handle files starting with -)
+            const fileListPath = '/tmp/blindtest-filelist.txt';
+            writeFileSync(fileListPath, batch.map(f => `./${f}`).join('\n'));
 
-          // Copy tar to pod and extract
-          log('  Copying archive to pod...', colors.gray);
-          await sshCmd(`kubectl cp /tmp/blindtest-uploads.tar.gz ${K8S_NAMESPACE}/${podName}:/tmp/blindtest-uploads.tar.gz`);
+            // Create tar with files to sync
+            await $`tar -czf ${tarFile} -C ${LOCAL_UPLOADS_DIR} -T ${fileListPath}`;
+            unlinkSync(fileListPath);
 
-          log('  Extracting archive in pod...', colors.gray);
-          await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- tar -xzf /tmp/blindtest-uploads.tar.gz -C ${REMOTE_UPLOADS_PATH}/`);
+            // Get tar size for progress info
+            const tarStats = statSync(tarFile);
+            const tarSizeMB = (tarStats.size / (1024 * 1024)).toFixed(2);
+            log(`    Archive created: ${tarSizeMB} MB`, colors.gray);
 
-          // Cleanup
-          log('  Cleaning up...', colors.gray);
-          await $`rm ${tarFile}`;
-          await sshCmd('rm /tmp/blindtest-uploads.tar.gz');
-          await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm -f /tmp/blindtest-uploads.tar.gz`);
+            // Transfer tar to VPS (with progress)
+            log('    Transferring to VPS...', colors.gray);
+            await $`rsync -avz --progress ${tarFile} ${VPS_HOST}:/tmp/blindtest-uploads.tar.gz`.quiet(false);
+
+            // Copy tar to pod and extract
+            log('    Copying to pod...', colors.gray);
+            await sshCmd(`kubectl cp /tmp/blindtest-uploads.tar.gz ${K8S_NAMESPACE}/${podName}:/tmp/blindtest-uploads.tar.gz`);
+
+            log('    Extracting in pod...', colors.gray);
+            await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- tar -xzf /tmp/blindtest-uploads.tar.gz -C ${REMOTE_UPLOADS_PATH}/`);
+
+            // Cleanup this batch
+            await $`rm ${tarFile}`;
+            await sshCmd('rm /tmp/blindtest-uploads.tar.gz');
+            await sshCmd(`kubectl exec -n ${K8S_NAMESPACE} ${podName} -- rm -f /tmp/blindtest-uploads.tar.gz`);
+          }
 
           log(`  ${colors.green}${filesToSync.length} files synced!${colors.reset}`);
         }

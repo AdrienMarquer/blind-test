@@ -219,10 +219,14 @@
 		{#if stats.byLanguage.length > 0}
 			{@const enCount = stats.byLanguage.find(l => l.language === 'en')?.count ?? 0}
 			{@const frCount = stats.byLanguage.find(l => l.language === 'fr')?.count ?? 0}
-			{@const otherCount = stats.total - enCount - frCount}
+			{@const esCount = stats.byLanguage.find(l => l.language === 'es')?.count ?? 0}
+			{@const itCount = stats.byLanguage.find(l => l.language === 'it')?.count ?? 0}
+			{@const otherCount = stats.total - enCount - frCount - esCount - itCount}
 			{@const enPercent = Math.round((enCount / stats.total) * 100)}
 			{@const frPercent = Math.round((frCount / stats.total) * 100)}
-			{@const otherPercent = 100 - enPercent - frPercent}
+			{@const esPercent = Math.round((esCount / stats.total) * 100)}
+			{@const itPercent = Math.round((itCount / stats.total) * 100)}
+			{@const otherPercent = Math.max(0, 100 - enPercent - frPercent - esPercent - itPercent)}
 			<div class="language-stats">
 				<h4>Par langue</h4>
 				<div class="language-bar">
@@ -236,15 +240,31 @@
 							{#if frPercent >= 10}🇫🇷 {frPercent}%{/if}
 						</div>
 					{/if}
+					{#if esPercent > 0}
+						<div class="lang-segment es" style="width: {esPercent}%" title="Espagnol: {esCount} ({esPercent}%)">
+							{#if esPercent >= 5}🇪🇸 {esPercent}%{/if}
+						</div>
+					{/if}
+					{#if itPercent > 0}
+						<div class="lang-segment it" style="width: {itPercent}%" title="Italien: {itCount} ({itPercent}%)">
+							{#if itPercent >= 5}🇮🇹 {itPercent}%{/if}
+						</div>
+					{/if}
 					{#if otherPercent > 0}
 						<div class="lang-segment other" style="width: {otherPercent}%" title="Autre: {otherCount} ({otherPercent}%)">
-							{#if otherPercent >= 10}🌍 {otherPercent}%{/if}
+							{#if otherPercent >= 5}🌍 {otherPercent}%{/if}
 						</div>
 					{/if}
 				</div>
 				<div class="language-legend">
 					<span class="legend-item"><span class="dot en"></span> Anglais: {enCount}</span>
 					<span class="legend-item"><span class="dot fr"></span> Français: {frCount}</span>
+					{#if esCount > 0}
+						<span class="legend-item"><span class="dot es"></span> Espagnol: {esCount}</span>
+					{/if}
+					{#if itCount > 0}
+						<span class="legend-item"><span class="dot it"></span> Italien: {itCount}</span>
+					{/if}
 					{#if otherCount > 0}
 						<span class="legend-item"><span class="dot other"></span> Autre: {otherCount}</span>
 					{/if}
@@ -430,6 +450,14 @@
 		background: linear-gradient(135deg, #ef4c83, #ff6b9d);
 	}
 
+	.lang-segment.es {
+		background: linear-gradient(135deg, #f47a20, #ff9f5a);
+	}
+
+	.lang-segment.it {
+		background: linear-gradient(135deg, #2a5068, #436a82);
+	}
+
 	.lang-segment.other {
 		background: linear-gradient(135deg, #f8c027, #ffd666);
 		color: #122b3b;
@@ -462,6 +490,14 @@
 
 	.dot.fr {
 		background: #ef4c83;
+	}
+
+	.dot.es {
+		background: #f47a20;
+	}
+
+	.dot.it {
+		background: #2a5068;
 	}
 
 	.dot.other {
