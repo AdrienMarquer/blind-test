@@ -848,6 +848,19 @@ async function handleGameRestart(
         players: updatedPlayers
       }
     });
+
+    // Re-broadcast master playing status so players see the master in the list
+    const masterPlayingStatus = getMasterPlayingStatus(roomId);
+    if (masterPlayingStatus.playing) {
+      broadcastToRoom(roomId, {
+        type: 'master:playing',
+        data: masterPlayingStatus
+      });
+      wsLogger.info('Re-broadcast master playing status after restart', {
+        roomId,
+        masterPlaying: masterPlayingStatus
+      });
+    }
   } catch (error) {
     wsLogger.error('Failed to restart game', error, { roomId });
     sendMessage(ws, {

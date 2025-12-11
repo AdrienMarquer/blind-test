@@ -5,31 +5,64 @@
 		players: Player[];
 		room: Room;
 		isMaster: boolean;
-		onRemovePlayer: (playerId: string) => void;
+		masterPlaying?: { playing: boolean; playerName: string | null } | null;
+		onRemovePlayer?: (playerId: string) => void;
 	}
 
-	let { players, room, isMaster, onRemovePlayer }: Props = $props();
+	let { players, room, isMaster, masterPlaying, onRemovePlayer }: Props = $props();
+
+	// Sort players: connected first, then by score, then alphabetically
+	const sortedPlayers = $derived(
+		players
+			.slice()
+			.sort((a, b) => {
+				if (a.connected === b.connected) {
+					if (a.score === b.score) {
+						return a.name.localeCompare(b.name);
+					}
+					return b.score - a.score;
+				}
+				return Number(b.connected) - Number(a.connected);
+			})
+	);
+
+	// Total player count including master if playing
+	const totalPlayers = $derived(
+		players.length + (masterPlaying?.playing ? 1 : 0)
+	);
 </script>
 
 <section class="players-section">
-	<h2>Joueurs ({players.length}/{room.maxPlayers})</h2>
-
-	{#if players.length === 0}
-		<p class="empty">Aucun joueur pour l’instant. Lance-toi !</p>
+	{#if totalPlayers === 0}
+		<p class="empty">Aucun joueur pour l'instant. Lance-toi !</p>
 	{:else}
 		<div class="players-list">
-			{#each players as player (player.id)}
-				<div class="player-card" class:disconnected={!player.connected}>
-					<div class="player-info">
-						<span class="player-name">
-							{player.name}
-							{#if !player.connected}
-								<span class="status-badge">Hors ligne</span>
-							{/if}
-						</span>
-						<span class="player-score">Score : {player.score}</span>
+			<!-- Master player entry (shown first with special styling) -->
+			{#if masterPlaying?.playing && masterPlaying.playerName}
+				<div class="player-chip master-player">
+					<div class="chip-avatar master">
+						{masterPlaying.playerName.slice(0, 2).toUpperCase()}
 					</div>
-					{#if room.status === 'lobby' && isMaster}
+					<div class="chip-info">
+						<strong>{masterPlaying.playerName}</strong>
+						<span class="master-badge">Maître du jeu</span>
+					</div>
+					<span class="chip-score">0 pts</span>
+				</div>
+			{/if}
+
+			<!-- Regular players -->
+			{#each sortedPlayers as player (player.id)}
+				<div class="player-chip" class:offline={!player.connected}>
+					<div class="chip-avatar">
+						{player.name.slice(0, 2).toUpperCase()}
+					</div>
+					<div class="chip-info">
+						<strong>{player.name}</strong>
+						<span>{player.connected ? 'Connecté' : 'Hors ligne'}</span>
+					</div>
+					<span class="chip-score">{player.score} pts</span>
+					{#if room.status === 'lobby' && isMaster && onRemovePlayer}
 						<button
 							class="remove-button"
 							onclick={() => onRemovePlayer(player.id)}
@@ -45,89 +78,94 @@
 
 <style>
 	.players-section {
-		background: white;
-		padding: 2rem;
-		border-radius: 12px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-		margin-bottom: 2rem;
-	}
-
-	h2 {
-		margin: 0 0 1.5rem 0;
-		color: #333;
-		font-size: 1.5rem;
+		width: 100%;
 	}
 
 	.empty {
 		text-align: center;
-		color: #666;
-		padding: 2rem;
-		background: #f5f5f5;
-		border-radius: 8px;
+		padding: 1rem;
+		color: var(--aq-color-muted);
 	}
 
 	.players-list {
-		display: grid;
-		gap: 1rem;
-	}
-
-	.player-card {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 1rem 1.5rem;
-		background: #f9f9f9;
-		border-radius: 8px;
-		transition: all 0.2s;
-	}
-
-	.player-card:hover {
-		background: #f0f0f0;
-		transform: translateY(-2px);
-	}
-
-	.player-card.disconnected {
-		opacity: 0.6;
-		background: #fafafa;
-	}
-
-	.player-info {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+		gap: 0.85rem;
 	}
 
-	.player-name {
-		font-weight: 600;
-		font-size: 1.1rem;
-		color: #333;
-		display: flex;
+	.player-chip {
+		display: grid;
+		grid-template-columns: auto 1fr auto auto;
+		gap: 0.75rem;
 		align-items: center;
-		gap: 0.5rem;
+		padding: 0.85rem;
+		border-radius: var(--aq-radius-lg);
+		background: rgba(18, 43, 59, 0.05);
+		border: 1px solid rgba(18, 43, 59, 0.08);
+		position: relative;
 	}
 
-	.player-score {
-		color: #666;
-		font-size: 0.9rem;
+	.player-chip.offline {
+		opacity: 0.6;
 	}
 
-	.status-badge {
-		font-size: 0.75rem;
-		padding: 0.25rem 0.5rem;
-		background: #ff9800;
+	/* Master player special styling */
+	.player-chip.master-player {
+		background: linear-gradient(135deg, rgba(244, 122, 32, 0.15), rgba(248, 192, 39, 0.15));
+		border: 2px solid rgba(244, 122, 32, 0.4);
+		box-shadow: 0 2px 8px rgba(244, 122, 32, 0.15);
+	}
+
+	.chip-avatar {
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, rgba(239, 76, 131, 0.2), rgba(244, 122, 32, 0.2));
+		display: grid;
+		place-items: center;
+		font-weight: 700;
+		color: var(--aq-color-deep);
+	}
+
+	.chip-avatar.master {
+		background: linear-gradient(135deg, #f47a20, #f8c027);
 		color: white;
-		border-radius: 12px;
-		font-weight: 500;
+	}
+
+	.chip-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.chip-info strong {
+		color: var(--aq-color-deep);
+	}
+
+	.chip-info span {
+		font-size: 0.85rem;
+		color: var(--aq-color-muted);
+	}
+
+	.master-badge {
+		color: #f47a20 !important;
+		font-weight: 600;
+	}
+
+	.chip-score {
+		font-weight: 700;
+		color: var(--aq-color-deep);
 	}
 
 	.remove-button {
-		padding: 0.5rem 1rem;
+		padding: 0.4rem 0.75rem;
 		background: #f44336;
 		color: white;
 		border: none;
 		border-radius: 6px;
 		cursor: pointer;
 		font-weight: 500;
+		font-size: 0.85rem;
 		transition: background 0.2s;
 	}
 

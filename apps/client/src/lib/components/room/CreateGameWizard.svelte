@@ -8,10 +8,12 @@
 	import { validatePlayerName, PLAYER_CONFIG } from '@blind-test/shared';
 	import RoundBuilder from './RoundBuilder.svelte';
 	import ConfigSummary from './ConfigSummary.svelte';
+	import PlayersList from './PlayersList.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import InputField from '$lib/components/ui/InputField.svelte';
 	import { getDefaultRounds } from '$lib/presets';
 	import { gamePresets, masterPlayingPreset, cloneRounds } from '$lib/gamePresets';
+	import { roomApi } from '$lib/api-helpers';
 
 	interface Props {
 		room: Room;
@@ -109,6 +111,33 @@
 
 	$effect(() => {
 		masterNameError = validateMasterName(masterPlayerName);
+	});
+
+	// Broadcast master playing status to server when it changes
+	// This allows players to see the master in the player list
+	let lastBroadcastedStatus = $state<{ playing: boolean; playerName: string | null } | null>(null);
+	$effect(() => {
+		const currentStatus = {
+			playing: masterPlaying,
+			playerName: masterPlaying && masterPlayerName.trim() ? masterPlayerName.trim() : null
+		};
+
+		// Only broadcast if status actually changed
+		if (
+			lastBroadcastedStatus === null ||
+			lastBroadcastedStatus.playing !== currentStatus.playing ||
+			lastBroadcastedStatus.playerName !== currentStatus.playerName
+		) {
+			// Don't broadcast if playing but name is empty (wait for name to be entered)
+			if (currentStatus.playing && !currentStatus.playerName) {
+				return;
+			}
+
+			lastBroadcastedStatus = currentStatus;
+			roomApi.setMasterPlaying(room.id, currentStatus.playing, currentStatus.playerName ?? undefined)
+				.then(() => console.log('[Wizard] Broadcast master playing status:', currentStatus))
+				.catch(err => console.error('[Wizard] Failed to broadcast master playing status:', err));
+		}
 	});
 
 	// Can proceed to next step?
@@ -210,45 +239,6 @@
 		}
 	}
 
-	// Players with master preview
-	const playersWithMasterPreview = $derived.by(() => {
-		// Filter out existing master player to avoid duplicates when showing preview
-		const list = room.masterPlayerId
-			? players.filter(p => p.id !== room.masterPlayerId)
-			: [...players];
-		if (masterPlaying && masterPlayerName.trim()) {
-			list.push({
-				id: 'master-preview',
-				name: masterPlayerName.trim(),
-				roomId: room.id,
-				role: 'player',
-				connected: true,
-				joinedAt: new Date(),
-				score: 0,
-				roundScore: 0,
-				isActive: false,
-				isLockedOut: false,
-				isMasterPreview: true,
-				stats: {
-					totalAnswers: 0,
-					correctAnswers: 0,
-					wrongAnswers: 0,
-					buzzCount: 0,
-					averageAnswerTime: 0
-				}
-			} as Player & { isMasterPreview?: boolean });
-		}
-		return list;
-	});
-
-	const sortedPlayers = $derived(
-		playersWithMasterPreview.slice().sort((a, b) => {
-			if (a.connected === b.connected) {
-				return a.name.localeCompare(b.name);
-			}
-			return Number(b.connected) - Number(a.connected);
-		})
-	);
 </script>
 
 <section class="wizard">
@@ -407,33 +397,14 @@
 				</div>
 
 				<div class="players-section">
-					<h3>Joueurs connectés ({sortedPlayers.length})</h3>
-					{#if sortedPlayers.length === 0}
-						<p class="no-players">Aucun joueur pour l'instant. Partage le code !</p>
-					{:else}
-						<div class="player-grid">
-							{#each sortedPlayers as player (player.id)}
-								{@const isMasterPreview = (player as any).isMasterPreview}
-								<div class="player-chip" class:offline={!player.connected} class:master-preview={isMasterPreview}>
-									<div class="chip-avatar">{player.name.slice(0, 2).toUpperCase()}</div>
-									<div class="chip-info">
-										<strong>{player.name}</strong>
-										<span>{isMasterPreview ? '🎮 Toi (hôte)' : player.connected ? 'Connecté' : 'Hors ligne'}</span>
-									</div>
-									{#if !isMasterPreview}
-										<button
-											type="button"
-											class="chip-remove"
-											onclick={() => onRemovePlayer(player.id)}
-											title="Retirer le joueur"
-										>
-											✕
-										</button>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					{/if}
+					<h3>Joueurs connectés</h3>
+					<PlayersList
+						{players}
+						{room}
+						isMaster={true}
+						masterPlaying={masterPlaying && masterPlayerName.trim() ? { playing: true, playerName: masterPlayerName.trim() } : null}
+						{onRemovePlayer}
+					/>
 				</div>
 
 				<div class="config-summary">
@@ -837,90 +808,6 @@
 		margin: 0 0 1rem 0;
 		font-size: 1rem;
 		color: var(--aq-color-deep);
-	}
-
-	.no-players {
-		text-align: center;
-		padding: 1.5rem;
-		color: var(--aq-color-muted);
-		font-style: italic;
-	}
-
-	.player-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.player-chip {
-		display: grid;
-		grid-template-columns: auto 1fr auto;
-		gap: 0.75rem;
-		align-items: center;
-		padding: 0.75rem;
-		border-radius: 12px;
-		background: white;
-		border: 1px solid rgba(18, 43, 59, 0.08);
-	}
-
-	.player-chip.offline {
-		opacity: 0.6;
-	}
-
-	.player-chip.master-preview {
-		background: linear-gradient(135deg, rgba(239, 76, 131, 0.1), rgba(248, 192, 39, 0.1));
-		border: 2px solid rgba(239, 76, 131, 0.3);
-	}
-
-	.chip-avatar {
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(239, 76, 131, 0.2), rgba(244, 122, 32, 0.2));
-		display: grid;
-		place-items: center;
-		font-weight: 700;
-		font-size: 0.85rem;
-		color: var(--aq-color-deep);
-	}
-
-	.player-chip.master-preview .chip-avatar {
-		background: linear-gradient(135deg, var(--aq-color-primary), var(--aq-color-accent));
-		color: white;
-	}
-
-	.chip-info {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.chip-info strong {
-		font-size: 0.95rem;
-	}
-
-	.chip-info span {
-		font-size: 0.8rem;
-		color: var(--aq-color-muted);
-	}
-
-	.chip-remove {
-		border: none;
-		background: rgba(239, 76, 131, 0.15);
-		color: var(--aq-color-primary);
-		border-radius: 50%;
-		width: 28px;
-		height: 28px;
-		display: grid;
-		place-items: center;
-		cursor: pointer;
-		font-size: 0.85rem;
-		font-weight: 700;
-		transition: all 0.2s ease;
-	}
-
-	.chip-remove:hover {
-		background: rgba(239, 76, 131, 0.25);
-		transform: scale(1.1);
 	}
 
 	.config-summary {

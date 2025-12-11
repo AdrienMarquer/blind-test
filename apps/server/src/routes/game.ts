@@ -15,7 +15,6 @@ import { db, schema } from '../db';
 import { broadcastToRoom } from '../websocket/handler';
 import { gameService } from '../services/GameService';
 import { logger } from '../utils/logger';
-import { clearMasterPlayingStatus } from './rooms';
 
 const apiLogger = logger.child({ module: 'API:Game' });
 
@@ -196,8 +195,7 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
       const updated = await roomRepository.update(roomId, { status: 'playing' });
       apiLogger.info('Game started', { roomId, code: room.code, roundCount: rounds.length });
 
-      // Clear the in-memory master playing status (no longer needed once game starts)
-      clearMasterPlayingStatus(roomId);
+      // Note: We keep masterPlayingStatus so it can be re-broadcast when returning to lobby after game ends
 
       // Broadcast game start FIRST - before startRound
       // This ensures clients have masterPlayerId set before the game interface renders

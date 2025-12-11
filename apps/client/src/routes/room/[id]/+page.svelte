@@ -11,6 +11,7 @@
 	import CreateGameWizard from '$lib/components/room/CreateGameWizard.svelte';
 	import FinalScores from '$lib/components/room/FinalScores.svelte';
 	import BetweenRounds from '$lib/components/game/BetweenRounds.svelte';
+	import PlayersList from '$lib/components/room/PlayersList.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
 	import InputField from '$lib/components/ui/InputField.svelte';
@@ -86,6 +87,7 @@
 	let wsRoom = $state<Room | null>(null);
 	let players = $state<Player[]>([]);
 	let reconnecting = $state(false);
+	let masterPlaying = $state<{ playing: boolean; playerName: string | null } | null>(null);
 
 	// Derived room state (prefer WebSocket room if available, otherwise use initialRoom)
 	const room = $derived(wsRoom ?? initialRoom);
@@ -567,11 +569,21 @@
 				showFinalScores = false;
 				finalScores = [];
 				betweenRoundsData = null;
+				// Clear master playing status (will be set again when master configures new game)
+				masterPlaying = null;
 				// Load songs for master to start new game
 				if (isMaster) {
 					loadSongs();
 				}
 				roomSocket.events.clear('gameRestarted');
+			}
+		});
+
+		// Listen for master:playing status updates
+		$effect(() => {
+			if (roomSocket?.events.masterPlaying) {
+				console.log('[Room] Master playing status updated', roomSocket.events.masterPlaying);
+				masterPlaying = roomSocket.events.masterPlaying;
 			}
 		});
 	});
@@ -651,22 +663,12 @@
 		{#if !showFinalScores && !isMaster && !((room.status === 'playing' || room.status === 'between_rounds') && currentPlayer)}
 			<div class="room-panels">
 				<Card title={`Joueurs`} subtitle={room.status === 'lobby' ? 'En attente du lancement' : 'Scores mis à jour en direct'} icon="👥">
-					{#if sortedPlayers.length === 0}
-						<p class="empty">Aucun joueur pour l'instant.</p>
-					{:else}
-						<div class="player-grid">
-							{#each sortedPlayers as player (player.id)}
-								<div class="player-chip" class:offline={!player.connected}>
-									<div class="chip-avatar">{player.name.slice(0, 2).toUpperCase()}</div>
-									<div class="chip-info">
-										<strong>{player.name}</strong>
-										<span>{player.connected ? 'Connecté' : 'Hors ligne'}</span>
-									</div>
-									<span class="chip-score">{player.score} pts</span>
-								</div>
-							{/each}
-						</div>
-					{/if}
+					<PlayersList
+						{players}
+						{room}
+						{isMaster}
+						{masterPlaying}
+					/>
 				</Card>
 
 				<div class="side-stack">
@@ -893,49 +895,6 @@
 		}
 	}
 
-	.player-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
-	}
-
-	.player-chip {
-		display: grid;
-		grid-template-columns: auto 1fr auto auto;
-		gap: 0.75rem;
-		align-items: center;
-		padding: 0.85rem;
-		border-radius: var(--aq-radius-lg);
-		background: rgba(18, 43, 59, 0.05);
-		border: 1px solid rgba(18, 43, 59, 0.08);
-		position: relative;
-	}
-
-	.player-chip.offline {
-		opacity: 0.6;
-	}
-
-	.chip-avatar {
-		width: 48px;
-		height: 48px;
-		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(239, 76, 131, 0.2), rgba(244, 122, 32, 0.2));
-		display: grid;
-		place-items: center;
-		font-weight: 700;
-		color: var(--aq-color-deep);
-	}
-
-	.chip-info span {
-		font-size: 0.85rem;
-		color: var(--aq-color-muted);
-	}
-
-	.chip-score {
-		font-weight: 700;
-		color: var(--aq-color-deep);
-	}
-
 	.side-stack {
 		display: flex;
 		flex-direction: column;
@@ -956,12 +915,6 @@
 	.info-list {
 		margin: 0;
 		padding-left: 1.25rem;
-		color: var(--aq-color-muted);
-	}
-
-	.empty {
-		text-align: center;
-		padding: 1rem;
 		color: var(--aq-color-muted);
 	}
 

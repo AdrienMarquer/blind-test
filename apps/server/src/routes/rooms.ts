@@ -184,6 +184,8 @@ export const roomRoutes = new Elysia({ prefix: '/api/rooms' })
         await playerRepository.deleteByRoom(roomId);
         // Delete room
         await roomRepository.delete(roomId);
+        // Clear master playing status
+        clearMasterPlayingStatus(roomId);
 
         apiLogger.info('Deleted room', { roomId, code: room.code });
         set.status = 204;
