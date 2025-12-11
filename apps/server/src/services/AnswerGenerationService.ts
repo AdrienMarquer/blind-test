@@ -4,7 +4,7 @@
  */
 
 import type { Song, MediaQuestion, AnswerChoice, MediaType } from '@blind-test/shared';
-import { songRepository } from '../repositories';
+import { songRepository, artistRepository } from '../repositories';
 import { logger } from '../utils/logger';
 
 const serviceLogger = logger.child({ module: 'AnswerGeneration' });
@@ -27,6 +27,47 @@ export class AnswerGenerationService {
 	}
 
 	private async getArtistDistractors(correctSong: Song, desiredCount: number): Promise<WrongAnswer[]> {
+		// PRIORITY 1: Use related artists from database if available
+		if (correctSong.artistId) {
+			try {
+				const relatedArtists = await artistRepository.getRelatedArtists(correctSong.artistId);
+
+				if (relatedArtists.length >= desiredCount) {
+					serviceLogger.debug('Using related artists from database', {
+						songId: correctSong.id,
+						artistId: correctSong.artistId,
+						relatedCount: relatedArtists.length,
+					});
+
+					// Shuffle related artists to get variety
+					const shuffled = this.shuffleArray([...relatedArtists]);
+					const selected = shuffled.slice(0, desiredCount);
+
+					// Convert to WrongAnswer format
+					const wrongAnswers: WrongAnswer[] = selected.map(artist => ({
+						title: '', // Not needed for artist-type questions
+						artist: artist.name,
+						isInLibrary: false, // These are related artists, not necessarily in library
+					}));
+
+					return wrongAnswers;
+				}
+
+				// Not enough related artists, log and fall through to genre-based matching
+				if (relatedArtists.length > 0) {
+					serviceLogger.debug('Not enough related artists, supplementing with genre-based', {
+						songId: correctSong.id,
+						artistId: correctSong.artistId,
+						relatedCount: relatedArtists.length,
+						needed: desiredCount,
+					});
+				}
+			} catch (error) {
+				serviceLogger.error('Error fetching related artists', { error, artistId: correctSong.artistId });
+			}
+		}
+
+		// FALLBACK: Genre/language/year-based matching
 		const allSongs = await this.repository.findAll();
 		if (!allSongs.length) {
 			serviceLogger.warn('No songs in repository for artist distractors');

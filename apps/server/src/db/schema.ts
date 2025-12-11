@@ -4,7 +4,7 @@
  * SQLite version
  */
 
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ============================================================================
@@ -61,7 +61,8 @@ export const songs = sqliteTable('songs', {
 
   // Metadata (from ID3 tags or Spotify)
   title: text('title').notNull(),
-  artist: text('artist').notNull(),
+  artist: text('artist').notNull(), // Display name (kept for backward compatibility)
+  artistId: text('artist_id'), // Foreign key to artists table (will be linked after artists table is created)
   album: text('album'),
   year: integer('year').notNull(), // Mandatory - Release year
   genre: text('genre'),
@@ -91,6 +92,40 @@ export const songs = sqliteTable('songs', {
   yearIdx: index('songs_year_idx').on(table.year),
   spotifyIdIdx: index('songs_spotify_id_idx').on(table.spotifyId),
   youtubeIdIdx: index('songs_youtube_id_idx').on(table.youtubeId),
+  artistIdIdx: index('songs_artist_id_idx').on(table.artistId),
+}));
+
+// ============================================================================
+// Artists Table
+// ============================================================================
+
+export const artists = sqliteTable('artists', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  spotifyId: text('spotify_id').unique(),
+  genres: text('genres', { mode: 'json' }).$type<string[]>(),
+  popularity: integer('popularity'),
+  imageUrl: text('image_url'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => ({
+  spotifyIdIdx: index('artists_spotify_id_idx').on(table.spotifyId),
+  nameIdx: index('artists_name_idx').on(table.name),
+}));
+
+// ============================================================================
+// Artist Relations Table (self-referencing many-to-many)
+// ============================================================================
+
+export const artistRelations = sqliteTable('artist_relations', {
+  id: text('id').primaryKey(),
+  artistId: text('artist_id').notNull().references(() => artists.id, { onDelete: 'cascade' }),
+  relatedArtistId: text('related_artist_id').notNull().references(() => artists.id, { onDelete: 'cascade' }),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => ({
+  artistIdIdx: index('artist_relations_artist_id_idx').on(table.artistId),
+  relatedArtistIdIdx: index('artist_relations_related_artist_id_idx').on(table.relatedArtistId),
+  uniqueRelation: uniqueIndex('artist_relations_unique').on(table.artistId, table.relatedArtistId),
 }));
 
 // ============================================================================

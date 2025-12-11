@@ -16,7 +16,7 @@ export type RoundStatus = 'pending' | 'active' | 'finished';
 export const CANONICAL_GENRES = [
   'Afrobeat', 'Alternative', 'Ambient',
   'Blues',
-  'Chanson', 'Classical', 'Country',
+  'Classical', 'Country',
   'Disney', 'Drum & Bass', 'Dubstep',
   'Electronic',
   'Folk', 'Funk',
@@ -30,6 +30,7 @@ export const CANONICAL_GENRES = [
   'R&B', 'Reggae', 'Reggaeton', 'Rock',
   'Soul',
   'Techno', 'Trance',
+  'Variété Française',
 ] as const;
 
 export type CanonicalGenre = typeof CANONICAL_GENRES[number];
@@ -190,7 +191,8 @@ export interface Song {
 
   // Metadata (from ID3 tags or Spotify)
   title: string;
-  artist: string;
+  artist: string;              // Display name (kept for backward compatibility)
+  artistId?: string;           // Foreign key to Artist table
   album?: string;
   year: number;                // Mandatory - Release year
   genre?: string;
@@ -215,6 +217,17 @@ export interface Song {
   createdAt: Date;
   fileSize: number;            // Bytes
   format: string;              // 'mp3' | 'm4a' | 'wav' | 'flac'
+}
+
+export interface Artist {
+  id: string;
+  name: string;
+  spotifyId?: string;          // Spotify artist ID for API lookups
+  genres?: string[];           // Spotify genres array
+  popularity?: number;         // Spotify popularity (0-100)
+  imageUrl?: string;           // Artist image from Spotify
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Playlist {

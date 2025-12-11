@@ -100,6 +100,7 @@ export class RoomSocket {
   // Timer state
   songTimeRemaining = $state<number>(0);
   answerTimeRemaining = $state<number>(0);
+  answerTimerMax = $state<number>(6); // Max value for progress bar calculation (default 6s)
   answerPlayerId = $state<string | null>(null);
 
   constructor(
@@ -362,6 +363,7 @@ export class RoomSocket {
         // Initialize answer timer with value from server to avoid showing stale timer
         if (message.data.answerTimer) {
           this.answerTimeRemaining = message.data.answerTimer;
+          this.answerTimerMax = message.data.answerTimer; // Store max for progress bar
         }
         this.events.playerBuzzed = message.data;
         break;
@@ -371,13 +373,17 @@ export class RoomSocket {
         break;
 
       case 'answer:result':
+        // Reset answer timer when result is received
+        this.answerTimeRemaining = 0;
+        this.answerPlayerId = null;
         this.events.answerResult = message.data;
         break;
 
       case 'choices:title':
-        // Reset answer timer for title question (fresh 6 seconds)
+        // Reset answer timer for title question (fresh timer)
         if (message.data.answerTimer) {
           this.answerTimeRemaining = message.data.answerTimer;
+          this.answerTimerMax = message.data.answerTimer; // Store max for progress bar
         }
         this.events.titleChoices = message.data;
         break;

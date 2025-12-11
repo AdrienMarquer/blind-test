@@ -9,50 +9,11 @@
  * - Provider-specific format differences
  */
 
-export const CANONICAL_GENRES = [
-  // Rock Family
-  'Rock',
-  'Metal',
-  'Punk',
-  'Alternative',
-  'Indie',
+// Import canonical genres from shared package (single source of truth)
+import { CANONICAL_GENRES, type CanonicalGenre } from '@blind-test/shared';
 
-  // Pop Family
-  'Pop',
-  'K-Pop',
-  'Chanson',
-
-  // Urban Family
-  'Hip-Hop/Rap',
-  'R&B',
-  'Soul',
-  'Funk',
-
-  // Electronic Family
-  'Electronic',
-  'House',
-  'Techno',
-  'Trance',
-  'Drum & Bass',
-  'Dubstep',
-  'Ambient',
-
-  // Traditional/World
-  'Jazz',
-  'Blues',
-  'Country',
-  'Folk',
-  'Classical',
-  'Latin',
-  'Reggae',
-  'Reggaeton',
-  'Afrobeat',
-
-  // Soundtrack/Kids
-  'Disney',
-] as const;
-
-export type CanonicalGenre = typeof CANONICAL_GENRES[number];
+// Re-export for backward compatibility
+export { CANONICAL_GENRES, type CanonicalGenre };
 
 /**
  * Mapping from provider-specific genre strings to canonical genres
@@ -123,12 +84,16 @@ const GENRE_MAPPING: Record<string, CanonicalGenre> = {
   'kpop': 'K-Pop',
   'korean pop': 'K-Pop',
 
-  'chanson': 'Chanson',
-  'chanson française': 'Chanson',
-  'chanson francaise': 'Chanson',
-  'french pop': 'Chanson',
-  'variété française': 'Chanson',
-  'variete francaise': 'Chanson',
+  'chanson': 'Variété Française',
+  'chanson française': 'Variété Française',
+  'chanson francaise': 'Variété Française',
+  'french pop': 'Variété Française',
+  'variété française': 'Variété Française',
+  'variete francaise': 'Variété Française',
+  'variété': 'Variété Française',
+  'variete': 'Variété Française',
+  'pop française': 'Variété Française',
+  'pop francaise': 'Variété Française',
 
   // Urban Family
   'hip hop': 'Hip-Hop/Rap',

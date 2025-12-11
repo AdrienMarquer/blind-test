@@ -3,9 +3,13 @@
 	interface Props {
 		onSubmit: (titleAnswer: string, artistAnswer: string) => void;
 		answerTimeRemaining: number;
+		answerTimerMax: number;
 	}
 
-	const { onSubmit, answerTimeRemaining }: Props = $props();
+	const { onSubmit, answerTimeRemaining, answerTimerMax }: Props = $props();
+
+	// Calculate progress percentage (0-100, decreasing)
+	const timerProgress = $derived(answerTimerMax > 0 ? (answerTimeRemaining / answerTimerMax) * 100 : 0);
 
 	let titleInput = $state('');
 	let artistInput = $state('');
@@ -22,8 +26,15 @@
 <div class="text-input-ui">
 	<div class="input-header">
 		<p class="status-text">✍️ Tape le titre et/ou l'artiste</p>
-		<div class="timer">
-			<span>{answerTimeRemaining}s</span>
+		<div class="timer-container">
+			<div class="timer-bar">
+				<div
+					class="timer-fill"
+					class:urgent={answerTimeRemaining <= 2}
+					style="width: {timerProgress}%"
+				></div>
+			</div>
+			<span class="timer-text" class:urgent={answerTimeRemaining <= 2}>{answerTimeRemaining}s</span>
 		</div>
 	</div>
 
@@ -73,17 +84,53 @@
 		font-size: 1.1rem;
 		font-weight: 600;
 		color: var(--aq-color-deep);
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.75rem;
 	}
 
-	.timer {
-		background: rgba(239, 76, 131, 0.15);
+	.timer-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+	}
+
+	.timer-bar {
+		flex: 1;
+		max-width: 200px;
+		height: 8px;
+		background: rgba(18, 43, 59, 0.1);
 		border-radius: 999px;
-		padding: 0.5rem 1.25rem;
-		display: inline-block;
+		overflow: hidden;
+	}
+
+	.timer-fill {
+		height: 100%;
+		background: linear-gradient(90deg, var(--aq-color-primary), var(--aq-color-secondary));
+		border-radius: 999px;
+		transition: width 0.3s linear;
+	}
+
+	.timer-fill.urgent {
+		background: linear-gradient(90deg, #ef4444, #f97316);
+		animation: pulse-urgent 0.5s ease-in-out infinite;
+	}
+
+	@keyframes pulse-urgent {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
+	}
+
+	.timer-text {
 		font-weight: 700;
+		font-size: 1.1rem;
 		color: var(--aq-color-primary);
-		font-size: 1.25rem;
+		min-width: 2.5rem;
+		text-align: center;
+	}
+
+	.timer-text.urgent {
+		color: #ef4444;
+		animation: pulse-urgent 0.5s ease-in-out infinite;
 	}
 
 	.input-group {

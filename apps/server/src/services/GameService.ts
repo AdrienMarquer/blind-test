@@ -479,6 +479,18 @@ export class GameService {
 
     const modeHandler = modeRegistry.get(round.modeType);
 
+    // RACE CONDITION FIX: Validate that player is still the active player
+    // This prevents late answers from being processed after timer expiry
+    if (song.activePlayerId !== playerId) {
+      gameLogger.warn('Answer rejected - player is no longer active (timer likely expired)', {
+        roomId,
+        playerId,
+        activePlayerId: song.activePlayerId,
+        answerType: answer.type
+      });
+      throw new Error('Answer timer expired - you are no longer the active player');
+    }
+
     // Clear answer timer (player answered in time)
     timerManager.clearAnswerTimer(roomId);
 

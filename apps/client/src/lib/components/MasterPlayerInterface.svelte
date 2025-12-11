@@ -75,6 +75,7 @@
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
 	const answerTimeRemaining = $derived(socket.answerTimeRemaining);
+	const answerTimerMax = $derived(socket.answerTimerMax);
 
 	// Player score
 	let score = $state(player.score);
@@ -564,6 +565,7 @@
 			currentChoices={gameState.choices}
 			answerType={gameState.answerType}
 			answerTimeRemaining={answerTimeRemaining}
+			answerTimerMax={answerTimerMax}
 			onAnswer={handleAnswer}
 		/>
 	{/if}

@@ -17,16 +17,17 @@
  *   --auto-crop        Detect and trim leading silence from existing audio files
  */
 
-import { SpotifyApi } from '@spotify/web-api-ts-sdk';
-import YoutubeSearch from 'youtube-search-api';
-import path from 'path';
-import fs from 'fs/promises';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { db, schema, runMigrations } from '../index';
-import { generateId } from '@blind-test/shared';
-import { sql, isNull, eq } from 'drizzle-orm';
-import { GenreMapper } from '../../services/GenreMapper';
+import { SpotifyApi } from "@spotify/web-api-ts-sdk";
+import YoutubeSearch from "youtube-search-api";
+import path from "path";
+import fs from "fs/promises";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { db, schema, runMigrations } from "../index";
+import { generateId } from "@blind-test/shared";
+import { sql, isNull, eq } from "drizzle-orm";
+import { artistRepository } from "../../repositories";
+import { GenreMapper } from "../../services/GenreMapper";
 import {
   getAllSeedEntries,
   getExistingDataMap,
@@ -34,7 +35,7 @@ import {
   getFailedEntries,
   type SeedEntry,
   type EnrichedSong,
-} from './musiques';
+} from "./musiques";
 
 const execAsync = promisify(exec);
 
@@ -49,13 +50,13 @@ const execAsync = promisify(exec);
 function sanitizeFilename(str: string): string {
   return str
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove accents
-    .replace(/[^a-z0-9\s-]/g, '')    // Remove special chars
-    .replace(/\s+/g, '_')            // Spaces to underscores
-    .replace(/_+/g, '_')             // Collapse multiple underscores
-    .replace(/^_|_$/g, '')           // Trim leading/trailing underscores
-    .substring(0, 50);               // Limit length
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[^a-z0-9\s-]/g, "") // Remove special chars
+    .replace(/\s+/g, "_") // Spaces to underscores
+    .replace(/_+/g, "_") // Collapse multiple underscores
+    .replace(/^_|_$/g, "") // Trim leading/trailing underscores
+    .substring(0, 50); // Limit length
 }
 
 // Types are imported from ./musiques.ts
@@ -66,22 +67,22 @@ function sanitizeFilename(str: string): string {
 
 // Server root directory (apps/server/)
 // __dirname is apps/server/src/db/seed, so go up 3 levels
-const SERVER_ROOT = path.join(__dirname, '..', '..', '..');
+const SERVER_ROOT = path.join(__dirname, "..", "..", "..");
 
 const CONFIG = {
-  inputFile: path.join(__dirname, 'musiques.json'),
-  outputFile: path.join(__dirname, 'musiques.json'), // Edit in place
-  uploadDir: process.env.UPLOAD_DIR || path.join(SERVER_ROOT, 'uploads'),
+  inputFile: path.join(__dirname, "musiques.json"),
+  outputFile: path.join(__dirname, "musiques.json"), // Edit in place
+  uploadDir: process.env.UPLOAD_DIR || path.join(SERVER_ROOT, "uploads"),
 
   // Rate limiting
-  spotifyDelay: 100,     // ms between Spotify requests
-  youtubeDelay: 2000,    // ms between YouTube downloads (be nice to YouTube)
+  spotifyDelay: 100, // ms between Spotify requests
+  youtubeDelay: 2000, // ms between YouTube downloads (be nice to YouTube)
 
   // Defaults
-  defaultClipStart: 0,    // Start at beginning (matches app default)
+  defaultClipStart: 0, // Start at beginning (matches app default)
   defaultClipDuration: 60, // Download 60 seconds
-  audioFormat: 'mp3' as const,
-  audioQuality: '128k',
+  audioFormat: "mp3" as const,
+  audioQuality: "128k",
 };
 
 // ============================================================================
@@ -96,21 +97,24 @@ class SpotifyClient {
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-      console.error('❌ Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET');
+      console.error("❌ Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET");
       return false;
     }
 
     try {
       this.api = SpotifyApi.withClientCredentials(clientId, clientSecret);
-      console.log('✅ Spotify API initialized');
+      console.log("✅ Spotify API initialized");
       return true;
     } catch (error) {
-      console.error('❌ Failed to initialize Spotify:', error);
+      console.error("❌ Failed to initialize Spotify:", error);
       return false;
     }
   }
 
-  async search(title: string, artist: string): Promise<{
+  async search(
+    title: string,
+    artist: string
+  ): Promise<{
     spotifyId: string;
     title: string;
     artist: string;
@@ -125,12 +129,17 @@ class SpotifyClient {
     try {
       // Use Spotify's search filters for better accuracy
       const query = `track:${title} artist:${artist}`;
-      const results = await this.api.search(query, ['track'], undefined, 10);
+      const results = await this.api.search(query, ["track"], undefined, 10);
 
       if (results.tracks.items.length === 0) {
         // Fallback to simple search if no results
         const fallbackQuery = `${artist} ${title}`;
-        const fallbackResults = await this.api.search(fallbackQuery, ['track'], undefined, 5);
+        const fallbackResults = await this.api.search(
+          fallbackQuery,
+          ["track"],
+          undefined,
+          5
+        );
         if (fallbackResults.tracks.items.length === 0) {
           return null;
         }
@@ -139,9 +148,10 @@ class SpotifyClient {
 
       // Find best match - prefer exact artist name match
       const normalizedArtist = artist.toLowerCase();
-      let track = results.tracks.items.find(t =>
-        t.artists.some(a => a.name.toLowerCase() === normalizedArtist)
-      ) || results.tracks.items[0];
+      let track =
+        results.tracks.items.find((t) =>
+          t.artists.some((a) => a.name.toLowerCase() === normalizedArtist)
+        ) || results.tracks.items[0];
 
       // Get year from release date
       const year = track.album.release_date
@@ -155,7 +165,7 @@ class SpotifyClient {
           const artistData = await this.api.artists.get(track.artists[0].id);
           if (artistData.genres && artistData.genres.length > 0) {
             const normalized = GenreMapper.normalize(artistData.genres[0]);
-            genre = normalized !== 'Unknown' ? normalized : undefined;
+            genre = normalized !== "Unknown" ? normalized : undefined;
           }
         } catch (e) {
           // Ignore - genre will be undefined
@@ -165,7 +175,7 @@ class SpotifyClient {
       return {
         spotifyId: track.id,
         title: track.name,
-        artist: track.artists.map(a => a.name).join(', '),
+        artist: track.artists.map((a) => a.name).join(", "),
         album: track.album.name,
         year,
         genre,
@@ -183,11 +193,16 @@ class SpotifyClient {
 
     try {
       const query = `track:${title} artist:${artist}`;
-      const results = await this.api.search(query, ['track'], undefined, 10);
+      const results = await this.api.search(query, ["track"], undefined, 10);
 
       if (results.tracks.items.length === 0) {
         const fallbackQuery = `${artist} ${title}`;
-        const fallbackResults = await this.api.search(fallbackQuery, ['track'], undefined, 5);
+        const fallbackResults = await this.api.search(
+          fallbackQuery,
+          ["track"],
+          undefined,
+          5
+        );
         if (fallbackResults.tracks.items.length === 0) {
           return null;
         }
@@ -195,11 +210,147 @@ class SpotifyClient {
       }
 
       const normalizedArtist = artist.toLowerCase();
-      const track = results.tracks.items.find(t =>
-        t.artists.some(a => a.name.toLowerCase() === normalizedArtist)
-      ) || results.tracks.items[0];
+      const track =
+        results.tracks.items.find((t) =>
+          t.artists.some((a) => a.name.toLowerCase() === normalizedArtist)
+        ) || results.tracks.items[0];
 
       return track.album.images[0]?.url || null;
+    } catch (error) {
+      console.error(`  ⚠️ Spotify search failed: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get full artist info by Spotify artist ID
+   */
+  async getArtist(artistId: string): Promise<{
+    spotifyId: string;
+    name: string;
+    genres: string[];
+    popularity: number;
+    imageUrl?: string;
+  } | null> {
+    if (!this.api) return null;
+
+    try {
+      const artist = await this.api.artists.get(artistId);
+      return {
+        spotifyId: artist.id,
+        name: artist.name,
+        genres: artist.genres,
+        popularity: artist.popularity,
+        imageUrl: artist.images[0]?.url,
+      };
+    } catch (error) {
+      console.error(`  ⚠️ Failed to get artist: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get related artists from Spotify API
+   * Returns up to 20 similar artists
+   */
+  async getRelatedArtists(artistId: string): Promise<
+    Array<{
+      spotifyId: string;
+      name: string;
+      genres: string[];
+      popularity: number;
+      imageUrl?: string;
+    }>
+  > {
+    if (!this.api) return [];
+
+    try {
+      const response = await this.api.artists.relatedArtists(artistId);
+
+      return response.artists.map((artist: any) => ({
+        spotifyId: artist.id,
+        name: artist.name,
+        genres: artist.genres,
+        popularity: artist.popularity,
+        imageUrl: artist.images[0]?.url,
+      }));
+    } catch (error) {
+      console.error(`  ⚠️ Failed to get related artists: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Search for track and return artist Spotify ID along with track data
+   */
+  async searchWithArtistId(
+    title: string,
+    artist: string
+  ): Promise<{
+    spotifyId: string;
+    title: string;
+    artist: string;
+    artistSpotifyId: string;
+    album?: string;
+    year?: number;
+    genre?: string;
+    duration: number;
+    albumArt?: string;
+  } | null> {
+    if (!this.api) return null;
+
+    try {
+      const query = `track:${title} artist:${artist}`;
+      const results = await this.api.search(query, ["track"], undefined, 10);
+
+      if (results.tracks.items.length === 0) {
+        const fallbackQuery = `${artist} ${title}`;
+        const fallbackResults = await this.api.search(
+          fallbackQuery,
+          ["track"],
+          undefined,
+          5
+        );
+        if (fallbackResults.tracks.items.length === 0) {
+          return null;
+        }
+        results.tracks.items = fallbackResults.tracks.items;
+      }
+
+      const normalizedArtist = artist.toLowerCase();
+      const track =
+        results.tracks.items.find((t) =>
+          t.artists.some((a) => a.name.toLowerCase() === normalizedArtist)
+        ) || results.tracks.items[0];
+
+      const year = track.album.release_date
+        ? parseInt(track.album.release_date.substring(0, 4))
+        : undefined;
+
+      let genre: string | undefined;
+      if (track.artists.length > 0) {
+        try {
+          const artistData = await this.api.artists.get(track.artists[0].id);
+          if (artistData.genres && artistData.genres.length > 0) {
+            const normalized = GenreMapper.normalize(artistData.genres[0]);
+            genre = normalized !== "Unknown" ? normalized : undefined;
+          }
+        } catch (e) {
+          // Ignore
+        }
+      }
+
+      return {
+        spotifyId: track.id,
+        title: track.name,
+        artist: track.artists.map((a) => a.name).join(", "),
+        artistSpotifyId: track.artists[0]?.id || "",
+        album: track.album.name,
+        year,
+        genre,
+        duration: Math.floor(track.duration_ms / 1000),
+        albumArt: track.album.images[0]?.url,
+      };
     } catch (error) {
       console.error(`  ⚠️ Spotify search failed: ${error}`);
       return null;
@@ -212,7 +363,10 @@ class SpotifyClient {
 // ============================================================================
 
 class YouTubeClient {
-  async search(title: string, artist: string): Promise<{
+  async search(
+    title: string,
+    artist: string
+  ): Promise<{
     videoId: string;
     title: string;
     duration?: number;
@@ -230,7 +384,7 @@ class YouTubeClient {
       return {
         videoId: video.id,
         title: video.title,
-        duration: this.parseDuration(video.length?.simpleText || '0:00'),
+        duration: this.parseDuration(video.length?.simpleText || "0:00"),
       };
     } catch (error) {
       console.error(`  ⚠️ YouTube search failed: ${error}`);
@@ -246,7 +400,7 @@ class YouTubeClient {
     options: {
       clipStart?: number;
       clipDuration?: number;
-      format?: 'mp3' | 'm4a';
+      format?: "mp3" | "m4a";
       quality?: string;
     } = {}
   ): Promise<{
@@ -259,8 +413,8 @@ class YouTubeClient {
     const {
       clipStart = 0,
       clipDuration = 60,
-      format = 'mp3',
-      quality = '192'
+      format = "mp3",
+      quality = "192",
     } = options;
 
     try {
@@ -292,9 +446,15 @@ class YouTubeClient {
       // Ensure absolute path
       const absoluteOutputPath = path.resolve(outputPath);
 
-      console.log(`     🔗 Downloading: https://www.youtube.com/watch?v=${videoId}`);
+      console.log(
+        `     🔗 Downloading: https://www.youtube.com/watch?v=${videoId}`
+      );
       console.log(`     📁 Output: ${absoluteOutputPath}`);
-      console.log(`     ✂️  Clipping: ${clipStart}s to ${clipStart + clipDuration}s (${clipDuration}s)`);
+      console.log(
+        `     ✂️  Clipping: ${clipStart}s to ${
+          clipStart + clipDuration
+        }s (${clipDuration}s)`
+      );
 
       // Use yt-dlp with ffmpeg postprocessor for clipping, quality control, and loudness normalization
       const ffmpegArgs = `-ss ${clipStart} -t ${clipDuration} -b:a ${quality} -af loudnorm=I=-16:LRA=11:TP=-1.5`;
@@ -303,10 +463,20 @@ class YouTubeClient {
       await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 });
 
       // Auto-crop leading silence (> 1s)
-      const silenceDuration = await detectSilenceDuration(absoluteOutputPath, -40);
+      const silenceDuration = await detectSilenceDuration(
+        absoluteOutputPath,
+        -40
+      );
       if (silenceDuration >= 1.0) {
-        console.log(`     🔇 Trimming ${silenceDuration.toFixed(2)}s of leading silence...`);
-        const trimResult = await trimSilenceFromFile(absoluteOutputPath, silenceDuration);
+        console.log(
+          `     🔇 Trimming ${silenceDuration.toFixed(
+            2
+          )}s of leading silence...`
+        );
+        const trimResult = await trimSilenceFromFile(
+          absoluteOutputPath,
+          silenceDuration
+        );
         if (trimResult) {
           return {
             filePath: outputPath,
@@ -327,7 +497,7 @@ class YouTubeClient {
       };
     } catch (error: any) {
       // Extract detailed error info from yt-dlp
-      const stderr = error?.stderr || '';
+      const stderr = error?.stderr || "";
       const message = error?.message || String(error);
       console.error(`  ⚠️ YouTube download failed:`);
       console.error(`     Message: ${message}`);
@@ -337,7 +507,7 @@ class YouTubeClient {
   }
 
   private parseDuration(durationStr: string): number {
-    const parts = durationStr.split(':').map(p => parseInt(p, 10));
+    const parts = durationStr.split(":").map((p) => parseInt(p, 10));
     if (parts.length === 2) {
       return parts[0] * 60 + parts[1];
     } else if (parts.length === 3) {
@@ -353,9 +523,9 @@ class YouTubeClient {
 
 class DatabaseService {
   async initialize(): Promise<void> {
-    console.log('🗄️  Initializing database...');
+    console.log("🗄️  Initializing database...");
     runMigrations();
-    console.log('✅ Database ready');
+    console.log("✅ Database ready");
   }
 
   async findByTitleAndArtist(title: string, artist: string): Promise<boolean> {
@@ -378,24 +548,29 @@ class DatabaseService {
     return result.length > 0;
   }
 
-  async insertSong(song: EnrichedSong): Promise<string | null> {
+  async insertSong(
+    song: EnrichedSong & { artistId?: string }
+  ): Promise<string | null> {
     // Skip if missing required fields
     if (!song.filePath || !song.fileName || !song.duration || !song.fileSize) {
-      console.log('     ⚠️ Missing required fields for DB insert');
+      console.log("     ⚠️ Missing required fields for DB insert");
       return null;
     }
 
     // Check if already exists by title/artist
-    const existsByMeta = await this.findByTitleAndArtist(song.title, song.artist);
+    const existsByMeta = await this.findByTitleAndArtist(
+      song.title,
+      song.artist
+    );
     if (existsByMeta) {
-      console.log('     ⏭️ Already in database (matching title/artist)');
+      console.log("     ⏭️ Already in database (matching title/artist)");
       return null;
     }
 
     // Check if file path already exists (unique constraint)
     const existsByPath = await this.findByFilePath(song.filePath);
     if (existsByPath) {
-      console.log('     ⏭️ Already in database (matching file path)');
+      console.log("     ⏭️ Already in database (matching file path)");
       return null;
     }
 
@@ -408,6 +583,7 @@ class DatabaseService {
       fileName: song.fileName,
       title: song.title,
       artist: song.artist,
+      artistId: song.artistId || null,
       album: song.album || null,
       year: song.year || 2000, // Default year if missing
       genre: song.genre || null,
@@ -417,12 +593,12 @@ class DatabaseService {
       spotifyId: song.spotifyId || null,
       youtubeId: song.youtubeId || null,
       albumArt: song.albumArt || null,
-      source: 'seed',
+      source: "seed",
       clipStart: song.clipStart ?? 0,
       clipDuration: song.clipDuration ?? 60,
       createdAt: now.toISOString(),
       fileSize: song.fileSize,
-      format: song.format || 'mp3',
+      format: song.format || "mp3",
     };
 
     await db.insert(schema.songs).values(newSong);
@@ -430,7 +606,9 @@ class DatabaseService {
     return id;
   }
 
-  async getSongsWithoutAlbumArt(): Promise<{ id: string; title: string; artist: string }[]> {
+  async getSongsWithoutAlbumArt(): Promise<
+    { id: string; title: string; artist: string }[]
+  > {
     return await db
       .select({
         id: schema.songs.id,
@@ -448,7 +626,15 @@ class DatabaseService {
       .where(eq(schema.songs.id, id));
   }
 
-  async getAllSongsWithFilePath(): Promise<{ id: string; title: string; artist: string; filePath: string; fileSize: number }[]> {
+  async getAllSongsWithFilePath(): Promise<
+    {
+      id: string;
+      title: string;
+      artist: string;
+      filePath: string;
+      fileSize: number;
+    }[]
+  > {
     const result = await db
       .select({
         id: schema.songs.id,
@@ -460,7 +646,13 @@ class DatabaseService {
       .from(schema.songs);
 
     // Filter out songs without filePath (shouldn't happen but be safe)
-    return result.filter(s => s.filePath) as { id: string; title: string; artist: string; filePath: string; fileSize: number }[];
+    return result.filter((s) => s.filePath) as {
+      id: string;
+      title: string;
+      artist: string;
+      filePath: string;
+      fileSize: number;
+    }[];
   }
 
   async updateFileSize(id: string, fileSize: number): Promise<void> {
@@ -468,6 +660,58 @@ class DatabaseService {
       .update(schema.songs)
       .set({ fileSize })
       .where(eq(schema.songs.id, id));
+  }
+
+  /**
+   * Find or create an artist and return their ID
+   */
+  async findOrCreateArtist(data: {
+    name: string;
+    spotifyId?: string;
+    genres?: string[];
+    popularity?: number;
+    imageUrl?: string;
+  }): Promise<string> {
+    const { artist, created } = await artistRepository.findOrCreate(data);
+
+    if (created) {
+      console.log(`     🎤 Created new artist: ${artist.name}`);
+    } else {
+      console.log(`     ⏭️ Artist exists: ${artist.name}`);
+    }
+
+    return artist.id;
+  }
+
+  /**
+   * Add related artists to an artist
+   * Creates artist records for each related artist if they don't exist
+   */
+  async addRelatedArtists(
+    artistId: string,
+    relatedArtists: Array<{
+      spotifyId: string;
+      name: string;
+      genres: string[];
+      popularity: number;
+      imageUrl?: string;
+    }>
+  ): Promise<number> {
+    const relatedIds: string[] = [];
+
+    for (const related of relatedArtists) {
+      const { artist } = await artistRepository.findOrCreate({
+        name: related.name,
+        spotifyId: related.spotifyId,
+        genres: related.genres,
+        popularity: related.popularity,
+        imageUrl: related.imageUrl,
+      });
+      relatedIds.push(artist.id);
+    }
+
+    await artistRepository.addRelatedArtists(artistId, relatedIds);
+    return relatedIds.length;
   }
 }
 
@@ -490,7 +734,7 @@ async function saveProgress(songs: EnrichedSong[]): Promise<void> {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ============================================================================
@@ -503,12 +747,17 @@ function sleep(ms: number): Promise<void> {
  * @param threshold Silence threshold in dB (default: -40dB, conservative)
  * @returns Duration of leading silence in seconds, or 0 if no silence detected
  */
-async function detectSilenceDuration(filePath: string, threshold: number = -40): Promise<number> {
+async function detectSilenceDuration(
+  filePath: string,
+  threshold: number = -40
+): Promise<number> {
   try {
     // Use ffmpeg silencedetect filter
     // d=0.1 means minimum silence duration of 0.1s to be detected
     const cmd = `ffmpeg -i "${filePath}" -af "silencedetect=noise=${threshold}dB:d=0.1" -f null - 2>&1`;
-    const { stdout, stderr } = await execAsync(cmd, { maxBuffer: 10 * 1024 * 1024 });
+    const { stdout, stderr } = await execAsync(cmd, {
+      maxBuffer: 10 * 1024 * 1024,
+    });
     const output = stdout + stderr;
 
     // Parse output for silence_end (first occurrence = end of leading silence)
@@ -522,7 +771,7 @@ async function detectSilenceDuration(filePath: string, threshold: number = -40):
     return 0;
   } catch (error: any) {
     // ffmpeg returns non-zero exit code even on success for this filter
-    const output = (error.stdout || '') + (error.stderr || '');
+    const output = (error.stdout || "") + (error.stderr || "");
     const match = output.match(/silence_end:\s*([\d.]+)/);
     if (match) {
       return parseFloat(match[1]);
@@ -543,11 +792,13 @@ async function trimSilenceFromFile(
   silenceDuration: number
 ): Promise<{ fileSize: number } | null> {
   try {
-    const tempPath = filePath + '.tmp.mp3';
+    const tempPath = filePath + ".tmp.mp3";
 
     // Re-encode with -ss to skip the silence
     // Using libmp3lame with quality 2 (VBR ~190kbps) for good quality
-    const cmd = `ffmpeg -y -i "${filePath}" -ss ${silenceDuration.toFixed(3)} -c:a libmp3lame -q:a 2 "${tempPath}"`;
+    const cmd = `ffmpeg -y -i "${filePath}" -ss ${silenceDuration.toFixed(
+      3
+    )} -c:a libmp3lame -q:a 2 "${tempPath}"`;
     await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 });
 
     // Replace original with trimmed version
@@ -561,40 +812,45 @@ async function trimSilenceFromFile(
     console.error(`  ⚠️ Error trimming file: ${error.message}`);
     // Clean up temp file if it exists
     try {
-      await fs.unlink(filePath + '.tmp.mp3');
+      await fs.unlink(filePath + ".tmp.mp3");
     } catch {}
     return null;
   }
 }
 
 async function main() {
-  console.log('🎵 Musiques Seed Script');
-  console.log('========================\n');
+  console.log("🎵 Musiques Seed Script");
+  console.log("========================\n");
 
   // Parse arguments
   const args = process.argv.slice(2);
-  const dryRun = args.includes('--dry-run');
-  const noDownload = args.includes('--no-download');
-  const retryFailed = args.includes('--retry-failed');
-  const fixAlbumArt = args.includes('--fix-album-art');
-  const autoCrop = args.includes('--auto-crop');
+  const dryRun = args.includes("--dry-run");
+  const noDownload = args.includes("--no-download");
+  const retryFailed = args.includes("--retry-failed");
+  const fixAlbumArt = args.includes("--fix-album-art");
+  const autoCrop = args.includes("--auto-crop");
 
   let limit = Infinity;
   let skip = 0;
 
   for (const arg of args) {
-    if (arg.startsWith('--limit=')) {
-      limit = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith("--limit=")) {
+      limit = parseInt(arg.split("=")[1], 10);
     }
-    if (arg.startsWith('--skip=')) {
-      skip = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith("--skip=")) {
+      skip = parseInt(arg.split("=")[1], 10);
     }
   }
 
-  if (dryRun) console.log('🔍 Dry run mode - no files will be downloaded\n');
-  if (noDownload) console.log('📋 Metadata only mode - skipping YouTube downloads\n');
-  if (fixAlbumArt) console.log('🎨 Fix album art mode - re-fetching missing albumArt\n');
-  if (autoCrop) console.log('🔇 Auto-crop mode - trimming leading silence from audio files\n');
+  if (dryRun) console.log("🔍 Dry run mode - no files will be downloaded\n");
+  if (noDownload)
+    console.log("📋 Metadata only mode - skipping YouTube downloads\n");
+  if (fixAlbumArt)
+    console.log("🎨 Fix album art mode - re-fetching missing albumArt\n");
+  if (autoCrop)
+    console.log(
+      "🔇 Auto-crop mode - trimming leading silence from audio files\n"
+    );
 
   // Initialize services
   const spotify = new SpotifyClient();
@@ -603,18 +859,20 @@ async function main() {
 
   const spotifyReady = await spotify.initialize();
   if (!spotifyReady) {
-    console.error('\n⚠️ Continuing without Spotify (metadata will be incomplete)');
+    console.error(
+      "\n⚠️ Continuing without Spotify (metadata will be incomplete)"
+    );
   }
 
   // Initialize database (skip in dry-run mode)
-  if (!dryRun && !noDownload || fixAlbumArt || autoCrop) {
+  if ((!dryRun && !noDownload) || fixAlbumArt || autoCrop) {
     await database.initialize();
   }
 
   // Handle --fix-album-art mode
   if (fixAlbumArt) {
     if (!spotifyReady) {
-      console.error('❌ Cannot fix album art without Spotify API');
+      console.error("❌ Cannot fix album art without Spotify API");
       process.exit(1);
     }
 
@@ -622,7 +880,7 @@ async function main() {
     console.log(`📊 Found ${songsWithoutArt.length} songs without album art\n`);
 
     if (songsWithoutArt.length === 0) {
-      console.log('✅ All songs have album art!');
+      console.log("✅ All songs have album art!");
       return;
     }
 
@@ -631,7 +889,9 @@ async function main() {
 
     for (let i = 0; i < songsWithoutArt.length; i++) {
       const song = songsWithoutArt[i];
-      console.log(`[${i + 1}/${songsWithoutArt.length}] ${song.artist} - ${song.title}`);
+      console.log(
+        `[${i + 1}/${songsWithoutArt.length}] ${song.artist} - ${song.title}`
+      );
 
       const albumArt = await spotify.getAlbumArt(song.title, song.artist);
 
@@ -639,24 +899,24 @@ async function main() {
         if (!dryRun) {
           await database.updateAlbumArt(song.id, albumArt);
         }
-        console.log(`  ✅ ${dryRun ? 'Would update' : 'Updated'}`);
+        console.log(`  ✅ ${dryRun ? "Would update" : "Updated"}`);
         updated++;
       } else {
-        console.log('  ❌ Not found on Spotify');
+        console.log("  ❌ Not found on Spotify");
         notFound++;
       }
 
       await sleep(CONFIG.spotifyDelay);
     }
 
-    console.log('\n========================');
-    console.log('📊 Summary:');
+    console.log("\n========================");
+    console.log("📊 Summary:");
     console.log(`   Total processed: ${songsWithoutArt.length}`);
     console.log(`   Updated: ${updated}`);
     console.log(`   Not found: ${notFound}`);
 
     if (dryRun) {
-      console.log('\n⚠️  Dry run - no changes were made.');
+      console.log("\n⚠️  Dry run - no changes were made.");
     }
     return;
   }
@@ -667,7 +927,7 @@ async function main() {
     console.log(`📊 Found ${songs.length} songs with audio files\n`);
 
     if (songs.length === 0) {
-      console.log('✅ No songs to process!');
+      console.log("✅ No songs to process!");
       return;
     }
 
@@ -690,7 +950,7 @@ async function main() {
       try {
         await fs.access(absolutePath);
       } catch {
-        console.log('  ⚠️ File not found, skipping');
+        console.log("  ⚠️ File not found, skipping");
         skippedMissing++;
         continue;
       }
@@ -699,7 +959,9 @@ async function main() {
       const silenceDuration = await detectSilenceDuration(absolutePath, -40);
 
       if (silenceDuration < minSilence) {
-        console.log(`  ⏭️ No significant silence (${silenceDuration.toFixed(2)}s)`);
+        console.log(
+          `  ⏭️ No significant silence (${silenceDuration.toFixed(2)}s)`
+        );
         skippedNoSilence++;
         continue;
       }
@@ -713,7 +975,7 @@ async function main() {
       }
 
       // Trim the file
-      console.log('  ✂️ Re-encoding...');
+      console.log("  ✂️ Re-encoding...");
       const result = await trimSilenceFromFile(absolutePath, silenceDuration);
 
       if (result) {
@@ -724,13 +986,13 @@ async function main() {
         console.log(`  ✅ Trimmed (${oldSize}KB → ${newSize}KB)`);
         trimmed++;
       } else {
-        console.log('  ❌ Failed to trim');
+        console.log("  ❌ Failed to trim");
         errors++;
       }
     }
 
-    console.log('\n========================');
-    console.log('📊 Summary:');
+    console.log("\n========================");
+    console.log("📊 Summary:");
     console.log(`   Total processed: ${songs.length}`);
     console.log(`   Trimmed: ${trimmed}`);
     console.log(`   Skipped (no silence): ${skippedNoSilence}`);
@@ -738,7 +1000,7 @@ async function main() {
     console.log(`   Errors: ${errors}`);
 
     if (dryRun) {
-      console.log('\n⚠️  Dry run - no changes were made.');
+      console.log("\n⚠️  Dry run - no changes were made.");
     }
     return;
   }
@@ -763,30 +1025,36 @@ async function main() {
     // Check if already processed
     const existing = progress.get(key);
     if (existing) {
-      if (retryFailed && existing.status === 'failed') {
+      if (retryFailed && existing.status === "failed") {
         console.log(`🔄 Retrying: ${entry.artist} - ${entry.title}`);
-      } else if (existing.status === 'downloaded') {
+      } else if (existing.status === "downloaded") {
         skipped++;
         continue;
       }
     }
 
     processed++;
-    console.log(`\n[${i + 1}/${musiques.length}] ${entry.artist} - ${entry.title}`);
+    console.log(
+      `\n[${i + 1}/${musiques.length}] ${entry.artist} - ${entry.title}`
+    );
 
-    const song: EnrichedSong = {
+    const song: EnrichedSong & { artistId?: string } = {
       title: entry.title,
       artist: entry.artist,
       lang: entry.lang,
       niche: entry.niche,
-      status: 'pending',
+      status: "pending",
       processedAt: new Date().toISOString(),
     };
 
-    // Step 1: Search Spotify
+    // Step 1: Search Spotify and get artist info
+    let artistSpotifyId: string | undefined;
     if (spotifyReady) {
-      console.log('  🎧 Searching Spotify...');
-      const spotifyData = await spotify.search(entry.title, entry.artist);
+      console.log("  🎧 Searching Spotify...");
+      const spotifyData = await spotify.searchWithArtistId(
+        entry.title,
+        entry.artist
+      );
 
       if (spotifyData) {
         song.spotifyId = spotifyData.spotifyId;
@@ -795,10 +1063,59 @@ async function main() {
         song.genre = spotifyData.genre;
         song.duration = spotifyData.duration;
         song.albumArt = spotifyData.albumArt;
-        song.status = 'spotify_done';
-        console.log(`     ✓ Found: ${spotifyData.album} (${spotifyData.year}) - ${spotifyData.genre || 'unknown genre'}`);
+        artistSpotifyId = spotifyData.artistSpotifyId;
+        song.status = "spotify_done";
+        console.log(
+          `     ✓ Found: ${spotifyData.album} (${spotifyData.year}) - ${
+            spotifyData.genre || "unknown genre"
+          }`
+        );
+
+        // Step 1b: Create/find artist and fetch related artists
+        if (artistSpotifyId && !dryRun) {
+          console.log("  🎤 Processing artist...");
+          const artistInfo = await spotify.getArtist(artistSpotifyId);
+          await sleep(CONFIG.spotifyDelay);
+
+          if (artistInfo) {
+            // Find or create the artist
+            const artistId = await database.findOrCreateArtist({
+              name: artistInfo.name,
+              spotifyId: artistInfo.spotifyId,
+              genres: artistInfo.genres,
+              popularity: artistInfo.popularity,
+              imageUrl: artistInfo.imageUrl,
+            });
+            song.artistId = artistId;
+
+            // Check if we need to fetch related artists (only for new artists)
+            const existingRelatedCount =
+              await artistRepository.getRelatedArtistCount(artistId);
+            if (existingRelatedCount === 0) {
+              console.log("  🔗 Fetching related artists...");
+              const relatedArtists = await spotify.getRelatedArtists(
+                artistSpotifyId
+              );
+              await sleep(CONFIG.spotifyDelay);
+
+              if (relatedArtists.length > 0) {
+                const addedCount = await database.addRelatedArtists(
+                  artistId,
+                  relatedArtists
+                );
+                console.log(`     ✓ Added ${addedCount} related artists`);
+              } else {
+                console.log("     ⚠️ No related artists found");
+              }
+            } else {
+              console.log(
+                `     ⏭️ Artist already has ${existingRelatedCount} related artists`
+              );
+            }
+          }
+        }
       } else {
-        console.log('     ✗ Not found on Spotify');
+        console.log("     ✗ Not found on Spotify");
       }
 
       await sleep(CONFIG.spotifyDelay);
@@ -806,10 +1123,13 @@ async function main() {
 
     // Step 2: Check if already in database (skip download if exists)
     if (!dryRun && !noDownload) {
-      const existsInDb = await database.findByTitleAndArtist(entry.title, entry.artist);
+      const existsInDb = await database.findByTitleAndArtist(
+        entry.title,
+        entry.artist
+      );
       if (existsInDb) {
-        console.log('  ⏭️  Already in database, skipping download');
-        song.status = 'downloaded';
+        console.log("  ⏭️  Already in database, skipping download");
+        song.status = "downloaded";
         progress.set(key, song);
         skipped++;
         continue;
@@ -818,18 +1138,18 @@ async function main() {
 
     // Step 3: Search YouTube
     if (!dryRun) {
-      console.log('  📺 Searching YouTube...');
+      console.log("  📺 Searching YouTube...");
       const youtubeData = await youtube.search(entry.title, entry.artist);
 
       if (youtubeData) {
         song.youtubeId = youtubeData.videoId;
         song.youtubeTitle = youtubeData.title;
-        song.status = 'youtube_found';
+        song.status = "youtube_found";
         console.log(`     ✓ Found: ${youtubeData.title}`);
 
         // Step 3: Download from YouTube
         if (!noDownload) {
-          console.log('  📥 Downloading audio...');
+          console.log("  📥 Downloading audio...");
           const downloadResult = await youtube.download(
             youtubeData.videoId,
             CONFIG.uploadDir,
@@ -850,24 +1170,28 @@ async function main() {
             song.format = CONFIG.audioFormat;
             song.clipStart = CONFIG.defaultClipStart;
             song.clipDuration = CONFIG.defaultClipDuration;
-            song.status = 'downloaded';
-            console.log(`     ✓ Downloaded: ${downloadResult.fileName} (${Math.round(downloadResult.fileSize / 1024)}KB)`);
+            song.status = "downloaded";
+            console.log(
+              `     ✓ Downloaded: ${downloadResult.fileName} (${Math.round(
+                downloadResult.fileSize / 1024
+              )}KB)`
+            );
 
             // Step 4: Insert into database
-            console.log('  🗄️  Inserting into database...');
+            console.log("  🗄️  Inserting into database...");
             await database.insertSong(song);
           } else {
-            song.status = 'failed';
-            song.error = 'Download failed';
+            song.status = "failed";
+            song.error = "Download failed";
             errors++;
           }
 
           await sleep(CONFIG.youtubeDelay);
         }
       } else {
-        console.log('     ✗ Not found on YouTube');
-        song.status = 'failed';
-        song.error = 'Not found on YouTube';
+        console.log("     ✗ Not found on YouTube");
+        song.status = "failed";
+        song.error = "Not found on YouTube";
         errors++;
       }
     }
@@ -887,8 +1211,8 @@ async function main() {
   await saveProgress(Array.from(progress.values()));
 
   // Summary
-  console.log('\n========================');
-  console.log('📊 Summary:');
+  console.log("\n========================");
+  console.log("📊 Summary:");
   console.log(`   Total in file: ${musiques.length}`);
   console.log(`   Processed: ${processed}`);
   console.log(`   Skipped (already done): ${skipped}`);
@@ -898,10 +1222,10 @@ async function main() {
   // Show stats by status
   const statuses = new Map<string, number>();
   for (const song of progress.values()) {
-    const status = song.status || 'unknown';
+    const status = song.status || "unknown";
     statuses.set(status, (statuses.get(status) || 0) + 1);
   }
-  console.log('\n📈 Status breakdown:');
+  console.log("\n📈 Status breakdown:");
   for (const [status, count] of statuses) {
     console.log(`   ${status}: ${count}`);
   }

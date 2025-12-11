@@ -2,14 +2,16 @@
  * Musiques Seed Data
  *
  * This file aggregates all seed data from individual JSON files.
- * Each JSON file represents a category/playlist of songs to seed.
+ * - Manual seed files: placed directly in this folder (e.g., chaise.json)
+ * - Playlist imports: auto-loaded from ./playlists/ folder
  *
- * To add a new seed source:
- * 1. Create a new JSON file (e.g., myplaylist.json) with an array of { title, artist, lang? } objects
- * 2. Import it here and add it to the seedSources array
+ * To add songs:
+ * 1. Use fetch-playlist.ts to import from Spotify playlists (auto-saved to ./playlists/)
+ * 2. Or manually create a JSON file with an array of { title, artist, lang?, niche? } objects
  */
 
-import chaiseData from './chaise.json';
+import fs from 'fs';
+import path from 'path';
 
 // Import processed/existing data
 import musiquesData from './musiques.json';
@@ -20,6 +22,33 @@ export interface SeedEntry {
   artist: string;
   lang?: string; // ISO 639-1 language code (e.g., 'en', 'fr')
   niche?: boolean; // Is this a niche/obscure song?
+}
+
+// Auto-load all JSON files from playlists folder
+const PLAYLISTS_DIR = path.join(__dirname, 'playlists');
+
+function loadPlaylistFiles(): Record<string, SeedEntry[]> {
+  const playlists: Record<string, SeedEntry[]> = {};
+
+  try {
+    if (!fs.existsSync(PLAYLISTS_DIR)) {
+      return playlists;
+    }
+
+    const files = fs.readdirSync(PLAYLISTS_DIR).filter(f => f.endsWith('.json'));
+
+    for (const file of files) {
+      const filePath = path.join(PLAYLISTS_DIR, file);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content) as SeedEntry[];
+      const name = file.replace('.json', '');
+      playlists[name] = data;
+    }
+  } catch (error) {
+    console.warn('Warning: Could not load playlist files:', error);
+  }
+
+  return playlists;
 }
 
 // Type for enriched songs (after processing)
@@ -53,15 +82,9 @@ export interface EnrichedSong extends SeedEntry {
 }
 
 /**
- * All seed sources - add new JSON imports here
- * Each source is a named collection of songs
+ * All seed sources - auto-loaded from ./playlists/ folder
  */
-export const seedSources: Record<string, SeedEntry[]> = {
-  chaise: chaiseData as SeedEntry[],
-  // Add more sources here:
-  // disco: discoData as SeedEntry[],
-  // rock: rockData as SeedEntry[],
-};
+export const seedSources: Record<string, SeedEntry[]> = loadPlaylistFiles();
 
 /**
  * Get all seed entries from all sources (deduplicated)

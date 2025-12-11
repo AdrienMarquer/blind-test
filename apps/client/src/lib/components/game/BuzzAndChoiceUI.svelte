@@ -1,20 +1,23 @@
 <script lang="ts">
 	import type { AnswerChoice } from '@blind-test/shared';
-	import type { RoomSocket } from '$lib/stores/socket.svelte';
 
 	// Props
 	interface Props {
 		currentChoices: AnswerChoice[];
 		answerType: 'title' | 'artist';
 		answerTimeRemaining: number;
+		answerTimerMax: number;
 		onAnswer: (value: string) => void;
 		playerName?: string;
 	}
 
-	const { currentChoices, answerType, answerTimeRemaining, onAnswer, playerName }: Props = $props();
+	const { currentChoices, answerType, answerTimeRemaining, answerTimerMax, onAnswer, playerName }: Props = $props();
 
 	// Easter egg: If player is "rodrigue" (case-insensitive), show middle finger emoji
 	const isRodrigue = $derived(playerName?.toLowerCase() === 'rodrigue');
+
+	// Calculate progress percentage (0-100, decreasing)
+	const timerProgress = $derived(answerTimerMax > 0 ? (answerTimeRemaining / answerTimerMax) * 100 : 0);
 
 	// Get display text for choices (with easter egg)
 	function getDisplayText(choice: AnswerChoice): string {
@@ -31,8 +34,15 @@
 		<p class="status-text">
 			{answerType === 'title' ? '🎵 Choisis le titre' : "🎤 Choisis l'artiste"}
 		</p>
-		<div class="answer-timer">
-			<span>{answerTimeRemaining}s</span>
+		<div class="timer-container">
+			<div class="timer-bar">
+				<div
+					class="timer-fill"
+					class:urgent={answerTimeRemaining <= 2}
+					style="width: {timerProgress}%"
+				></div>
+			</div>
+			<span class="timer-text" class:urgent={answerTimeRemaining <= 2}>{answerTimeRemaining}s</span>
 		</div>
 	</div>
 
@@ -68,17 +78,53 @@
 		font-size: 1.1rem;
 		font-weight: 600;
 		color: var(--aq-color-deep);
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.75rem;
 	}
 
-	.answer-timer {
-		background: rgba(239, 76, 131, 0.15);
+	.timer-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+	}
+
+	.timer-bar {
+		flex: 1;
+		max-width: 200px;
+		height: 8px;
+		background: rgba(18, 43, 59, 0.1);
 		border-radius: 999px;
-		padding: 0.5rem 1.25rem;
-		display: inline-block;
+		overflow: hidden;
+	}
+
+	.timer-fill {
+		height: 100%;
+		background: linear-gradient(90deg, var(--aq-color-primary), var(--aq-color-secondary));
+		border-radius: 999px;
+		transition: width 0.3s linear;
+	}
+
+	.timer-fill.urgent {
+		background: linear-gradient(90deg, #ef4444, #f97316);
+		animation: pulse-urgent 0.5s ease-in-out infinite;
+	}
+
+	@keyframes pulse-urgent {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
+	}
+
+	.timer-text {
 		font-weight: 700;
+		font-size: 1.1rem;
 		color: var(--aq-color-primary);
-		font-size: 1.25rem;
+		min-width: 2.5rem;
+		text-align: center;
+	}
+
+	.timer-text.urgent {
+		color: #ef4444;
+		animation: pulse-urgent 0.5s ease-in-out infinite;
 	}
 
 	.choices {

@@ -83,6 +83,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 	// Reactive timer values from socket
 	const timeRemaining = $derived(socket.songTimeRemaining);
 	const answerTimeRemaining = $derived(socket.answerTimeRemaining);
+	const answerTimerMax = $derived(socket.answerTimerMax);
 
 	function formatAnswerLabel(label: 'title' | 'artist', { withArticle = false } = {}) {
 		if (withArticle) {
@@ -719,6 +720,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 			currentChoices={gameState.choices}
 			answerType={gameState.answerType}
 			answerTimeRemaining={answerTimeRemaining}
+			answerTimerMax={answerTimerMax}
 			onAnswer={handleAnswer}
 			playerName={player.name}
 		/>
@@ -729,6 +731,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 		<FastBuzzUI
 			hasBuzzed={true}
 			answerTimeRemaining={answerTimeRemaining}
+			answerTimerMax={answerTimerMax}
 		/>
 	{/if}
 

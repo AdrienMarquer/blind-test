@@ -41,6 +41,7 @@ export class SongRepository implements Repository<Song> {
       fileName: dbSong.fileName,
       title: dbSong.title,
       artist: dbSong.artist,
+      artistId: dbSong.artistId || undefined,
       album: dbSong.album || undefined,
       year: dbSong.year,
       genre: dbSong.genre || undefined,
