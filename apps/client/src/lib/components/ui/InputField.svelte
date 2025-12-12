@@ -94,7 +94,7 @@
 		width: 100%;
 		padding: 0.75rem 1rem;
 		border-radius: var(--aq-radius-md);
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		background: rgba(255, 255, 255, 0.95);
 		font-size: 1rem;
 		transition: border-color 160ms ease, box-shadow 160ms ease;

@@ -147,7 +147,7 @@
 
 	.text-input {
 		padding: 0.85rem 1rem;
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		border-radius: 12px;
 		font-size: 1rem;
 		font-family: inherit;

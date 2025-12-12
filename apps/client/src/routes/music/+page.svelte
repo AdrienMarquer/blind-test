@@ -1044,7 +1044,7 @@
 		min-width: 180px;
 		padding: 0.65rem 1rem;
 		border-radius: var(--aq-radius-md);
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		background: rgba(255, 255, 255, 0.9);
 		color: var(--aq-color-deep);
 		font-size: 1rem;
@@ -1067,7 +1067,7 @@
 		min-width: 200px;
 		padding: 0.65rem 1rem;
 		border-radius: var(--aq-radius-md);
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		background: rgba(255, 255, 255, 0.9);
 		color: var(--aq-color-deep);
 		font-size: 1rem;
@@ -1090,7 +1090,7 @@
 		min-width: 160px;
 		padding: 0.65rem 1rem;
 		border-radius: var(--aq-radius-md);
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		background: rgba(255, 255, 255, 0.9);
 		color: var(--aq-color-deep);
 		font-size: 1rem;
@@ -1113,7 +1113,7 @@
 		min-width: 170px;
 		padding: 0.65rem 1rem;
 		border-radius: var(--aq-radius-md);
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		background: rgba(255, 255, 255, 0.9);
 		color: var(--aq-color-deep);
 		font-size: 1rem;

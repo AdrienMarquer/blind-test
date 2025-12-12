@@ -359,7 +359,7 @@
 	.genre-select {
 		width: 100%;
 		padding: 0.75rem 1rem;
-		border: 2px solid rgba(18, 43, 59, 0.15);
+		border: 1px solid rgba(18, 43, 59, 0.2);
 		border-radius: 16px;
 		background: white;
 		font-size: 1rem;
