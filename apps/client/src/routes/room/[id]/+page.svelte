@@ -298,7 +298,7 @@
 	}
 
 	async function removePlayer(playerId: string) {
-		if (!room || !confirm('Retirer ce joueur ?')) return;
+		if (!room) return;
 
 		try {
 			error = null;
