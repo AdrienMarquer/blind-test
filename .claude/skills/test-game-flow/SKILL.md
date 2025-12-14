@@ -1,6 +1,6 @@
 ---
 name: test-game-flow
-description: Test the complete game flow from lobby to final results. Use when verifying game modes, scoring, multi-player interactions, or after making changes to game logic.
+description: Test the complete game flow from lobby to final results. Use this proactively when verifying game modes, scoring, multi-player interactions, or after making changes to game logic.
 ---
 
 # Test Game Flow

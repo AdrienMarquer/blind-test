@@ -1,6 +1,6 @@
 ---
 name: sync-game-interfaces
-description: Synchronize changes between MasterPlayerInterface and PlayerGameInterface components. Use after modifying game UI, timers, state handling, or WebSocket event handlers in either file.
+description: Synchronize changes between MasterPlayerInterface and PlayerGameInterface components. Use this proactively after modifying game UI, timers, state handling, or WebSocket event handlers in either file.
 ---
 
 # Sync Game Interfaces
