@@ -207,6 +207,20 @@
 	$effect(() => {
 		const event = socket.events.songPreparing;
 		if (event) {
+			// Stop audio from previous song (answer reveal phase ends here)
+			if (audioElement) {
+				audioElement.pause();
+				audioElement.currentTime = 0;
+				audioElement.src = '';
+				console.log('[MasterPlayer Audio] Stopped for loading screen');
+			}
+
+			// Reset pause state for new song
+			isPaused = false;
+
+			// Update song index for loading screen display
+			currentSongIndex = event.songIndex;
+
 			gameState = {
 				status: 'loading',
 				countdown: event.countdown,
@@ -387,8 +401,12 @@
 	$effect(() => {
 		const event = socket.events.songEnded;
 		if (event) {
-			if (audioElement && !audioElement.paused) {
-				audioElement.pause();
+			// Resume audio playback during answer reveal (if it was paused during answering)
+			if (audioElement && audioElement.paused && audioElement.src) {
+				audioElement.play().catch(err => {
+					console.error('[MasterPlayer Audio] Failed to resume during answer reveal:', err);
+				});
+				console.log('[MasterPlayer Audio] Resumed for answer reveal');
 			}
 
 			// NOW we can see the song info (fair play!)
@@ -420,11 +438,8 @@
 				feedbackMessage = null;
 			}, 4000);
 
-			if (audioElement) {
-				audioElement.pause();
-				audioElement.currentTime = 0;
-				audioElement.src = '';
-			}
+			// Note: Audio continues playing during answer reveal
+			// It will be stopped when song:preparing is received
 			socket.events.clear('songEnded');
 		}
 	});
@@ -479,10 +494,7 @@
 	{#if gameState.status !== 'loading'}
 		<div class="master-controls-bar">
 			<div class="master-info">
-				<span class="master-badge">Tu joues</span>
-				{#if totalSongsInRound > 0}
-					<span class="song-progress">{currentSongIndex + 1} / {totalSongsInRound}</span>
-				{/if}
+				<!-- Empty for now -->
 			</div>
 			<div class="master-actions">
 				<button class="control-btn pause-btn" onclick={handlePause}>
@@ -500,7 +512,7 @@
 		<div class="loading-screen">
 			{#if totalSongsInRound > 0}
 				<div class="song-progress-indicator">
-					{currentSongIndex + 2} / {totalSongsInRound}
+					{currentSongIndex + 1} / {totalSongsInRound}
 				</div>
 			{/if}
 			<div class="loading-content">
@@ -648,14 +660,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-	}
-
-	.master-badge {
-		padding: 0.3rem 0.75rem;
-		background: rgba(255, 255, 255, 0.2);
-		border-radius: 999px;
-		font-size: 0.85rem;
-		font-weight: 600;
 	}
 
 	.song-progress {

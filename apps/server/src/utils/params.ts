@@ -58,51 +58,6 @@ export function getAnswerTimer(round: Round, modeHandler: ModeHandler): number {
   return resolveParam('answerTimer', round, modeHandler);
 }
 
-/** Validation manuelle activée ou non */
-export function getManualValidation(round: Round, modeHandler: ModeHandler): boolean {
-  return resolveParam('manualValidation', round, modeHandler);
-}
-
-/** Points pour le titre */
-export function getPointsTitle(round: Round, modeHandler: ModeHandler): number {
-  return resolveParam('pointsTitle', round, modeHandler);
-}
-
-/** Points pour l'artiste */
-export function getPointsArtist(round: Round, modeHandler: ModeHandler): number {
-  return resolveParam('pointsArtist', round, modeHandler);
-}
-
-/** Nombre de choix dans les questions à choix multiples */
-export function getNumChoices(round: Round, modeHandler: ModeHandler): number {
-  return resolveParam('numChoices', round, modeHandler);
-}
-
-/** Matching flou activé ou non */
-export function getFuzzyMatch(round: Round, modeHandler: ModeHandler): boolean {
-  return resolveParam('fuzzyMatch', round, modeHandler);
-}
-
-/** Distance de Levenshtein maximale pour le matching flou */
-export function getLevenshteinDistance(round: Round, modeHandler: ModeHandler): number {
-  return resolveParam('levenshteinDistance', round, modeHandler);
-}
-
-/** Pénalités activées ou non */
-export function getPenaltyEnabled(round: Round, modeHandler: ModeHandler): boolean {
-  return resolveParam('penaltyEnabled', round, modeHandler);
-}
-
-/** Montant de la pénalité */
-export function getPenaltyAmount(round: Round, modeHandler: ModeHandler): number {
-  return resolveParam('penaltyAmount', round, modeHandler);
-}
-
-/** Autoriser le re-buzz ou non */
-export function getAllowRebuzz(round: Round, modeHandler: ModeHandler): boolean {
-  return resolveParam('allowRebuzz', round, modeHandler);
-}
-
 /** Où l'audio est joué ('master', 'players', ou 'all') */
 export function getAudioPlayback(round: Round, modeHandler: ModeHandler): 'master' | 'players' | 'all' {
   return resolveParam('audioPlayback', round, modeHandler) as 'master' | 'players' | 'all';

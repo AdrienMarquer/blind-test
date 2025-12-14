@@ -65,39 +65,6 @@ export function resolveParam<T>(
   return SYSTEM_DEFAULTS[paramName] as T;
 }
 
-/**
- * Resolve all parameters for a round, merging mode and round-specific params
- *
- * @param round - The current round
- * @param mode - The mode configuration
- * @returns Complete ModeParams with all values resolved
- */
-export function resolveAllParams(round: Round, mode: Mode): Required<ModeParams> {
-  const keys = Object.keys(SYSTEM_DEFAULTS) as Array<keyof ModeParams>;
-
-  return keys.reduce((params, key) => {
-    params[key] = resolveParam(key, round, mode);
-    return params;
-  }, {} as Required<ModeParams>);
-}
-
-// ============================================================================
-// QR Code Generation
-// ============================================================================
-
-/**
- * Generate a room join URL
- * Note: Actual QR code image generation happens server-side
- *
- * @param roomId - The room UUID
- * @param serverIp - The server IP address
- * @param port - The client port (default: 5173)
- * @returns Join URL for the room
- */
-export function generateRoomJoinURL(roomId: string, serverIp: string, port: number = 5173): string {
-  return `http://${serverIp}:${port}/room/${roomId}`;
-}
-
 // ============================================================================
 // Validation
 // ============================================================================
@@ -113,34 +80,6 @@ export function validatePlayerName(name: string): boolean {
   }
 
   return VALIDATION_PATTERNS.PLAYER_NAME.test(name);
-}
-
-// ============================================================================
-// Time Utilities
-// ============================================================================
-
-/**
- * Calculate time remaining from a start time and duration
- *
- * @param startedAt - Start timestamp
- * @param duration - Duration in seconds
- * @returns Remaining time in seconds (0 if expired)
- */
-export function calculateTimeRemaining(startedAt: Date, duration: number): number {
-  const elapsed = (Date.now() - startedAt.getTime()) / 1000;
-  const remaining = Math.max(0, duration - elapsed);
-  return Math.floor(remaining);
-}
-
-/**
- * Calculate answer time in milliseconds
- *
- * @param buzzedAt - When the player buzzed
- * @param answeredAt - When the answer was submitted
- * @returns Time in milliseconds
- */
-export function calculateAnswerTime(buzzedAt: Date, answeredAt: Date): number {
-  return answeredAt.getTime() - buzzedAt.getTime();
 }
 
 // ============================================================================

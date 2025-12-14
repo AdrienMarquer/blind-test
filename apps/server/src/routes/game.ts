@@ -293,7 +293,7 @@ export const gameRoutes = new Elysia({ prefix: '/api/game' })
       return { error: 'Room not found' };
     }
 
-    if (room.status !== 'playing') {
+    if (room.status !== 'playing' && room.status !== 'between_rounds') {
       set.status = 409;
       return { error: 'No active game to end' };
     }

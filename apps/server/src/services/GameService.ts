@@ -160,45 +160,32 @@ export class GameService {
       throw new Error(`Song ${songIndex} not found in round ${round.index}`);
     }
 
-    // Only skip loading screen for the very first song of the very first round
-    // All other cases (between songs, between rounds) should show loading screen
-    const isVeryFirstSong = songIndex === 0 && round.index === 0;
+    // Show loading screen before every song
+    gameLogger.info('Broadcasting song:preparing event', {
+      roomId,
+      roundIndex: round.index,
+      songIndex,
+      genre: song.song.genre,
+      year: song.song.year,
+    });
 
-    if (!isVeryFirstSong) {
-      // Show loading screen for: between songs, or first song of new rounds
-      gameLogger.info('Broadcasting song:preparing event', {
-        roomId,
-        roundIndex: round.index,
+    broadcastToRoom(roomId, {
+      type: 'song:preparing',
+      data: {
         songIndex,
         genre: song.song.genre,
         year: song.song.year,
-        reason: songIndex === 0 ? 'new_round_start' : 'between_songs'
-      });
+        countdown: 6, // 6 seconds countdown
+      },
+    });
 
-      broadcastToRoom(roomId, {
-        type: 'song:preparing',
-        data: {
-          songIndex,
-          genre: song.song.genre,
-          year: song.song.year,
-          countdown: 6, // 6 seconds countdown
-        },
-      });
+    // Wait 6 seconds for the loading screen
+    await new Promise(resolve => setTimeout(resolve, 6000));
 
-      // Wait 6 seconds for the loading screen
-      await new Promise(resolve => setTimeout(resolve, 6000));
-
-      gameLogger.info('Loading screen complete, starting song playback', {
-        roomId,
-        songIndex
-      });
-    } else {
-      gameLogger.info('Very first song of game - skipping loading screen for immediate start', {
-        roomId,
-        roundIndex: round.index,
-        songIndex
-      });
-    }
+    gameLogger.info('Loading screen complete, starting song playback', {
+      roomId,
+      songIndex
+    });
 
     // Get mode and media handlers
     const modeHandler = modeRegistry.get(round.modeType);

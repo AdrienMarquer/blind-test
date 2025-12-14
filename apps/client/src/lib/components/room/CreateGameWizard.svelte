@@ -344,7 +344,6 @@
 						{penaltyEnabled}
 						{penaltyAmount}
 						{masterPlaying}
-						presetName={masterPlaying ? 'Mode joueur' : 'Soirée classique'}
 						onEditRounds={handleEditRounds}
 						onChangeAudio={handleChangeAudio}
 						onChangePenalty={handleChangePenalty}

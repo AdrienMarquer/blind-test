@@ -205,6 +205,13 @@ Validation utilities live in `packages/shared/src/utils.ts`:
 - Some advanced game modes (Phase 2)
 - Full game history and statistics tracking
 
+## Code Style
+
+- **Avoid code duplication** - Extract shared logic to `packages/shared/src/utils.ts` or create reusable components
+- **Reuse existing components** before creating new ones - check `apps/client/src/lib/components/` first
+- **Keep game interfaces in sync** - `MasterPlayerInterface.svelte` and `PlayerGameInterface.svelte` share similar logic; changes to one often need to be mirrored in the other
+- **Use shared types** - All types go in `packages/shared/src/types.ts`, never duplicate type definitions
+
 ## Common Pitfalls
 
 1. **Port Conflicts**: Server runs on 3007, client on 5173. If startup fails, check if ports are in use.

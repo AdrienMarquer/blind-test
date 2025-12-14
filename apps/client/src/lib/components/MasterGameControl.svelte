@@ -142,6 +142,14 @@
 				countdown: event.countdown
 			});
 
+			// Stop audio from previous song (answer reveal phase ends here)
+			if (audioElement && !audioElement.paused) {
+				audioElement.pause();
+				audioElement.currentTime = 0;
+				audioElement.src = '';
+				console.log('[Master Audio] Stopped for loading screen');
+			}
+
 			// Show loading screen
 			showLoadingScreen = true;
 			loadingCountdown = event.countdown;
@@ -310,10 +318,13 @@
 				winners: event.winners
 			});
 
-			// Stop audio playback (server controls when song ends)
-			if (audioElement && !audioElement.paused) {
-				audioElement.pause();
-				console.log('[Master Audio] Stopped by server song:ended event');
+			// Resume audio playback during answer reveal (if it was paused during answering)
+			// This lets players hear the rest of the song while seeing the answer
+			if (audioElement && audioElement.paused && audioElement.src) {
+				audioElement.play().catch(err => {
+					console.error('[Master Audio] Failed to resume during answer reveal:', err);
+				});
+				console.log('[Master Audio] Resumed for answer reveal');
 			}
 
 			// Clear any pending validation

@@ -70,89 +70,6 @@ export const gamePresets: GamePreset[] = [
 				}
 			}
 		]
-	},
-	{
-		id: 'quick',
-		name: 'Mode rapide',
-		description: 'Une partie express',
-		icon: '⚡',
-		gradient: 'linear-gradient(135deg, #f8c027, #f47a20)',
-		estimatedMinutes: 8,
-		audioPlayback: 'master',
-		rounds: [
-			{
-				modeType: 'fast_buzz',
-				mediaType: 'music',
-				songFilters: { songCount: 5 },
-				params: {
-					songDuration: 20,
-					answerTimer: 4,
-					penaltyEnabled: false,
-					penaltyAmount: 1
-				}
-			}
-		]
-	},
-	{
-		id: 'marathon',
-		name: 'Marathon musical',
-		description: 'Pour les vrais fans',
-		icon: '🏆',
-		gradient: 'linear-gradient(135deg, #009daa, #0ec58f)',
-		estimatedMinutes: 60,
-		audioPlayback: 'master',
-		rounds: [
-			{
-				modeType: 'fast_buzz',
-				mediaType: 'music',
-				songFilters: { songCount: 10 },
-				params: {
-					songDuration: DEFAULT_SONG_DURATION,
-					answerTimer: 5,
-					penaltyEnabled: false,
-					penaltyAmount: 1
-				}
-			},
-			{
-				modeType: 'buzz_and_choice',
-				mediaType: 'music',
-				songFilters: { songCount: 10 },
-				params: {
-					songDuration: DEFAULT_SONG_DURATION,
-					answerTimer: 8,
-					numChoices: 4,
-					pointsTitle: 1,
-					pointsArtist: 1,
-					penaltyEnabled: false,
-					penaltyAmount: 1
-				}
-			},
-			{
-				modeType: 'fast_buzz',
-				mediaType: 'music',
-				songFilters: { songCount: 10 },
-				params: {
-					songDuration: DEFAULT_SONG_DURATION,
-					answerTimer: 5,
-					penaltyEnabled: false,
-					penaltyAmount: 1
-				}
-			},
-			{
-				modeType: 'buzz_and_choice',
-				mediaType: 'music',
-				songFilters: { songCount: 10 },
-				params: {
-					songDuration: DEFAULT_SONG_DURATION,
-					answerTimer: 8,
-					numChoices: 4,
-					pointsTitle: 1,
-					pointsArtist: 1,
-					penaltyEnabled: false,
-					penaltyAmount: 1
-				}
-			}
-		]
 	}
 ];
 
@@ -187,32 +104,6 @@ export const masterPlayingPreset: GamePreset = {
 };
 
 /**
- * Get a preset adjusted for master playing mode
- * Converts fast_buzz rounds to buzz_and_choice since fast_buzz requires manual validation
- */
-export function getPresetForMasterPlaying(preset: GamePreset): GamePreset {
-	return {
-		...preset,
-		rounds: preset.rounds.map((round) => {
-			if (round.modeType === 'fast_buzz') {
-				return {
-					...round,
-					modeType: 'buzz_and_choice' as const,
-					params: {
-						...round.params,
-						answerTimer: 8,
-						numChoices: 4,
-						pointsTitle: 1,
-						pointsArtist: 1
-					}
-				};
-			}
-			return round;
-		})
-	};
-}
-
-/**
  * Deep clone rounds from a preset
  */
 export function cloneRounds(rounds: RoundConfig[]): RoundConfig[] {
@@ -221,11 +112,4 @@ export function cloneRounds(rounds: RoundConfig[]): RoundConfig[] {
 		songFilters: round.songFilters ? { ...round.songFilters } : undefined,
 		params: round.params ? { ...round.params } : undefined
 	}));
-}
-
-/**
- * Get preset by ID
- */
-export function getPresetById(id: string): GamePreset | undefined {
-	return gamePresets.find((p) => p.id === id);
 }

@@ -107,7 +107,9 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 			const remaining = Math.max(0, normalizedDuration - elapsed);
 			smoothProgress = (remaining / normalizedDuration) * 100;
 
-			if (remaining > 0 && gameState.status === 'ready_to_buzz') {
+			// Continue animation for all states that show the timer bar
+			const timerStates = ['ready_to_buzz', 'locked_out', 'watching_other_player', 'buzzed_waiting_server'];
+			if (remaining > 0 && timerStates.includes(gameState.status)) {
 				timerRafId = requestAnimationFrame(tick);
 			}
 		}
@@ -225,6 +227,17 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 				year: event.year,
 				countdown: event.countdown
 			});
+
+			// Stop audio from previous song (answer reveal phase ends here)
+			if (audioElement) {
+				audioElement.pause();
+				audioElement.currentTime = 0;
+				audioElement.src = '';
+				console.log('[Player Audio] Stopped for loading screen');
+			}
+
+			// Update song index for loading screen display
+			currentSongIndex = event.songIndex;
 
 			// Transition to loading state
 			gameState = {
@@ -433,6 +446,10 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 					// Wrong answer - locked out
 					console.log('[Player] 🚫 LOCKED OUT');
 					gameState = { status: 'locked_out' };
+					// Resume timer so locked-out player can see remaining time
+					const fallbackRemaining = Math.ceil((smoothProgress / 100) * maxSongDuration);
+					const remaining = timeRemaining > 0 ? timeRemaining : Math.max(fallbackRemaining, 0);
+					resumeSmoothTimerFromRemaining(remaining);
 				} else if (event.isCorrect) {
 					// Correct final answer - song will end soon
 					console.log('[Player] 🏆 SONG WON - Waiting for song:ended');
@@ -514,10 +531,12 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 				playerName: player.name
 			});
 
-			// Stop audio playback (server controls when song ends)
-			if (audioElement && !audioElement.paused) {
-				audioElement.pause();
-				console.log('[Player Audio] Stopped by server song:ended event');
+			// Resume audio playback during answer reveal (if it was paused during answering)
+			if (audioElement && audioElement.paused && audioElement.src) {
+				audioElement.play().catch(err => {
+					console.error('[Player Audio] Failed to resume during answer reveal:', err);
+				});
+				console.log('[Player Audio] Resumed for answer reveal');
 			}
 
 			console.log('[Player] 👀 Entering answer reveal phase (5 seconds)');
@@ -554,12 +573,8 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 				feedbackMessage = null;
 			}, 4000);
 
-			// Stop audio if playing
-			if (audioElement) {
-				audioElement.pause();
-				audioElement.currentTime = 0;
-				audioElement.src = '';
-			}
+			// Note: Audio continues playing during answer reveal
+			// It will be stopped when song:preparing is received
 			socket.events.clear('songEnded');
 		}
 	});
@@ -651,7 +666,7 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 		<div class="loading-screen">
 			{#if totalSongsInRound > 0}
 				<div class="song-progress-indicator">
-					{currentSongIndex + 2} / {totalSongsInRound}
+					{currentSongIndex + 1} / {totalSongsInRound}
 				</div>
 			{/if}
 			<div class="loading-content">
@@ -693,25 +708,28 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 		</div>
 	{/if}
 
-	<!-- Ready to Buzz State -->
-	{#if gameState.status === 'ready_to_buzz'}
+	<!-- Song Timer (shown for multiple states) -->
+	{#if ['ready_to_buzz', 'locked_out', 'watching_other_player', 'buzzed_waiting_server'].includes(gameState.status)}
 		<div class="game-status">
-			<p class="status-text">🎵 Écoute et buzze dès que tu as la réponse !</p>
+			{#if gameState.status === 'ready_to_buzz'}
+				<p class="status-text">🎵 Écoute et buzze dès que tu as la réponse !</p>
+			{:else if gameState.status === 'locked_out'}
+				<p class="status-text error">🚫 Tu es bloqué pour cette musique</p>
+			{:else if gameState.status === 'watching_other_player'}
+				<p class="status-text">⏸️ {gameState.playerName} répond...</p>
+			{:else if gameState.status === 'buzzed_waiting_server'}
+				<p class="status-text">⏳ Buzz envoyé, en attente du serveur...</p>
+			{/if}
 			<div class="timer-bar">
 				<div class="timer-fill" style="width: {smoothProgress}%"></div>
 			</div>
 			<div class="timer-text">{smoothTimeRemaining}s</div>
 		</div>
-		<button class="buzz-button" onclick={handleBuzz}>
-			<span class="buzz-text">BUZZ&nbsp;!</span>
-		</button>
-	{/if}
-
-	<!-- Buzzed Waiting for Server State -->
-	{#if gameState.status === 'buzzed_waiting_server'}
-		<div class="game-status">
-			<p class="status-text">⏳ Buzz envoyé, en attente du serveur...</p>
-		</div>
+		{#if gameState.status === 'ready_to_buzz'}
+			<button class="buzz-button" onclick={handleBuzz}>
+				<span class="buzz-text">BUZZ&nbsp;!</span>
+			</button>
+		{/if}
 	{/if}
 
 	<!-- Answering Choices State -->
@@ -733,20 +751,6 @@ const { player, socket }: { player: Player; socket: RoomSocket } = $props();
 			answerTimeRemaining={answerTimeRemaining}
 			answerTimerMax={answerTimerMax}
 		/>
-	{/if}
-
-	<!-- Locked Out State -->
-	{#if gameState.status === 'locked_out'}
-		<div class="game-status">
-			<p class="status-text error">🚫 Tu es bloqué pour cette musique</p>
-		</div>
-	{/if}
-
-	<!-- Watching Other Player State -->
-	{#if gameState.status === 'watching_other_player'}
-		<div class="game-status">
-			<p class="status-text">⏸️ {gameState.playerName} répond...</p>
-		</div>
 	{/if}
 
 	<!-- Answer Reveal State -->

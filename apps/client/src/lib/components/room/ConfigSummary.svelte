@@ -11,7 +11,6 @@
 	interface Props {
 		rounds: RoundConfig[];
 		audioPlayback: 'master' | 'players' | 'all';
-		presetName: string;
 		penaltyEnabled: boolean;
 		penaltyAmount: number;
 		masterPlaying?: boolean;
@@ -22,7 +21,7 @@
 		onUpdateRounds?: (rounds: RoundConfig[]) => void;
 	}
 
-	let { rounds, audioPlayback, presetName, penaltyEnabled, penaltyAmount, masterPlaying = false, onEditRounds, onChangeAudio, onChangePenalty, onChangePenaltyAmount, onUpdateRounds }: Props = $props();
+	let { rounds, audioPlayback, penaltyEnabled, penaltyAmount, masterPlaying = false, onEditRounds, onChangeAudio, onChangePenalty, onChangePenaltyAmount, onUpdateRounds }: Props = $props();
 
 	// Track which round is expanded for editing
 	let expandedRoundIndex = $state<number | null>(null);
@@ -231,35 +230,62 @@
 		{ value: 'players' as const, label: 'Joueurs' },
 		{ value: 'all' as const, label: 'Tous' }
 	];
+
+	// Media type display info
+	const mediaTypeInfo: Record<string, { icon: string; label: string }> = {
+		music: { icon: '🎵', label: 'Musique' },
+		picture: { icon: '📷', label: 'Photo' },
+		video: { icon: '🎬', label: 'Vidéo' },
+		text_question: { icon: '📝', label: 'Texte' }
+	};
 </script>
 
 <div class="config-summary">
-	<div class="summary-header">
-		<span class="preset-badge">{presetName}</span>
-	</div>
-
 	<!-- Rounds list - clickable for inline editing -->
 	<div class="rounds-list">
 		{#each rounds as round, index}
 			{@const modeInfo = getModeInfo(round.modeType)}
 			{@const isExpanded = expandedRoundIndex === index}
 			<div class="round-wrapper">
-				<button
-					type="button"
+				<div
 					class="round-card"
 					class:expanded={isExpanded}
-					onclick={() => toggleRoundExpand(index)}
 				>
-					<div class="round-number">Manche {index + 1}</div>
-					<div class="round-details">
+					<button
+						type="button"
+						class="round-header"
+						onclick={() => toggleRoundExpand(index)}
+					>
+						<div class="round-number">Manche {index + 1}</div>
+						<span class="media-type-badge">{mediaTypeInfo[round.mediaType]?.icon || '🎵'}</span>
 						<span class="round-mode">
 							<span class="mode-icon">{modeInfo?.icon || '🎵'}</span>
 							<span class="mode-name">{modeInfo?.name || round.modeType}</span>
 						</span>
-						<span class="round-songs">{round.songFilters?.songCount || 5} titres</span>
-						<span class="expand-icon">{isExpanded ? '▲' : '▼'}</span>
+					</button>
+					<div class="song-stepper-header">
+						<button
+							type="button"
+							class="stepper-btn-header"
+							onclick={(e) => { e.stopPropagation(); updateSongCount(index, -1); }}
+							disabled={(round.songFilters?.songCount || 5) <= 1}
+						>−</button>
+						<span class="stepper-value-header">{round.songFilters?.songCount || 5}</span>
+						<button
+							type="button"
+							class="stepper-btn-header"
+							onclick={(e) => { e.stopPropagation(); updateSongCount(index, 1); }}
+							disabled={(round.songFilters?.songCount || 5) >= 20}
+						>+</button>
 					</div>
-				</button>
+					<button
+						type="button"
+						class="expand-btn"
+						onclick={() => toggleRoundExpand(index)}
+					>
+						<span class="expand-icon">{isExpanded ? '▲' : '▼'}</span>
+					</button>
+				</div>
 
 				{#if isExpanded}
 					<div class="round-editor">
@@ -282,26 +308,6 @@
 										<span>{mode.label}</span>
 									</button>
 								{/each}
-							</div>
-						</div>
-
-						<!-- Song count -->
-						<div class="editor-row">
-							<span class="editor-label">Titres</span>
-							<div class="song-stepper">
-								<button
-									type="button"
-									class="stepper-btn"
-									onclick={(e) => { e.stopPropagation(); updateSongCount(index, -1); }}
-									disabled={(round.songFilters?.songCount || 5) <= 1}
-								>−</button>
-								<span class="stepper-value">{round.songFilters?.songCount || 5}</span>
-								<button
-									type="button"
-									class="stepper-btn"
-									onclick={(e) => { e.stopPropagation(); updateSongCount(index, 1); }}
-									disabled={(round.songFilters?.songCount || 5) >= 20}
-								>+</button>
 							</div>
 						</div>
 
@@ -494,24 +500,6 @@
 		gap: 1rem;
 	}
 
-	.summary-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.preset-badge {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.35rem 0.75rem;
-		background: linear-gradient(135deg, rgba(239, 76, 131, 0.1), rgba(248, 192, 39, 0.1));
-		border: 1px solid rgba(239, 76, 131, 0.2);
-		border-radius: 999px;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--aq-color-primary);
-	}
-
 	/* Rounds list - clickable for inline editing */
 	.rounds-list {
 		display: flex;
@@ -528,14 +516,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.75rem 1rem;
+		gap: 0.75rem;
+		padding: 0.5rem 0.75rem;
 		background: linear-gradient(135deg, rgba(239, 76, 131, 0.06), rgba(248, 192, 39, 0.06));
 		border-radius: 12px;
 		border: 1px solid rgba(239, 76, 131, 0.12);
-		cursor: pointer;
 		transition: all 0.15s ease;
 		width: 100%;
-		text-align: left;
 	}
 
 	.round-card:hover {
@@ -549,18 +536,79 @@
 		border-bottom-right-radius: 0;
 	}
 
+	.round-header {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.25rem 0;
+		text-align: left;
+	}
+
 	.round-number {
-		font-size: 0.8rem;
+		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--aq-color-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
 
-	.round-details {
+	.media-type-badge {
+		font-size: 1rem;
+	}
+
+	/* Song stepper in header */
+	.song-stepper-header {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		gap: 0.15rem;
+		background: white;
+		border-radius: 999px;
+		padding: 0.2rem;
+		border: 1px solid rgba(18, 43, 59, 0.1);
+	}
+
+	.stepper-btn-header {
+		width: 32px;
+		height: 32px;
+		border-radius: 50%;
+		border: 1.5px solid rgba(239, 76, 131, 0.3);
+		background: white;
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--aq-color-primary);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.stepper-btn-header:hover:not(:disabled) {
+		border-color: var(--aq-color-primary);
+		background: rgba(239, 76, 131, 0.1);
+	}
+
+	.stepper-btn-header:active:not(:disabled) {
+		transform: scale(0.95);
+		background: rgba(239, 76, 131, 0.2);
+	}
+
+	.stepper-btn-header:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+
+	.stepper-value-header {
+		min-width: 1.75rem;
+		text-align: center;
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: var(--aq-color-deep);
 	}
 
 	.round-mode {
@@ -583,16 +631,19 @@
 		color: var(--aq-color-deep);
 	}
 
-	.round-songs {
-		font-size: 0.85rem;
-		font-weight: 500;
-		color: var(--aq-color-muted);
+	.expand-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.expand-icon {
 		font-size: 0.7rem;
 		color: var(--aq-color-muted);
-		margin-left: 0.25rem;
 	}
 
 	/* Round editor (expanded) */
@@ -612,12 +663,6 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-	}
-
-	.editor-label {
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--aq-color-deep);
 	}
 
 	.mode-chips {
@@ -654,46 +699,6 @@
 	.mode-chip.disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-
-	.song-stepper {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.stepper-btn {
-		width: 32px;
-		height: 32px;
-		border-radius: 50%;
-		border: 1.5px solid rgba(18, 43, 59, 0.2);
-		background: white;
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: var(--aq-color-deep);
-		cursor: pointer;
-		transition: all 0.15s ease;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.stepper-btn:hover:not(:disabled) {
-		border-color: var(--aq-color-primary);
-		color: var(--aq-color-primary);
-	}
-
-	.stepper-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.stepper-value {
-		min-width: 2rem;
-		text-align: center;
-		font-size: 1rem;
-		font-weight: 700;
-		color: var(--aq-color-deep);
 	}
 
 	.delete-round-btn {
@@ -1036,14 +1041,31 @@
 		}
 
 		.round-card {
-			flex-direction: column;
-			align-items: flex-start;
+			flex-direction: row;
+			flex-wrap: nowrap;
+			padding: 0.5rem;
+		}
+
+		.round-header {
+			flex: 1;
+			min-width: 0;
+			flex-wrap: wrap;
 			gap: 0.5rem;
 		}
 
-		.round-details {
-			width: 100%;
-			justify-content: space-between;
+		.round-mode {
+			display: none;
+		}
+
+		.stepper-btn-header {
+			width: 28px;
+			height: 28px;
+			font-size: 1rem;
+		}
+
+		.stepper-value-header {
+			min-width: 1.5rem;
+			font-size: 0.9rem;
 		}
 
 		.year-range {

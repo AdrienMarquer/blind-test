@@ -12,8 +12,10 @@
 	let { players, room, isMaster, masterPlaying, onRemovePlayer }: Props = $props();
 
 	// Sort players: connected first, then by score, then alphabetically
+	// Filter out master player if they're shown via masterPlaying (to avoid duplicate)
 	const sortedPlayers = $derived(
 		players
+			.filter(p => !(masterPlaying?.playing && p.id === room.masterPlayerId))
 			.slice()
 			.sort((a, b) => {
 				if (a.connected === b.connected) {
@@ -26,14 +28,22 @@
 			})
 	);
 
-	// Total player count including master if playing
-	const totalPlayers = $derived(
-		players.length + (masterPlaying?.playing ? 1 : 0)
+	// Total player count (master is already included in players array when playing)
+	const totalPlayers = $derived(players.length);
+
+	// Check if there are any players to show (including master playing)
+	const hasPlayersToShow = $derived(
+		totalPlayers > 0 || (masterPlaying?.playing && masterPlaying.playerName)
+	);
+
+	// Get master player's score from the players array
+	const masterPlayerScore = $derived(
+		players.find(p => p.id === room.masterPlayerId)?.score ?? 0
 	);
 </script>
 
 <section class="players-section">
-	{#if totalPlayers === 0}
+	{#if !hasPlayersToShow}
 		<p class="empty">Aucun joueur pour l'instant. Lance-toi !</p>
 	{:else}
 		<div class="players-list">
@@ -47,7 +57,7 @@
 						<strong>{masterPlaying.playerName}</strong>
 						<span class="master-badge">Maître du jeu</span>
 					</div>
-					<span class="chip-score">0 pts</span>
+					<span class="chip-score">{masterPlayerScore} pts</span>
 				</div>
 			{/if}
 
