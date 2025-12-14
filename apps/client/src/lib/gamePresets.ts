@@ -24,11 +24,11 @@ export function getTotalSongs(rounds: RoundConfig[]): number {
 
 /**
  * Estimate game duration in minutes based on rounds
- * Assumes ~2 minutes per song (playback + answers + transition)
+ * ~1 minute per song (30s playback + 8s answer + 5s loading + 5s reveal + buffer)
  */
 export function estimateDuration(rounds: RoundConfig[]): number {
 	const totalSongs = getTotalSongs(rounds);
-	return Math.ceil(totalSongs * 2);
+	return Math.ceil(totalSongs * 1);
 }
 
 /**
